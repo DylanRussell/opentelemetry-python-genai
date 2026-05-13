@@ -805,6 +805,7 @@ class NonStreamingTestCase(TestCase):
                     span = self.otel.get_span_named(
                         "generate_content gemini-2.0-flash"
                     )
+                    self.assertEqual(span.attributes["gen_ai.provider.name"], "gemini")
                     self.assertEqual(
                         span.attributes[
                             "gen_ai.usage.cache_read.input_tokens"
