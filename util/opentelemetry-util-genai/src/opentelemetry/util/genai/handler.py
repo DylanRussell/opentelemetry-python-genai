@@ -275,6 +275,7 @@ class TelemetryHandler:
         request_model: str | None = None,
         server_address: str | None = None,
         server_port: int | None = None,
+        operation_name: str | None = None,
     ) -> AbstractContextManager[InferenceInvocation]:
         """Context manager for LLM inference invocations.
 
@@ -289,6 +290,7 @@ class TelemetryHandler:
             request_model=request_model,
             server_address=server_address,
             server_port=server_port,
+            operation_name=operation_name,
         )._managed()
 
     def embedding(

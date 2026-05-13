@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 -Add `gen_ai.usage.reasoning.output_tokens` attribute to capture thinking tokens on spans/events when the experimental sem conv flag is set. Add thinking tokens to output tokens. ([#4313](https://github.com/open-telemetry/opentelemetry-python-contrib/pull/4313))
 -Add `gen_ai.usage.cache_read.input_tokens` attribute to capture cached tokens on spans/events when the experimental sem conv flag is set. ([#4313](https://github.com/open-telemetry/opentelemetry-python-contrib/pull/4313))
+-Refactor code to make use of the shared GenAi Utils package. This shared package is used by multiple GenAI instrumentations, and ensures sem convs are followed and up to date. This does result in some span attributes on the execute tool span being removed (`code.function.parameters.someparam.type`, `code.function.parameters.someparam.value` etc.), and other sem conv compliant attributes being added (specifically: `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` etc.), but otherwise users of the instrumentation should see no change. ([#4571](https://github.com/open-telemetry/opentelemetry-python-contrib/pull/4571))
 
 ## Version 0.7b0 (2026-02-20)
 - Fix bug in how tokens are counted when using the streaming `generateContent` method.  ([#4152](https://github.com/open-telemetry/opentelemetry-python-contrib/pull/4152)).

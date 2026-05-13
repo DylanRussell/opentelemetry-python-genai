@@ -2,23 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
-import os
+import json
 import unittest
-from unittest.mock import patch
 
 from google.genai import types as genai_types
 
 from opentelemetry._logs import get_logger_provider
-from opentelemetry.instrumentation._semconv import (
-    _OpenTelemetrySemanticConventionStability,
-)
-from opentelemetry.instrumentation.google_genai import (
-    otel_wrapper,
-    tool_call_wrapper,
-)
+from opentelemetry.instrumentation.google_genai import tool_call_wrapper
 from opentelemetry.metrics import get_meter_provider
 from opentelemetry.trace import get_tracer_provider
-from opentelemetry.util.genai.types import ContentCapturingMode
+from opentelemetry.util.genai.handler import TelemetryHandler
 
 from ..common import otel_mocker
 
@@ -27,17 +20,11 @@ class TestCase(unittest.TestCase):
     def setUp(self):
         self._otel = otel_mocker.OTelMocker()
         self._otel.install()
-        self._otel_wrapper = otel_wrapper.OTelWrapper.from_providers(
-            get_tracer_provider(),
-            get_logger_provider(),
-            get_meter_provider(),
+        self._otel_wrapper = TelemetryHandler(
+            tracer_provider=get_tracer_provider(),
+            logger_provider=get_logger_provider(),
+            meter_provider=get_meter_provider(),
         )
-        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = (
-            "true"
-        )
-        os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] = "default"
-        _OpenTelemetrySemanticConventionStability._initialized = False
-        _OpenTelemetrySemanticConventionStability._initialize()
 
     @property
     def otel(self):
@@ -47,9 +34,11 @@ class TestCase(unittest.TestCase):
     def otel_wrapper(self):
         return self._otel_wrapper
 
-    def wrap(self, tool_or_tools, **kwargs):
-        return tool_call_wrapper.wrapped(
-            tool_or_tools, self.otel_wrapper, **kwargs
+    def wrap(self, tool_or_tools, capture_content_on_span=True):
+        return tool_call_wrapper.wrapped_tool(
+            tool_or_tools,
+            self.otel_wrapper,
+            capture_content_on_span=capture_content_on_span,
         )
 
     def test_wraps_none(self):
@@ -174,11 +163,10 @@ class TestCase(unittest.TestCase):
         wrapped_somefunction(12345)
         self.otel.assert_has_span_named("execute_tool somefunction")
         span = self.otel.get_span_named("execute_tool somefunction")
+        arguments = json.loads(span.attributes["gen_ai.tool.call.arguments"])
+        self.assertEqual(arguments["code.function.parameters.arg.type"], "int")
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.type"], "int"
-        )
-        self.assertEqual(
-            span.attributes["code.function.parameters.arg.value"], 12345
+            arguments["code.function.parameters.arg.value"], 12345
         )
 
     def test_handles_primitive_string_arg(self):
@@ -192,11 +180,10 @@ class TestCase(unittest.TestCase):
         wrapped_somefunction("a string value")
         self.otel.assert_has_span_named("execute_tool somefunction")
         span = self.otel.get_span_named("execute_tool somefunction")
+        arguments = json.loads(span.attributes["gen_ai.tool.call.arguments"])
+        self.assertEqual(arguments["code.function.parameters.arg.type"], "str")
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.type"], "str"
-        )
-        self.assertEqual(
-            span.attributes["code.function.parameters.arg.value"],
+            arguments["code.function.parameters.arg.value"],
             "a string value",
         )
 
@@ -211,12 +198,13 @@ class TestCase(unittest.TestCase):
         wrapped_somefunction({"key": "value"})
         self.otel.assert_has_span_named("execute_tool somefunction")
         span = self.otel.get_span_named("execute_tool somefunction")
+        arguments = json.loads(span.attributes["gen_ai.tool.call.arguments"])
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.type"], "dict"
+            arguments["code.function.parameters.arg.type"], "dict"
         )
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.value"],
-            '{"key": "value"}',
+            arguments["code.function.parameters.arg.value"],
+            {"key": "value"},
         )
 
     def test_handles_primitive_list_arg(self):
@@ -230,13 +218,12 @@ class TestCase(unittest.TestCase):
         wrapped_somefunction([1, 2, 3])
         self.otel.assert_has_span_named("execute_tool somefunction")
         span = self.otel.get_span_named("execute_tool somefunction")
+        arguments = json.loads(span.attributes["gen_ai.tool.call.arguments"])
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.type"], "list"
+            arguments["code.function.parameters.arg.type"], "list"
         )
-        # A conversion is required here, because the Open Telemetry code converts the
-        # list into a tuple. (But this conversion isn't happening in "tool_call_wrapper.py").
         self.assertEqual(
-            list(span.attributes["code.function.parameters.arg.value"]),
+            arguments["code.function.parameters.arg.value"],
             [1, 2, 3],
         )
 
@@ -251,50 +238,61 @@ class TestCase(unittest.TestCase):
         wrapped_somefunction([123, "abc"])
         self.otel.assert_has_span_named("execute_tool somefunction")
         span = self.otel.get_span_named("execute_tool somefunction")
+        arguments = json.loads(span.attributes["gen_ai.tool.call.arguments"])
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.type"], "list"
+            arguments["code.function.parameters.arg.type"], "list"
         )
         self.assertEqual(
-            span.attributes["code.function.parameters.arg.value"],
-            '[123, "abc"]',
+            arguments["code.function.parameters.arg.value"],
+            [123, "abc"],
         )
 
-    def test_handle_with_new_sem_conv(self):
+    def test_handle_with_different_capture_content_on_span_config(self):
         def somefunction(arg=None):
-            pass
+            return arg
 
-        for mode in ContentCapturingMode:
-            with self.subTest(f"mode: {mode}"):
+        for capture_content_on_span in [False, True]:
+            with self.subTest(
+                f"capture_content_on_span: {capture_content_on_span}"
+            ):
                 self.setUp()
-                with patch.dict(
-                    "os.environ",
-                    {
-                        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": mode.name,
-                        "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
-                    },
-                ):
-                    _OpenTelemetrySemanticConventionStability._initialized = (
-                        False
-                    )
-                    _OpenTelemetrySemanticConventionStability._initialize()
-                    wrapped_somefunction = self.wrap(somefunction)
-                    wrapped_somefunction(12345)
+                wrapped_somefunction = self.wrap(
+                    somefunction,
+                    capture_content_on_span=capture_content_on_span,
+                )
+                wrapped_somefunction(12345)
+                span = self.otel.get_span_named("execute_tool somefunction")
 
-                    span = self.otel.get_span_named(
-                        "execute_tool somefunction"
+                if not capture_content_on_span:
+                    self.assertNotIn(
+                        "gen_ai.tool.call.arguments",
+                        span.attributes,
                     )
+                    self.assertNotIn(
+                        "gen_ai.tool.call.result",
+                        span.attributes,
+                    )
+                else:
+                    self.assertIn(
+                        "code.function.parameters.arg.value",
+                        span.attributes["gen_ai.tool.call.arguments"],
+                    )
+                    self.assertEqual(
+                        span.attributes["gen_ai.tool.call.result"],
+                        "12345",
+                    )
+                self.tearDown()
 
-                    if mode in [
-                        ContentCapturingMode.NO_CONTENT,
-                        ContentCapturingMode.EVENT_ONLY,
-                    ]:
-                        self.assertNotIn(
-                            "code.function.parameters.arg.value",
-                            span.attributes,
-                        )
-                    else:
-                        self.assertIn(
-                            "code.function.parameters.arg.value",
-                            span.attributes,
-                        )
-                    self.tearDown()
+    def test_function_that_throws_exception(self):
+        def somefunction(arg=None):
+            raise Exception("Something went wrong")
+
+        wrapped_somefunction = self.wrap(
+            somefunction,
+            capture_content_on_span=True,
+        )
+        try:
+            wrapped_somefunction(12345)
+        except Exception:
+            span = self.otel.get_span_named("execute_tool somefunction")
+            self.assertEqual(span.attributes["error.type"], "Exception")
