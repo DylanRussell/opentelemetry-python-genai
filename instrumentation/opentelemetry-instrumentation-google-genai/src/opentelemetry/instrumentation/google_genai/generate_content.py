@@ -910,8 +910,10 @@ def _create_instrumented_generate_content(
                         config=helper.wrapped_config(config),
                         **kwargs,
                     )
-                    candidates.extend(response.candidates)
+                    if response.candidates:
+                        candidates.extend(response.candidates)
                     helper._update_response(response)
+                    return response
                 finally:
                     helper.apply_finish_attributes(invocation, candidates)
         else:
@@ -1003,7 +1005,7 @@ def _create_instrumented_generate_content_stream(
                         helper._update_response(resp)
                         if resp.candidates:
                             candidates += resp.candidates
-                    yield resp
+                        yield resp
                 finally:
                     helper.apply_finish_attributes(invocation, candidates)
         else:
@@ -1094,7 +1096,8 @@ def _create_instrumented_async_generate_content(
                         **kwargs,
                     )
                     helper._update_response(response)
-                    candidates += response.candidates
+                    if response.candidates:
+                        candidates += response.candidates
                     return response
                 finally:
                     helper.apply_finish_attributes(invocation, candidates)
