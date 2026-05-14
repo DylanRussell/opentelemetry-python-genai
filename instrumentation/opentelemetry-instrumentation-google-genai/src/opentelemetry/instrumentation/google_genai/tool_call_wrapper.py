@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import functools
-import inspect
+import inspect, json
 from typing import Any, Callable, Optional, Union
 
 from google.genai.types import (
@@ -15,7 +15,29 @@ from opentelemetry.util.genai.handler import TelemetryHandler
 
 ToolFunction = Callable[..., Any]
 
+def _is_primitive(value):
+    return isinstance(value, (str, int, bool, float))
 
+
+def _to_otel_value(python_value):
+    """Coerces parameters to something representable with Open Telemetry."""
+    if python_value is None or _is_primitive(python_value):
+        return python_value
+    if isinstance(python_value, list):
+        return [_to_otel_value(x) for x in python_value]
+    if isinstance(python_value, dict):
+        return {
+            key: _to_otel_value(val) for (key, val) in python_value.items()
+        }
+    if hasattr(python_value, "model_dump"):
+        return python_value.model_dump()
+    if hasattr(python_value, "__dict__"):
+        return _to_otel_value(python_value.__dict__)
+    return repr(python_value)
+
+
+# Whenever python gets around to supporting complex attributes (https://github.com/open-telemetry/opentelemetry-specification/pull/4485)
+# we can change this serialization logic to allow None values and heterogenous primitive lists..
 def _get_function_args(wrapped_function, function_args, function_kwargs):
     """Records the details about a function invocation as span attributes."""
     function_arg_attr = {}
@@ -29,14 +51,16 @@ def _get_function_args(wrapped_function, function_args, function_kwargs):
             type(entry).__name__
         )
         function_arg_attr[f"code.function.parameters.{param_name}.value"] = (
-            entry
+            _to_otel_value(entry)
         )
     for key, value in function_kwargs.items():
         function_arg_attr[f"code.function.parameters.{key}.type"] = type(
             value
         ).__name__
-        function_arg_attr[f"code.function.parameters.{key}.value"] = value
-    return function_arg_attr
+        function_arg_attr[f"code.function.parameters.{key}.value"] = (
+            _to_otel_value(value)
+        )
+    return json.dumps(function_arg_attr)
 
 
 def _wrap_tool_function(
@@ -56,7 +80,7 @@ def _wrap_tool_function(
                     tool_invocation.arguments = _get_function_args(
                         tool_function, args, kwargs
                     )
-                    tool_invocation.tool_result = result
+                    tool_invocation.tool_result = json.dumps(_to_otel_value(result))
             return result
     else:
 
@@ -70,7 +94,7 @@ def _wrap_tool_function(
                     tool_invocation.arguments = _get_function_args(
                         tool_function, args, kwargs
                     )
-                    tool_invocation.tool_result = result
+                    tool_invocation.tool_result = json.dumps(_to_otel_value(result))
             return result
 
     return wrapped_function

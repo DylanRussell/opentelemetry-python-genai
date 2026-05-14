@@ -75,12 +75,7 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_TOOL_CALL_ID, self.tool_call_id),
             (GenAI.GEN_AI_TOOL_TYPE, self.tool_type),
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.tool_description),
-            (
-                GenAI.GEN_AI_TOOL_CALL_ARGUMENTS,
-                None
-                if self.arguments is None
-                else gen_ai_json_dumps(self.arguments),
-            ),
+            (GenAI.GEN_AI_TOOL_CALL_ARGUMENTS, self.arguments),
         )
         return {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
@@ -102,18 +97,8 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_TOOL_CALL_ID, self.tool_call_id),
             (GenAI.GEN_AI_TOOL_TYPE, self.tool_type),
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.tool_description),
-            (
-                GenAI.GEN_AI_TOOL_CALL_ARGUMENTS,
-                None
-                if self.arguments is None
-                else gen_ai_json_dumps(self.arguments),
-            ),
-            (
-                GenAI.GEN_AI_TOOL_CALL_RESULT,
-                None
-                if self.tool_result is None
-                else gen_ai_json_dumps(self.tool_result),
-            ),
+            (GenAI.GEN_AI_TOOL_CALL_ARGUMENTS, self.arguments),
+            (GenAI.GEN_AI_TOOL_CALL_RESULT, self.tool_result),
         )
         attributes: dict[str, Any] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,

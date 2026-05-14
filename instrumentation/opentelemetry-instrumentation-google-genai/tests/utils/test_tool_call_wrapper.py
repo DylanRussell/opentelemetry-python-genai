@@ -204,7 +204,7 @@ class TestCase(unittest.TestCase):
         )
         self.assertEqual(
             arguments["code.function.parameters.arg.value"],
-            {"key": "value"},
+            {'key': 'value'}
         )
 
     def test_handles_primitive_list_arg(self):
