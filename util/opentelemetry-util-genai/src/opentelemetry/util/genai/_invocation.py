@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import timeit
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from contextvars import Token
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, Generator, Sequence
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Sequence
 
-from typing_extensions import Self, TypeAlias
+from typing_extensions import TypeAlias
 
 from opentelemetry._logs import Logger, LogRecord
 from opentelemetry.context import Context, attach, detach
@@ -165,13 +165,17 @@ class GenAIInvocation(ABC):
             error = Error(type=type(error), message=str(error))
         self._finish(error)
 
-    @contextmanager
-    def _managed(self) -> Generator[Self, None, None]:
-        """Context manager that calls stop() on success or fail() on exception."""
-        try:
-            yield self
-        except Exception as exc:
-            self.fail(exc)
+    def __enter__(self):
+        return self
+
+    def __exit__(
+        self,
+        type_: type[BaseException] | None,
+        value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if value:
+            self.fail(value)
             raise
         self.stop()
 

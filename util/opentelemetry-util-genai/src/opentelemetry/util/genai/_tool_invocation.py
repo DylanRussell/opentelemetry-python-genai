@@ -47,6 +47,7 @@ class ToolInvocation(GenAIInvocation):
         tool_call_id: str | None = None,
         tool_type: str | None = None,
         tool_description: str | None = None,
+        tool_result: Any | None = None,
     ) -> None:
         """Use handler.start_tool(name) or handler.tool(name) instead of calling this directly."""
         _operation_name = GenAI.GenAiOperationNameValues.EXECUTE_TOOL.value
@@ -59,11 +60,11 @@ class ToolInvocation(GenAIInvocation):
             span_name=f"{_operation_name} {name}" if name else _operation_name,
         )
         self.name = name
+        self.tool_result = tool_result
         self.arguments = arguments
         self.tool_call_id = tool_call_id
         self.tool_type = tool_type
         self.tool_description = tool_description
-        self.tool_result: Any = None
         self._start(self._get_base_attributes())
 
     def _get_base_attributes(self) -> dict[str, Any]:
@@ -73,6 +74,8 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_TOOL_CALL_ID, self.tool_call_id),
             (GenAI.GEN_AI_TOOL_TYPE, self.tool_type),
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.tool_description),
+            (GenAI.GEN_AI_TOOL_CALL_ARGUMENTS, self.arguments),
+            (GenAI.GEN_AI_TOOL_CALL_RESULT, self.tool_result),
         )
         return {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
@@ -95,6 +98,7 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_TOOL_TYPE, self.tool_type),
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.tool_description),
             (GenAI.GEN_AI_TOOL_CALL_ARGUMENTS, self.arguments),
+            (GenAI.GEN_AI_TOOL_CALL_RESULT, self.tool_result),
         )
         attributes: dict[str, Any] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
