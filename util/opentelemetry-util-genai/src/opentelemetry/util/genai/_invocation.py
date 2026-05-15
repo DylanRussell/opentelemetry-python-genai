@@ -176,8 +176,8 @@ class GenAIInvocation(ABC):
     ) -> None:
         if value:
             self.fail(value)
-            raise
-        self.stop()
+        else:
+            self.stop()
 
 
 def get_content_attributes(
