@@ -46,7 +46,6 @@ from opentelemetry.util.genai.invocation import (
     InferenceInvocation,
 )
 from opentelemetry.util.genai.types import (
-    ContentCapturingMode,
     FunctionToolDefinition,
     GenericToolDefinition,
     ToolDefinition,
@@ -400,15 +399,13 @@ def _coerce_config_to_object(
 
 def _wrapped_config_with_tools(
     telemetry_handler: TelemetryHandler,
-    capture_content_on_span: bool,
     config: GenerateContentConfig,
 ):
     if not config.tools:
         return config
     result = copy.copy(config)
     result.tools = [
-        wrapped_tool(tool, telemetry_handler, capture_content_on_span)
-        for tool in config.tools
+        wrapped_tool(tool, telemetry_handler) for tool in config.tools
     ]
     return result
 
@@ -477,13 +474,6 @@ class _GenerateContentInstrumentationHelper:
         self._content_recording_enabled = is_content_recording_enabled(
             self.experimental_sem_convs_enabled
         )
-        if self.experimental_sem_convs_enabled:
-            self.capture_content_on_span = self._content_recording_enabled in [
-                ContentCapturingMode.SPAN_ONLY,
-                ContentCapturingMode.SPAN_AND_EVENT,
-            ]
-        else:
-            self.capture_content_on_span = self._content_recording_enabled
         self._response_index = 0
         self._candidate_index = 0
         self._generate_content_config_key_allowlist = (
@@ -515,7 +505,6 @@ class _GenerateContentInstrumentationHelper:
             return None
         return _wrapped_config_with_tools(
             self._telemetry_handler,
-            self.capture_content_on_span,
             _coerce_config_to_object(config),
         )
 

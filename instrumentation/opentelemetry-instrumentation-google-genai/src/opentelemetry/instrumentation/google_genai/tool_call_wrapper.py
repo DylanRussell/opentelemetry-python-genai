@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import functools
-import inspect, json
+import inspect
+import json
 from typing import Any, Callable, Optional, Union
 
 from google.genai.types import (
@@ -14,6 +15,7 @@ from google.genai.types import (
 from opentelemetry.util.genai.handler import TelemetryHandler
 
 ToolFunction = Callable[..., Any]
+
 
 def _is_primitive(value):
     return isinstance(value, (str, int, bool, float))
@@ -60,13 +62,12 @@ def _get_function_args(wrapped_function, function_args, function_kwargs):
         function_arg_attr[f"code.function.parameters.{key}.value"] = (
             _to_otel_value(value)
         )
-    return json.dumps(function_arg_attr)
+    return function_arg_attr
 
 
 def _wrap_tool_function(
     tool_function: ToolFunction,
     telemetry_handler: TelemetryHandler,
-    capture_content_on_span: bool,
 ):
     if inspect.iscoroutinefunction(tool_function):
 
@@ -76,11 +77,12 @@ def _wrap_tool_function(
                 tool_function.__name__, tool_description=tool_function.__doc__
             ) as tool_invocation:
                 result = await tool_function(*args, **kwargs)
-                if capture_content_on_span:
-                    tool_invocation.arguments = _get_function_args(
-                        tool_function, args, kwargs
-                    )
-                    tool_invocation.tool_result = json.dumps(_to_otel_value(result))
+                tool_invocation.arguments = json.dumps(
+                    _get_function_args(tool_function, args, kwargs)
+                )
+                tool_invocation.tool_result = json.dumps(
+                    _to_otel_value(result)
+                )
             return result
     else:
 
@@ -90,11 +92,12 @@ def _wrap_tool_function(
                 tool_function.__name__, tool_description=tool_function.__doc__
             ) as tool_invocation:
                 result = tool_function(*args, **kwargs)
-                if capture_content_on_span:
-                    tool_invocation.arguments = _get_function_args(
-                        tool_function, args, kwargs
-                    )
-                    tool_invocation.tool_result = json.dumps(_to_otel_value(result))
+                tool_invocation.arguments = json.dumps(
+                    _get_function_args(tool_function, args, kwargs)
+                )
+                tool_invocation.tool_result = json.dumps(
+                    _to_otel_value(result)
+                )
             return result
 
     return wrapped_function
@@ -105,22 +108,18 @@ def wrapped_tool(
         Union[ToolFunction, ToolOrDict, ToolListUnion, ToolListUnionDict]
     ],
     telemetry_handler: TelemetryHandler,
-    capture_content_on_span: bool,
 ):
     if tool_or_tools is None:
         return None
     if isinstance(tool_or_tools, list):
         return [
-            wrapped_tool(tool, telemetry_handler, capture_content_on_span)
-            for tool in tool_or_tools
+            wrapped_tool(tool, telemetry_handler) for tool in tool_or_tools
         ]
     if isinstance(tool_or_tools, dict):
         return {
-            key: wrapped_tool(tool, telemetry_handler, capture_content_on_span)
+            key: wrapped_tool(tool, telemetry_handler)
             for (key, tool) in tool_or_tools.items()
         }
     if callable(tool_or_tools):
-        return _wrap_tool_function(
-            tool_or_tools, telemetry_handler, capture_content_on_span
-        )
+        return _wrap_tool_function(tool_or_tools, telemetry_handler)
     return tool_or_tools

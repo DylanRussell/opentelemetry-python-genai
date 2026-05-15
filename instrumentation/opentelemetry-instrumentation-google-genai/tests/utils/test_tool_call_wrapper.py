@@ -203,8 +203,7 @@ class TestCase(unittest.TestCase):
             arguments["code.function.parameters.arg.type"], "dict"
         )
         self.assertEqual(
-            arguments["code.function.parameters.arg.value"],
-            {'key': 'value'}
+            arguments["code.function.parameters.arg.value"], {"key": "value"}
         )
 
     def test_handles_primitive_list_arg(self):
