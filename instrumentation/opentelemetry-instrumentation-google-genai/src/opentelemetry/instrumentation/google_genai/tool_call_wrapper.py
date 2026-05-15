@@ -38,8 +38,10 @@ def _to_otel_value(python_value):
     return repr(python_value)
 
 
-# Whenever python gets around to supporting complex attributes (https://github.com/open-telemetry/opentelemetry-specification/pull/4485)
-# we can change this serialization logic to allow None values and heterogenous primitive lists..
+# There is non canonical way to serialize a Python object to a span attribute value.
+# Span attribute values currently most be one of the primitive types, or a homogenous list of primitive types.
+# In the future the value will be expanded to include None, a heterogenous lists of primitive types, and a Map of these types.
+# See https://github.com/open-telemetry/opentelemetry-specification/pull/4485
 def _get_function_args(wrapped_function, function_args, function_kwargs):
     """Records the details about a function invocation as span attributes."""
     function_arg_attr = {}
@@ -77,6 +79,9 @@ def _wrap_tool_function(
                 tool_function.__name__, tool_description=tool_function.__doc__
             ) as tool_invocation:
                 result = await tool_function(*args, **kwargs)
+                # Always json.dumps. First we convert args / result to something that we can serialize, then we serialize.
+                # The return value of _to_otel_value could be a dict, which currently cannot be a span attribute..
+                # In the future that could change (see https://github.com/open-telemetry/opentelemetry-specification/pull/4485), and we could possibly stop using json.dumps here.
                 tool_invocation.arguments = json.dumps(
                     _get_function_args(tool_function, args, kwargs)
                 )
