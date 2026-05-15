@@ -120,7 +120,7 @@ def should_capture_content_on_spans() -> bool:
             ContentCapturingMode.SPAN_AND_EVENT,
         )
     envvar = os.environ.get(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT)
-    return envvar and envvar.lower().strip() == "true"
+    return bool(envvar) and envvar.lower().strip() == "true"
 
 
 class _GenAiJsonEncoder(json.JSONEncoder):
