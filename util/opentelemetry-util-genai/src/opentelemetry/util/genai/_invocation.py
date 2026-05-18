@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import timeit
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from contextlib import AbstractContextManager
 from contextvars import Token
 from dataclasses import asdict
 from types import TracebackType
@@ -39,10 +40,11 @@ from opentelemetry.util.genai.utils import (
 if TYPE_CHECKING:
     from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
 
+
 ContextToken: TypeAlias = Token[Context]
 
 
-class GenAIInvocation(ABC):
+class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     """
     Base class for all GenAI invocation types. Manages the lifecycle of a single
     GenAI operation (LLM call, embedding, tool execution, workflow, etc.).
@@ -170,12 +172,12 @@ class GenAIInvocation(ABC):
 
     def __exit__(
         self,
-        type_: type[BaseException] | None,
-        value: BaseException | None,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        if value:
-            self.fail(value)
+        if exc_value is not None and isinstance(exc_value, Exception):
+            self.fail(exc_value)
         else:
             self.stop()
 

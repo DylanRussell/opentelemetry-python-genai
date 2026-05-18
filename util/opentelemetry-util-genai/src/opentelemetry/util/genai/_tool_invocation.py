@@ -46,11 +46,11 @@ class ToolInvocation(GenAIInvocation):
         completion_hook: CompletionHook,
         name: str,
         *,
-        arguments: Any = None,
+        arguments: AttributeValue | None = None,
         tool_call_id: str | None = None,
         tool_type: str | None = None,
         tool_description: str | None = None,
-        tool_result: Any | None = None,
+        tool_result: AttributeValue | None = None,
     ) -> None:
         """Use handler.start_tool(name) or handler.tool(name) instead of calling this directly."""
         _operation_name = GenAI.GenAiOperationNameValues.EXECUTE_TOOL.value
