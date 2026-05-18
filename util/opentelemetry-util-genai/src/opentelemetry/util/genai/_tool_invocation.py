@@ -16,6 +16,7 @@ from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
 from opentelemetry.util.genai.utils import (
     should_capture_content_on_spans,
 )
+from opentelemetry.util.types import AttributeValue
 
 
 class ToolInvocation(GenAIInvocation):
