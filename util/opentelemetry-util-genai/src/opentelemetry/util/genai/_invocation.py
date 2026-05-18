@@ -167,7 +167,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             error = Error(type=type(error), message=str(error))
         self._finish(error)
 
-    def __enter__(self):
+    def __enter__(self) -> GenAIInvocation:
         return self
 
     def __exit__(
