@@ -73,6 +73,7 @@ from opentelemetry.util.genai.utils import (
     is_experimental_mode,
 )
 from opentelemetry.util.genai.version import __version__
+from opentelemetry.util.types import AttributeValue
 
 
 class TelemetryHandler:
@@ -207,7 +208,7 @@ class TelemetryHandler:
         self,
         name: str,
         *,
-        arguments: object = None,
+        arguments: AttributeValue | None = None,
         tool_call_id: str | None = None,
         tool_type: str | None = None,
         tool_description: str | None = None,
@@ -339,7 +340,7 @@ class TelemetryHandler:
         self,
         name: str,
         *,
-        arguments: object = None,
+        arguments: AttributeValue | None = None,
         tool_call_id: str | None = None,
         tool_type: str | None = None,
         tool_description: str | None = None,
