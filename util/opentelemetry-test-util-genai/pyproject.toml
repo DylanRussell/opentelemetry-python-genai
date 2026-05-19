@@ -1,0 +1,25 @@
+# Internal workspace member — not published to PyPI.
+# Consumed by sibling packages via uv workspace + editable install.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opentelemetry-test-util-genai"
+version = "0.0.0"
+description = "Internal-only test fixtures and helpers for the OpenTelemetry GenAI workspace. Not published."
+requires-python = ">=3.10"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+  "opentelemetry-api",
+  "opentelemetry-instrumentation",
+  "opentelemetry-sdk",
+  "opentelemetry-semantic-conventions",
+  "opentelemetry-test-utils",
+  "opentelemetry-util-genai",
+  "pytest",
+  "PyYAML",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opentelemetry"]

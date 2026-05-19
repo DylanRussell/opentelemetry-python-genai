@@ -9,6 +9,7 @@ dependencies = [
   "opentelemetry-semantic-conventions",
   "opentelemetry-instrumentation",
   "opentelemetry-test-utils",
+  "opentelemetry-test-util-genai",
   "opentelemetry-util-genai",
   "opentelemetry-instrumentation-anthropic[instruments]",
   "opentelemetry-instrumentation-claude-agent-sdk[instruments]",
@@ -27,6 +28,7 @@ required-version = ">=0.6.0"
 
 # https://docs.astral.sh/uv/reference/settings/#sources
 [tool.uv.sources]
+opentelemetry-test-util-genai = { workspace = true }
 opentelemetry-util-genai = { workspace = true }
 opentelemetry-instrumentation-anthropic = { workspace = true }
 opentelemetry-instrumentation-claude-agent-sdk = { workspace = true }
@@ -36,10 +38,12 @@ opentelemetry-instrumentation-openai-v2 = { workspace = true }
 opentelemetry-instrumentation-openai-agents-v2 = { workspace = true }
 opentelemetry-instrumentation-weaviate = { workspace = true }
 
+
 # https://docs.astral.sh/uv/reference/settings/#workspace
 [tool.uv.workspace]
 members = [
   "instrumentation/*",
+  "util/opentelemetry-test-util-genai",
   "util/opentelemetry-util-genai",
 ]
 
@@ -114,4 +118,5 @@ dev = [
     "tox",
     "tox-uv>=1",
     "pre-commit",
+    "towncrier",
 ]

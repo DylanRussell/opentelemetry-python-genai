@@ -14,7 +14,7 @@ commitment — limit public API.
 ## 1. Semconv first
 
 No code without semconv. If a signal, attribute, or operation is not in the
-[GenAI semconv](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai/),
+[GenAI semconv](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/),
 land the semconv change first.
 
 ## 2. Semantic conventions
