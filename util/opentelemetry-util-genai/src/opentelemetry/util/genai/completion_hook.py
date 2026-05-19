@@ -123,7 +123,7 @@ def load_completion_hook() -> CompletionHook:
     for entry_point in entry_points(
         group="opentelemetry_genai_completion_hook"
     ):
-        name = str(entry_point.name)
+        name = entry_point.name
         try:
             if hook_name != name:
                 continue
