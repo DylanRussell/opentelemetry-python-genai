@@ -39,8 +39,8 @@ def _to_otel_value(python_value):
 
 
 # There is non canonical way to serialize a Python object to a span attribute value.
-# Span attribute values currently most be one of the primitive types, or a homogenous list of primitive types.
-# In the future the value will be expanded to include None, a heterogenous lists of primitive types, and a Map of these types.
+# Span attribute values currently most be one of the primitive types, or a homogeneous list of primitive types.
+# In the future the value will be expanded to include None, a heterogeneous lists of primitive types, and a Map of these types.
 # See https://github.com/open-telemetry/opentelemetry-specification/pull/4485
 def _get_function_args(wrapped_function, function_args, function_kwargs):
     """Records the details about a function invocation as span attributes."""
