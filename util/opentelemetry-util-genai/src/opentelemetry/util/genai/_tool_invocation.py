@@ -53,7 +53,7 @@ class ToolInvocation(GenAIInvocation):
         tool_description: str | None = None,
         tool_result: AttributeValue | None = None,
     ) -> None:
-        """Use handler.start_tool(name) or handler.tool(name) instead of calling this directly."""
+        """Use handler.tool(name) instead of calling this directly."""
         _operation_name = GenAI.GenAiOperationNameValues.EXECUTE_TOOL.value
         super().__init__(
             tracer,
