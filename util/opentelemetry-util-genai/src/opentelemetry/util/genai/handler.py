@@ -51,8 +51,6 @@ from opentelemetry.trace import (
     get_tracer,
 )
 from opentelemetry.util.genai._agent_invocation import AgentInvocation
-from opentelemetry.util.genai._inference_invocation import LLMInvocation
-from opentelemetry.util.genai._invocation import Error
 from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
