@@ -8,6 +8,7 @@ from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
 from opentelemetry.metrics import get_meter_provider
 from opentelemetry.trace import get_tracer_provider
 from opentelemetry.util.genai.completion_hook import load_completion_hook
+from opentelemetry.util.genai.handler import TelemetryHandler
 
 from .allowlist_util import AllowList
 from .generate_content import (
@@ -33,7 +34,7 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
     # Inherited, abstract function from 'BaseInstrumentor'. Even though 'self' is
     # not used in the definition, a method is required per the API contract.
     def instrumentation_dependencies(self) -> Collection[str]:  # pylint: disable=no-self-use
-        return ["google-genai>=1.0.0,<2"]
+        return ["google-genai>=1.32.0,<3"]
 
     def _instrument(self, **kwargs: Any):
         tracer_provider = (
@@ -51,9 +52,15 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
         completion_hook = (
             kwargs.get("completion_hook") or load_completion_hook()
         )
+        telemetry_handler = TelemetryHandler(
+            tracer_provider=tracer_provider,
+            meter_provider=meter_provider,
+            logger_provider=logger_provider,
+            completion_hook=completion_hook,
+        )
         self._generate_content_snapshot = instrument_generate_content(
             otel_wrapper,
-            completion_hook,
+            telemetry_handler,
             generate_content_config_key_allowlist=self._generate_content_config_key_allowlist,
         )
 
