@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-google-genai ~=1.75.0
-opentelemetry-api ~=1.42.0
-opentelemetry-sdk ~=1.42.0
-opentelemetry-exporter-otlp-proto-grpc ~=1.42.0
-opentelemetry-instrumentation-requests ~= 0.51b0
-opentelemetry-instrumentation-google-genai ~= 0.0.1.dev
+# Single pinned requirements for langchain unit tests.
+# TODO: split into oldest/latest once the version matrix is defined.
+
+langchain-openai
+langchain-aws
+langchain-google-genai
+boto3
+
+-e util/opentelemetry-util-genai
+-e instrumentation/opentelemetry-instrumentation-langchain[instruments]
