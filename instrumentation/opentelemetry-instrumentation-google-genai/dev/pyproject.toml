@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "opentelemetry-instrumentation-google-genai",
     "google-genai",
+    "pyOpenSSL",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-grpc",
     "opentelemetry-util-genai",
