@@ -81,14 +81,17 @@ def _wrap_tool_function(
             with telemetry_handler.tool(
                 tool_function.__name__,
                 tool_description=tool_function.__doc__,
-                arguments=json.dumps(
-                    _get_function_args(tool_function, args, kwargs)
-                ),
             ) as tool_invocation:
+                # Do this before calling the tool in case that crashes.
+                if tool_invocation.should_capture_content_on_span:
+                    tool_invocation.arguments = json.dumps(
+                        _get_function_args(tool_function, args, kwargs)
+                    )
                 result = await tool_function(*args, **kwargs)
-                tool_invocation.tool_result = json.dumps(
-                    _to_otel_value(result)
-                )
+                if tool_invocation.should_capture_content_on_span:
+                    tool_invocation.tool_result = json.dumps(
+                        _to_otel_value(result)
+                    )
             return result
     else:
 
@@ -97,14 +100,17 @@ def _wrap_tool_function(
             with telemetry_handler.tool(
                 tool_function.__name__,
                 tool_description=tool_function.__doc__,
-                arguments=json.dumps(
-                    _get_function_args(tool_function, args, kwargs)
-                ),
             ) as tool_invocation:
+                # Do this before calling the tool in case that crashes.
+                if tool_invocation.should_capture_content_on_span:
+                    tool_invocation.arguments = json.dumps(
+                        _get_function_args(tool_function, args, kwargs)
+                    )
                 result = tool_function(*args, **kwargs)
-                tool_invocation.tool_result = json.dumps(
-                    _to_otel_value(result)
-                )
+                if tool_invocation.should_capture_content_on_span:
+                    tool_invocation.tool_result = json.dumps(
+                        _to_otel_value(result)
+                    )
             return result
 
     return wrapped_function
