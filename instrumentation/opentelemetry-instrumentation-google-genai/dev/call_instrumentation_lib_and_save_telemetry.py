@@ -18,7 +18,8 @@ from opentelemetry.instrumentation.google_genai import (
 )
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
-    SimpleLogRecordProcessor, InMemoryLogRecordExporter
+    InMemoryLogRecordExporter,
+    SimpleLogRecordProcessor,
 )
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -26,8 +27,6 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
-
-
 
 resource = Resource.create(attributes={SERVICE_NAME: "write-to-file-example"})
 in_memory_log_exporter = InMemoryLogRecordExporter()
