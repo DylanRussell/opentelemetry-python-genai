@@ -24,7 +24,7 @@ class ToolInvocation(GenAIInvocation):
 
     Not used as a message part — use ToolCallRequest for that purpose.
 
-    Use handler.start_tool(name) rather than constructing this directly.
+    Use handler.tool(name) rather than constructing this directly.
 
     Reference: https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai/gen-ai-spans.md#execute-tool-span
 
