@@ -202,66 +202,6 @@ class TelemetryHandler:
             server_port=server_port,
         )
 
-    def start_invoke_local_agent(
-        self,
-        provider: str,
-        *,
-        request_model: str | None = None,
-        agent_name: str | None = None,
-    ) -> AgentInvocation:
-        """Create and start a local agent invocation (INTERNAL span kind).
-
-        .. deprecated:: 0.5b0
-            Use ``handler.invoke_local_agent()`` instead.
-
-        Use for agents running within the same process (e.g. LangChain, CrewAI).
-
-        Set remaining attributes (agent_name, etc.) on the returned invocation,
-        then call invocation.stop() or invocation.fail().
-        """
-        return AgentInvocation(
-            self._tracer,
-            self._metrics_recorder,
-            self._logger,
-            self._completion_hook,
-            provider,
-            span_kind=SpanKind.INTERNAL,
-            request_model=request_model,
-            agent_name=agent_name,
-        )
-
-    def start_invoke_remote_agent(
-        self,
-        provider: str,
-        *,
-        request_model: str | None = None,
-        server_address: str | None = None,
-        server_port: int | None = None,
-        agent_name: str | None = None,
-    ) -> AgentInvocation:
-        """Create and start a remote agent invocation (CLIENT span kind).
-
-        .. deprecated:: 0.5b0
-            Use ``handler.invoke_remote_agent()`` instead.
-
-        Use for agents invoked over a remote service (e.g. OpenAI Assistants, AWS Bedrock).
-
-        Set remaining attributes (agent_name, etc.) on the returned invocation,
-        then call invocation.stop() or invocation.fail().
-        """
-        return AgentInvocation(
-            self._tracer,
-            self._metrics_recorder,
-            self._logger,
-            self._completion_hook,
-            provider,
-            span_kind=SpanKind.CLIENT,
-            request_model=request_model,
-            agent_name=agent_name,
-            server_address=server_address,
-            server_port=server_port,
-        )
-
     def start_tool(
         self,
         name: str,
