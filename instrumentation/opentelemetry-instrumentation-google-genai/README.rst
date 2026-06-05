@@ -78,8 +78,7 @@ Enabling message content
 ************************
 
 Message content is not captured by default. To capture message content set the environment variable
-``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` to one of  `NO_CONTENT`, `SPAN_AND_EVENT`, `SPAN_ONLY`, `EVENT_ONLY`.
-
+``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` to one of ``NO_CONTENT``, ``SPAN_AND_EVENT``, ``SPAN_ONLY``, ``EVENT_ONLY``.
 This controls whether the following content is captured on spans and/or events:
 
 - Input messages to the LLM.
