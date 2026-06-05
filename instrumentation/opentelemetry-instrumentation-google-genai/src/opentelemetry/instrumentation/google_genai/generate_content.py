@@ -412,11 +412,9 @@ def _maybe_update_token_counts_and_finish_reasons(
     input_tokens = _get_response_property(
         response, "usage_metadata.prompt_token_count"
     )
-    print("INPUT TOKENS", input_tokens)
     output_tokens = _get_response_property(
         response, "usage_metadata.candidates_token_count"
     )
-    print("OUTPUT TOKENS", output_tokens)
     cached_tokens = _get_response_property(
         response, "usage_metadata.cached_content_token_count"
     )
@@ -465,7 +463,6 @@ def _create_instrumented_generate_content(
     generate_content_config_key_allowlist: AllowList,
     content_recording_enabled: bool,
 ):
-    print("CREATING instrumentation generate content..")
     wrapped_func = snapshot.generate_content
 
     @functools.wraps(wrapped_func)
@@ -498,7 +495,6 @@ def _create_instrumented_generate_content(
             request_model=model,
             operation_name="generate_content",
         ) as invocation:
-            print("starting invocation..")
             invocation.attributes.update(extra_attributes)
             invocation.tool_definitions = _maybe_get_tool_definitions(config)
 
@@ -526,7 +522,6 @@ def _create_instrumented_generate_content(
                     candidates.extend(response.candidates)
                 return response
             finally:
-                print("exiting invocation..")
                 if content_recording_enabled and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
@@ -588,6 +583,7 @@ def _create_instrumented_generate_content_stream(
             try:
                 for resp in wrapped_func(
                     self,
+                    model=model,
                     contents=contents,
                     config=wrapped_config,
                     **kwargs,
@@ -645,7 +641,6 @@ def _create_instrumented_async_generate_content(
             request_model=model,
             operation_name="generate_content",
         ) as invocation:
-            print("Starting invocation gen contenr async..")
             invocation.attributes.update(extra_attributes)
             invocation.tool_definitions = (
                 await _maybe_get_tool_definitions_async(config)
@@ -675,7 +670,6 @@ def _create_instrumented_async_generate_content(
                     candidates += response.candidates
                 return response
             finally:
-                print("Exiting invocation gen contenr async..")
                 if content_recording_enabled and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
