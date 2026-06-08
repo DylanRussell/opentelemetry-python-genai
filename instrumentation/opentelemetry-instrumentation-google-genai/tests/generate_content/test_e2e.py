@@ -35,12 +35,6 @@ except ImportError:
     ClientConnectionError = None
     aiohttp_stubs = None
 
-from opentelemetry.instrumentation._semconv import (
-    OTEL_SEMCONV_STABILITY_OPT_IN,
-    _OpenTelemetrySemanticConventionStability,
-    _OpenTelemetryStabilitySignalType,
-    _StabilityMode,
-)
 from opentelemetry.instrumentation.google_genai import (
     GoogleGenAiSdkInstrumentor,
 )
@@ -347,15 +341,9 @@ def fixture_otel_mocker():
     params=["SPAN_AND_EVENT", "NO_CONTENT"],
 )
 def fixture_setup_content_recording(request):
-    os.environ.update(
-        {
-            OTEL_SEMCONV_STABILITY_OPT_IN: "gen_ai_latest_experimental",
-            OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: request.param,
-        }
+    os.environ[OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT] = (
+        request.param
     )
-    _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[
-        _OpenTelemetryStabilitySignalType.GEN_AI
-    ] = _StabilityMode.GEN_AI_LATEST_EXPERIMENTAL
 
 
 @pytest.fixture(name="vcr_record_mode")

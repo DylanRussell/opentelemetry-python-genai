@@ -56,20 +56,19 @@ def should_emit_event() -> bool:
         .strip()
     ):
         if envvar == "true":
-                return True
+            return True
         if envvar == "false":
-                return False
-            logger.warning(
-                "%s is not a valid option for `%s` environment variable. Must be one of true or false (case-insensitive). Defaulting based on content capturing mode.",
-                envvar,
-                OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT,
-            )
+            return False
+        logger.warning(
+            "%s is not a valid option for `%s` environment variable. Must be one of true or false (case-insensitive). Defaulting based on content capturing mode.",
+            envvar,
+            OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT,
+        )
     # EVENT_ONLY and SPAN_AND_EVENT require events, so default to True
     return get_content_capturing_mode() in (
         ContentCapturingMode.EVENT_ONLY,
         ContentCapturingMode.SPAN_AND_EVENT,
     )
-
 
 
 def should_capture_content_on_spans() -> bool:
