@@ -28,9 +28,11 @@ class TestCase(unittest.TestCase):
         self._instrumentor_args = {}
 
     def tearDown(self):
-        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = (
-            ""
-        )
+        if self._instrumentation_context is not None:
+            self._instrumentation_context.uninstall()
+            self._instrumentation_context = None
+        self._otel.uninstall()
+        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = ""
 
     def _lazy_init(self):
         self._instrumentation_context = InstrumentationContext(
@@ -74,9 +76,3 @@ class TestCase(unittest.TestCase):
                 credentials=self._credentials,
             )
         return google.genai.Client(vertexai=False, api_key=self._api_key)
-
-    def tearDown(self):
-        if self._instrumentation_context is not None:
-            self._instrumentation_context.uninstall()
-            self._instrumentation_context = None
-        self._otel.uninstall()
