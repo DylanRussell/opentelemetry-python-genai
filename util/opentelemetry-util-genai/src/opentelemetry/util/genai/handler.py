@@ -37,8 +37,6 @@ Usage:
 
 from __future__ import annotations
 
-import os
-
 from opentelemetry._logs import (
     LoggerProvider,
     get_logger,
@@ -57,9 +55,6 @@ from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
 )
-from opentelemetry.util.genai.environment_variables import (
-    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT,
-)
 from opentelemetry.util.genai.invocation import (
     EmbeddingInvocation,
     InferenceInvocation,
@@ -68,11 +63,6 @@ from opentelemetry.util.genai.invocation import (
     WorkflowInvocation,
 )
 from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
-from opentelemetry.util.genai.types import ContentCapturingMode
-from opentelemetry.util.genai.utils import (
-    get_content_capturing_mode,
-    is_experimental_mode,
-)
 from opentelemetry.util.genai.version import __version__
 
 
@@ -107,30 +97,6 @@ class TelemetryHandler:
             schema_url=schema_url,
         )
         self._completion_hook = completion_hook or _NoOpCompletionHook()
-        if is_experimental_mode():
-            content_enabled = (
-                get_content_capturing_mode() != ContentCapturingMode.NO_CONTENT
-            )
-        else:
-            content_enabled = os.environ.get(
-                OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT, ""
-            ).lower() in (
-                "true",
-                "span_only",
-                "event_only",
-                "span_and_event",
-            )
-        self._capture_content = content_enabled or not isinstance(
-            self._completion_hook, _NoOpCompletionHook
-        )
-
-    def should_capture_content(self) -> bool:
-        """Returns True if content should be captured.
-
-        Content is captured when the content capturing mode requires it, or
-        when a real completion hook is configured (not a no-op).
-        """
-        return self._capture_content
 
     # New-style factory methods: construct + start in one call, handler stored on invocation
     def start_inference(
