@@ -27,6 +27,11 @@ class TestCase(unittest.TestCase):
         self._credentials = FakeCredentials()
         self._instrumentor_args = {}
 
+    def tearDown(self):
+        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = (
+            ""
+        )
+
     def _lazy_init(self):
         self._instrumentation_context = InstrumentationContext(
             **self._instrumentor_args

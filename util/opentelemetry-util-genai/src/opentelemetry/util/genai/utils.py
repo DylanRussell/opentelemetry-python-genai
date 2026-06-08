@@ -49,7 +49,7 @@ def should_emit_event() -> bool:
     """
     # If explicitly set (and not empty), use the user's value (highest priority)
     if (
-        envvar := os.environ.get(OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT)
+        envvar := os.environ.get(OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT, "")
         .lower()
         .strip()
     ):
