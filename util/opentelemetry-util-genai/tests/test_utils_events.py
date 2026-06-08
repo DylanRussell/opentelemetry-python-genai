@@ -304,7 +304,6 @@ class TestTelemetryHandlerEvents(unittest.TestCase):
         os.environ,
         {
             "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "EVENT_ONLY",
-            "OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT": "false",
         },
     )
     def test_emits_llm_event_by_default_for_event_only(self):
@@ -330,7 +329,6 @@ class TestTelemetryHandlerEvents(unittest.TestCase):
         os.environ,
         {
             "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_AND_EVENT",
-            "OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT": "false",
         },
     )
     def test_emits_llm_event_by_default_for_span_and_event(self):

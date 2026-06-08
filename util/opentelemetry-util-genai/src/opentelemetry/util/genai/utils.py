@@ -18,11 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_content_capturing_mode() -> ContentCapturingMode:
-    """This function should not be called when GEN_AI stability mode is set to DEFAULT.
-
-    When the GEN_AI stability mode is DEFAULT this function will raise a ValueError -- see the code below."""
+    """Gets ContentCapturingMode from associated envvar, defaulting to NO_CONTENT if unset."""
     envvar = os.environ.get(
-        OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+        OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT, ""
     ).strip()
     if not envvar:
         return ContentCapturingMode.NO_CONTENT
