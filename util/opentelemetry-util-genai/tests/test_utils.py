@@ -182,7 +182,7 @@ class TestShouldEmitEvent(unittest.TestCase):
                 f"Expected True but got {result} (EVENT_ONLY should default to True)"
             )
         self.assertEqual(len(cm.output), 1)
-        self.assertIn("INVALID_VALUE is not a valid option for", cm.output[0])
+        self.assertIn("invalid_value is not a valid option for", cm.output[0])
         self.assertIn(
             "Must be one of true or false (case-insensitive)", cm.output[0]
         )
@@ -204,7 +204,7 @@ class TestShouldEmitEvent(unittest.TestCase):
                 f"Expected False but got {result} (SPAN_ONLY should default to False)"
             )
         self.assertEqual(len(cm.output), 1)
-        self.assertIn("INVALID_VALUE is not a valid option for", cm.output[0])
+        self.assertIn("invalid_value is not a valid option for", cm.output[0])
 
 
 class TestShouldCaptureContent(unittest.TestCase):
