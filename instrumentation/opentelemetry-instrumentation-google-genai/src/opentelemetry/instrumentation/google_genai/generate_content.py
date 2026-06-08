@@ -398,17 +398,13 @@ def _get_extra_generate_content_attributes() -> dict[str, AttributeValue]:
 
 def _maybe_update_token_counts_and_finish_reasons(
     response: GenerateContentResponse,
-    finish_reason_set: set[str],
+    finish_reasons: list[str],
     invocation: InferenceInvocation,
 ):
     for candidate in response.candidates or []:
         if candidate.finish_reason:
-            finish_reason_set.add(
-                candidate.finish_reason.name.lower().removeprefix(
-                    "finish_reason_"
-                )
-            )
-    invocation.finish_reasons = sorted(finish_reason_set)
+            finish_reasons.append(candidate.finish_reason.value.lower())
+    invocation.finish_reasons = finish_reasons
     input_tokens = _get_response_property(
         response, "usage_metadata.prompt_token_count"
     )
@@ -428,15 +424,8 @@ def _maybe_update_token_counts_and_finish_reasons(
     if output_tokens is not None and isinstance(output_tokens, int):
         invocation.output_tokens = output_tokens
     if thinking_tokens is not None and isinstance(thinking_tokens, int):
-        # Pricing of tokens is the sum of output tokens and thinking tokens:
-        # https://ai.google.dev/gemini-api/docs/thinking#pricing
-        # Also the sem conv recommends combining these counts.
-        invocation.output_tokens = (
-            invocation.output_tokens or 0
-        ) + thinking_tokens
-        invocation.attributes["gen_ai.usage.reasoning.output_tokens"] = (
-            thinking_tokens
-        )
+        # The util library will add this total to output tokens.
+        invocation.thinking_tokens = thinking_tokens
 
 
 def _maybe_get_tool_definitions(config) -> list[ToolDefinition]:
@@ -482,7 +471,7 @@ def _create_instrumented_generate_content(
             if config
             else None
         )
-        finish_reason_set = set()
+        finish_reasons = []
         extra_attributes = (
             _get_extra_generate_content_attributes()
             | _create_request_attributes(
@@ -516,7 +505,7 @@ def _create_instrumented_generate_content(
                     **kwargs,
                 )
                 _maybe_update_token_counts_and_finish_reasons(
-                    response, finish_reason_set, invocation
+                    response, finish_reasons, invocation
                 )
                 if response.candidates:
                     candidates.extend(response.candidates)
@@ -555,7 +544,7 @@ def _create_instrumented_generate_content_stream(
             if config
             else None
         )
-        finish_reason_set = set()
+        finish_reasons = []
         extra_attributes = (
             _get_extra_generate_content_attributes()
             | _create_request_attributes(
@@ -589,7 +578,7 @@ def _create_instrumented_generate_content_stream(
                     **kwargs,
                 ):
                     _maybe_update_token_counts_and_finish_reasons(
-                        resp, finish_reason_set, invocation
+                        resp, finish_reasons, invocation
                     )
                     if resp.candidates:
                         candidates += resp.candidates
@@ -628,7 +617,7 @@ def _create_instrumented_async_generate_content(
             if config
             else None
         )
-        finish_reason_set = set()
+        finish_reasons = []
         extra_attributes = (
             _get_extra_generate_content_attributes()
             | _create_request_attributes(
@@ -664,7 +653,7 @@ def _create_instrumented_async_generate_content(
                     **kwargs,
                 )
                 _maybe_update_token_counts_and_finish_reasons(
-                    response, finish_reason_set, invocation
+                    response, finish_reasons, invocation
                 )
                 if response.candidates:
                     candidates += response.candidates
@@ -704,7 +693,7 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
             if config
             else None
         )
-        finish_reason_set = set()
+        finish_reasons = []
         extra_attributes = (
             _get_extra_generate_content_attributes()
             | _create_request_attributes(
@@ -742,7 +731,7 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
                     **kwargs,
                 ):
                     _maybe_update_token_counts_and_finish_reasons(
-                        resp, finish_reason_set, invocation
+                        resp, finish_reasons, invocation
                     )
                     if resp.candidates:
                         candidates += resp.candidates
