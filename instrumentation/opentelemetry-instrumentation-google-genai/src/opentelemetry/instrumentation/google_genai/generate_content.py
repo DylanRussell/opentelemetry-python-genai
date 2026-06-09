@@ -396,11 +396,12 @@ def _get_extra_generate_content_attributes() -> dict[str, AttributeValue]:
     return dict(attrs or {})
 
 
-def _maybe_update_token_counts_and_finish_reasons(
+def _apply_response_attributes(
     response: GenerateContentResponse,
     finish_reasons: list[str],
     invocation: InferenceInvocation,
 ):
+    invocation.response_id = response.response_id
     for candidate in response.candidates or []:
         if candidate.finish_reason:
             finish_reasons.append(candidate.finish_reason.value.lower())
@@ -504,7 +505,7 @@ def _create_instrumented_generate_content(
                     config=wrapped_config,
                     **kwargs,
                 )
-                _maybe_update_token_counts_and_finish_reasons(
+                _apply_response_attributes(
                     response, finish_reasons, invocation
                 )
                 if response.candidates:
@@ -577,7 +578,7 @@ def _create_instrumented_generate_content_stream(
                     config=wrapped_config,
                     **kwargs,
                 ):
-                    _maybe_update_token_counts_and_finish_reasons(
+                    _apply_response_attributes(
                         resp, finish_reasons, invocation
                     )
                     if resp.candidates:
@@ -652,7 +653,7 @@ def _create_instrumented_async_generate_content(
                     config=wrapped_config,
                     **kwargs,
                 )
-                _maybe_update_token_counts_and_finish_reasons(
+                _apply_response_attributes(
                     response, finish_reasons, invocation
                 )
                 if response.candidates:
@@ -730,7 +731,7 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
                     config=wrapped_config,
                     **kwargs,
                 ):
-                    _maybe_update_token_counts_and_finish_reasons(
+                    _apply_response_attributes(
                         resp, finish_reasons, invocation
                     )
                     if resp.candidates:
