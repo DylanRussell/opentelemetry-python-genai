@@ -109,11 +109,20 @@ class TelemetryHandler:
         ) or not isinstance(self._completion_hook, _NoOpCompletionHook)
 
     def should_capture_content(self) -> bool:
-        """Returns True if message content should be captured by the instrumentation library.
+        """Returns True when message content should be captured by the instrumentation library.
+
+        Message content includes the following attributes:
+            - input_messages
+            - output_messages
+            - system_instructions
+            - For tool invocations: tool args and results
+            - For tool definitions: tool args and description
+
+        The util library will decide when and where the message content will be 
+        added to the telemetry data.
 
         Content should be captured when the content capturing mode requires it, or
-        when a real completion hook is configured (not a no-op). The util library will decide
-        when and where the message content will be added to the telemetry data.
+        when a real completion hook is configured (not a no-op).
         """
         return self._capture_content
 
