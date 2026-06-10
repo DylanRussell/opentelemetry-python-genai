@@ -36,6 +36,14 @@ def get_content_capturing_mode() -> ContentCapturingMode:
         return ContentCapturingMode.NO_CONTENT
 
 
+def is_experimental_mode() -> bool:
+    """
+    Kept for backwards compatibility. The utils in this library only support the experimental mode sem convs now.
+    Don't use this function always returns True.
+    """
+    return True
+
+
 def should_emit_event() -> bool:
     """Check if event emission is enabled.
 

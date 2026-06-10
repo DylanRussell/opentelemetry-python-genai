@@ -63,6 +63,8 @@ from opentelemetry.util.genai.invocation import (
     WorkflowInvocation,
 )
 from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
+from opentelemetry.util.genai.types import ContentCapturingMode
+from opentelemetry.util.genai.utils import get_content_capturing_mode
 from opentelemetry.util.genai.version import __version__
 
 
@@ -97,6 +99,23 @@ class TelemetryHandler:
             schema_url=schema_url,
         )
         self._completion_hook = completion_hook or _NoOpCompletionHook()
+        self._capture_content = (
+            get_content_capturing_mode()
+            in (
+                ContentCapturingMode.SPAN_ONLY,
+                ContentCapturingMode.EVENT_ONLY,
+                ContentCapturingMode.SPAN_AND_EVENT,
+            )
+        ) or not isinstance(self._completion_hook, _NoOpCompletionHook)
+
+    def should_capture_content(self) -> bool:
+        """Returns True if message content should be captured by the instrumentation library.
+
+        Content should be captured when the content capturing mode requires it, or
+        when a real completion hook is configured (not a no-op). The util library will decide
+        when and where the message content will be added to the telemetry data.
+        """
+        return self._capture_content
 
     # New-style factory methods: construct + start in one call, handler stored on invocation
     def start_inference(

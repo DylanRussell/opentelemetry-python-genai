@@ -10,6 +10,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
+from opentelemetry.util.genai.completion_hook import _NoOpCompletionHook
 from opentelemetry.util.genai.environment_variables import (
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT,
     OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT,
@@ -336,3 +337,37 @@ class TestHandlerCompletionHook(TestCase):  # pylint: disable=too-many-public-me
         handler = self._make_handler()
         handler.invoke_local_agent("openai").stop()
         handler.invoke_remote_agent("openai").stop()
+
+    def test_should_capture_content_false_by_default(self):
+        for env_var, expected_content_capture in [
+            ("", False),
+            ("NO_CONTENT", False),
+            ("SPAN_ONLY", True),
+            ("EVENT_ONLY", True),
+            ("SPAN_AND_EVENT", True),
+        ]:
+            with patch.dict(
+                os.environ,
+                {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: env_var},
+            ):
+                handler = self._make_handler()
+                self.assertEqual(
+                    handler.should_capture_content(), expected_content_capture
+                )
+
+    @patch.dict(
+        os.environ,
+        {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "no_content"},
+    )
+    def test_should_capture_content_true_when_real_hook_set(self):
+        # A real (non-noop) hook forces content capture regardless of env vars
+        hook = MagicMock()
+        handler = self._make_handler(hook)
+        self.assertTrue(handler.should_capture_content())
+
+    @patch.dict(
+        os.environ, {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: ""}
+    )
+    def test_should_capture_content_false_when_noop_hook(self):
+        handler = self._make_handler(_NoOpCompletionHook())
+        self.assertFalse(handler.should_capture_content())
