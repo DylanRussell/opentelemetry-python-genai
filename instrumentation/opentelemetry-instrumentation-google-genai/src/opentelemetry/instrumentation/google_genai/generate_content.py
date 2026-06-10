@@ -279,43 +279,44 @@ async def _to_tool_definition_async(
     return _to_tool_definition_common(tool)
 
 
-def _create_request_attributes(
+def _apply_request_attributes(
     config: Optional[GenerateContentConfigOrDict],
     allow_list: AllowList,
-) -> dict[str, AttributeValue]:
+    invocation: InferenceInvocation,
+) -> None:
     if not config:
-        return {}
+        return
     config = _to_dict(config)
+    invocation.temperature = config.get("temperature")
+    invocation.top_p = config.get("top_p")
+    invocation.top_k = config.get("top_k")
+    invocation.request_choice_count = config.get("candidate_count")
+    invocation.max_tokens = config.get("max_output_tokens")
+    invocation.stop_sequences = config.get("stop_sequences")
+    invocation.frequency_penalty = config.get("frequency_penalty")
+    invocation.presence_penalty = config.get("presence_penalty")
+    invocation.seed = config.get("seed")
     attributes = flatten_dict(
         config,
         # A custom prefix is used, because the names/structure of the
         # configuration is likely to be specific to Google Gen AI SDK.
         key_prefix=GCP_GENAI_OPERATION_CONFIG,
-        exclude_keys=[
-            # System instruction can be overly long for a span attribute.
-            # Additionally, it is recorded as an event (log), instead.
-            "gcp.gen_ai.operation.config.system_instruction",
-        ],
-        # Although a custom prefix is used by default, some of the attributes
-        # are captured in common, standard, Semantic Conventions. For the
-        # well-known properties whose values align with Semantic Conventions,
-        # we ensure that the key name matches the standard SemConv name.
-        rename_keys={
-            # TODO: add more entries here as more semantic conventions are
-            # generalized to cover more of the available config options.
-            "gcp.gen_ai.operation.config.temperature": gen_ai_attributes.GEN_AI_REQUEST_TEMPERATURE,
-            "gcp.gen_ai.operation.config.top_k": gen_ai_attributes.GEN_AI_REQUEST_TOP_K,
-            "gcp.gen_ai.operation.config.top_p": gen_ai_attributes.GEN_AI_REQUEST_TOP_P,
-            "gcp.gen_ai.operation.config.candidate_count": gen_ai_attributes.GEN_AI_REQUEST_CHOICE_COUNT,
-            "gcp.gen_ai.operation.config.max_output_tokens": gen_ai_attributes.GEN_AI_REQUEST_MAX_TOKENS,
-            "gcp.gen_ai.operation.config.stop_sequences": gen_ai_attributes.GEN_AI_REQUEST_STOP_SEQUENCES,
-            "gcp.gen_ai.operation.config.frequency_penalty": gen_ai_attributes.GEN_AI_REQUEST_FREQUENCY_PENALTY,
-            "gcp.gen_ai.operation.config.presence_penalty": gen_ai_attributes.GEN_AI_REQUEST_PRESENCE_PENALTY,
-            "gcp.gen_ai.operation.config.seed": gen_ai_attributes.GEN_AI_REQUEST_SEED,
+        # These are all captured already as semantic conventions.
+        exclude_keys={
+            f"{GCP_GENAI_OPERATION_CONFIG}.system_instruction",
+            f"{GCP_GENAI_OPERATION_CONFIG}.temperature",
+            f"{GCP_GENAI_OPERATION_CONFIG}.top_k",
+            f"{GCP_GENAI_OPERATION_CONFIG}.top_p",
+            f"{GCP_GENAI_OPERATION_CONFIG}.candidate_count",
+            f"{GCP_GENAI_OPERATION_CONFIG}.max_output_tokens",
+            f"{GCP_GENAI_OPERATION_CONFIG}.stop_sequences",
+            f"{GCP_GENAI_OPERATION_CONFIG}.frequency_penalty",
+            f"{GCP_GENAI_OPERATION_CONFIG}.presence_penalty",
+            f"{GCP_GENAI_OPERATION_CONFIG}.seed",
         },
     )
-    response_mime_type = config.get("response_mime_type")
-    if response_mime_type:
+    attributes = {k: v for k, v in attributes.items() if allow_list.allowed(k)}
+    if response_mime_type := config.get("response_mime_type"):
         if response_mime_type == "text/plain":
             attributes[gen_ai_attributes.GEN_AI_OUTPUT_TYPE] = "text"
         elif response_mime_type == "application/json":
@@ -324,12 +325,7 @@ def _create_request_attributes(
             attributes[gen_ai_attributes.GEN_AI_OUTPUT_TYPE] = (
                 response_mime_type
             )
-    for key in list(attributes.keys()):
-        if key.startswith(
-            GCP_GENAI_OPERATION_CONFIG
-        ) and not allow_list.allowed(key):
-            del attributes[key]
-    return attributes
+    invocation.attributes.update(attributes)
 
 
 def _get_response_property(response: GenerateContentResponse, path: str):
@@ -473,19 +469,19 @@ def _create_instrumented_generate_content(
             else None
         )
         finish_reasons = []
-        extra_attributes = (
-            _get_extra_generate_content_attributes()
-            | _create_request_attributes(
-                config,
-                generate_content_config_key_allowlist,
-            )
-        )
         with telemetry_handler.inference(
             provider=_determine_genai_system(self),
             request_model=model,
             operation_name="generate_content",
         ) as invocation:
-            invocation.attributes.update(extra_attributes)
+            _apply_request_attributes(
+                config,
+                generate_content_config_key_allowlist,
+                invocation,
+            )
+            invocation.attributes.update(
+                _get_extra_generate_content_attributes()
+            )
             invocation.tool_definitions = _maybe_get_tool_definitions(config)
 
             if content_recording_enabled:
@@ -546,19 +542,17 @@ def _create_instrumented_generate_content_stream(
             else None
         )
         finish_reasons = []
-        extra_attributes = (
-            _get_extra_generate_content_attributes()
-            | _create_request_attributes(
-                config,
-                generate_content_config_key_allowlist,
-            )
-        )
         with telemetry_handler.inference(
             provider=_determine_genai_system(self),
             request_model=model,
             operation_name="generate_content",
         ) as invocation:
-            invocation.attributes.update(extra_attributes)
+            _apply_request_attributes(
+                config, generate_content_config_key_allowlist, invocation
+            )
+            invocation.attributes.update(
+                _get_extra_generate_content_attributes()
+            )
             invocation.tool_definitions = _maybe_get_tool_definitions(config)
 
             if content_recording_enabled:
@@ -619,19 +613,17 @@ def _create_instrumented_async_generate_content(
             else None
         )
         finish_reasons = []
-        extra_attributes = (
-            _get_extra_generate_content_attributes()
-            | _create_request_attributes(
-                config,
-                generate_content_config_key_allowlist,
-            )
-        )
         with telemetry_handler.inference(
             provider=_determine_genai_system(self),
             request_model=model,
             operation_name="generate_content",
         ) as invocation:
-            invocation.attributes.update(extra_attributes)
+            invocation.attributes.update(
+                _get_extra_generate_content_attributes()
+            )
+            _apply_request_attributes(
+                config, generate_content_config_key_allowlist, invocation
+            )
             invocation.tool_definitions = (
                 await _maybe_get_tool_definitions_async(config)
             )
@@ -695,19 +687,15 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
             else None
         )
         finish_reasons = []
-        extra_attributes = (
-            _get_extra_generate_content_attributes()
-            | _create_request_attributes(
-                config,
-                generate_content_config_key_allowlist,
-            )
-        )
         invocation = telemetry_handler.inference(
             provider=_determine_genai_system(self),
             request_model=model,
             operation_name="generate_content",
         )
-        invocation.attributes.update(extra_attributes)
+        invocation.attributes.update(_get_extra_generate_content_attributes())
+        _apply_request_attributes(
+            config, generate_content_config_key_allowlist, invocation
+        )
         invocation.tool_definitions = await _maybe_get_tool_definitions_async(
             config
         )
