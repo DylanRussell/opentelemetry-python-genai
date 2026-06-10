@@ -118,7 +118,7 @@ class TelemetryHandler:
             - For tool invocations: tool args and results
             - For tool definitions: tool args and description
 
-        The util library will decide when and where the message content will be 
+        The util library will decide when and where the message content will be
         added to the telemetry data.
 
         Content should be captured when the content capturing mode requires it, or
