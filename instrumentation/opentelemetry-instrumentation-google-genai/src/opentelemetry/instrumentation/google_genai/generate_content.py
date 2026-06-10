@@ -34,7 +34,6 @@ from opentelemetry.util.genai.types import (
     GenericToolDefinition,
     ToolDefinition,
 )
-from opentelemetry.util.genai.utils import get_content_capturing_mode
 from opentelemetry.util.types import AttributeValue
 
 from .allowlist_util import AllowList
@@ -447,7 +446,6 @@ def _create_instrumented_generate_content(
     snapshot: _MethodsSnapshot,
     telemetry_handler: TelemetryHandler,
     generate_content_config_key_allowlist: AllowList,
-    content_recording_enabled: bool,
 ):
     wrapped_func = snapshot.generate_content
 
@@ -484,7 +482,7 @@ def _create_instrumented_generate_content(
             )
             invocation.tool_definitions = _maybe_get_tool_definitions(config)
 
-            if content_recording_enabled:
+            if telemetry_handler.should_capture_content():
                 invocation.input_messages = to_input_messages(
                     contents=transformers.t_contents(contents)
                 )
@@ -508,7 +506,7 @@ def _create_instrumented_generate_content(
                     candidates.extend(response.candidates)
                 return response
             finally:
-                if content_recording_enabled and candidates:
+                if telemetry_handler.should_capture_content() and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
                     )
@@ -520,7 +518,6 @@ def _create_instrumented_generate_content_stream(
     snapshot: _MethodsSnapshot,
     telemetry_handler: TelemetryHandler,
     generate_content_config_key_allowlist: AllowList,
-    content_recording_enabled: bool,
 ):
     wrapped_func = snapshot.generate_content_stream
 
@@ -555,7 +552,7 @@ def _create_instrumented_generate_content_stream(
             )
             invocation.tool_definitions = _maybe_get_tool_definitions(config)
 
-            if content_recording_enabled:
+            if telemetry_handler.should_capture_content():
                 invocation.input_messages = to_input_messages(
                     contents=transformers.t_contents(contents)
                 )
@@ -579,7 +576,7 @@ def _create_instrumented_generate_content_stream(
                         candidates += resp.candidates
                     yield resp
             finally:
-                if content_recording_enabled and candidates:
+                if telemetry_handler.should_capture_content() and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
                     )
@@ -591,7 +588,6 @@ def _create_instrumented_async_generate_content(
     snapshot: _MethodsSnapshot,
     telemetry_handler: TelemetryHandler,
     generate_content_config_key_allowlist: AllowList,
-    content_recording_enabled: bool,
 ):
     wrapped_func = snapshot.async_generate_content
 
@@ -628,7 +624,7 @@ def _create_instrumented_async_generate_content(
                 await _maybe_get_tool_definitions_async(config)
             )
 
-            if content_recording_enabled:
+            if telemetry_handler.should_capture_content():
                 invocation.input_messages = to_input_messages(
                     contents=transformers.t_contents(contents)
                 )
@@ -652,7 +648,7 @@ def _create_instrumented_async_generate_content(
                     candidates += response.candidates
                 return response
             finally:
-                if content_recording_enabled and candidates:
+                if telemetry_handler.should_capture_content() and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
                     )
@@ -665,7 +661,6 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
     snapshot: _MethodsSnapshot,
     telemetry_handler: TelemetryHandler,
     generate_content_config_key_allowlist: AllowList,
-    content_recording_enabled: bool,
 ):
     wrapped_func = snapshot.async_generate_content_stream
 
@@ -700,7 +695,7 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
             config
         )
 
-        if content_recording_enabled:
+        if telemetry_handler.should_capture_content():
             invocation.input_messages = to_input_messages(
                 contents=transformers.t_contents(contents)
             )
@@ -725,13 +720,13 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
                     if resp.candidates:
                         candidates += resp.candidates
                     yield resp
-                if content_recording_enabled and candidates:
+                if telemetry_handler.should_capture_content() and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
                     )
                 invocation.stop()
             except Exception as exc:
-                if content_recording_enabled and candidates:
+                if telemetry_handler.should_capture_content() and candidates:
                     invocation.output_messages = to_output_messages(
                         candidates=candidates
                     )
@@ -754,33 +749,28 @@ def instrument_generate_content(
 ) -> object:
     os.environ["OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT"] = "true"
     snapshot = _MethodsSnapshot()
-    content_recording_enabled = get_content_capturing_mode()
     Models.generate_content = _create_instrumented_generate_content(
         snapshot,
         telemetry_handler,
         generate_content_config_key_allowlist,
-        content_recording_enabled,
     )
     Models.generate_content_stream = (
         _create_instrumented_generate_content_stream(
             snapshot,
             telemetry_handler,
             generate_content_config_key_allowlist,
-            content_recording_enabled,
         )
     )
     AsyncModels.generate_content = _create_instrumented_async_generate_content(
         snapshot,
         telemetry_handler,
         generate_content_config_key_allowlist,
-        content_recording_enabled,
     )
     AsyncModels.generate_content_stream = (
         _create_instrumented_async_generate_content_stream(
             snapshot,
             telemetry_handler,
             generate_content_config_key_allowlist,
-            content_recording_enabled,
         )
     )
     return snapshot
