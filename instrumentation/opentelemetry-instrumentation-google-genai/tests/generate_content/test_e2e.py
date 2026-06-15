@@ -504,7 +504,9 @@ def fixture_generate_content_stream(client, is_async):
     "enable_completion_hook", ["enable_completion_hook"], indirect=True
 )
 @pytest.mark.vcr
-def test_upload_hook_non_streaming(model, generate_content, otel_mocker: OTelMocker):
+def test_upload_hook_non_streaming(
+    model, generate_content, otel_mocker: OTelMocker
+):
     expected_input = [
         {
             "parts": [
