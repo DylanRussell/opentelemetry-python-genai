@@ -295,12 +295,19 @@ def _apply_request_attributes(
     invocation.frequency_penalty = config.get("frequency_penalty")
     invocation.presence_penalty = config.get("presence_penalty")
     invocation.seed = config.get("seed")
+    if response_mime_type := config.get("response_mime_type"):
+        if response_mime_type == "text/plain":
+            invocation.output_type = "text"
+        elif response_mime_type == "application/json":
+            invocation.output_type = "json"
+        else:
+            invocation.output_type = response_mime_type
     attributes = flatten_dict(
         config,
         # A custom prefix is used, because the names/structure of the
         # configuration is likely to be specific to Google Gen AI SDK.
         key_prefix=GCP_GENAI_OPERATION_CONFIG,
-        # These are all captured already as semantic conventions.
+        # These are all captured above as semantic conventions.
         exclude_keys={
             f"{GCP_GENAI_OPERATION_CONFIG}.system_instruction",
             f"{GCP_GENAI_OPERATION_CONFIG}.temperature",
@@ -312,19 +319,13 @@ def _apply_request_attributes(
             f"{GCP_GENAI_OPERATION_CONFIG}.frequency_penalty",
             f"{GCP_GENAI_OPERATION_CONFIG}.presence_penalty",
             f"{GCP_GENAI_OPERATION_CONFIG}.seed",
+            f"{GCP_GENAI_OPERATION_CONFIG}.response_mime_type",
         },
     )
-    attributes = {k: v for k, v in attributes.items() if allow_list.allowed(k)}
-    if response_mime_type := config.get("response_mime_type"):
-        if response_mime_type == "text/plain":
-            attributes[gen_ai_attributes.GEN_AI_OUTPUT_TYPE] = "text"
-        elif response_mime_type == "application/json":
-            attributes[gen_ai_attributes.GEN_AI_OUTPUT_TYPE] = "json"
-        else:
-            attributes[gen_ai_attributes.GEN_AI_OUTPUT_TYPE] = (
-                response_mime_type
-            )
-    invocation.attributes.update(attributes)
+    invocation.attributes.update(
+        {k: v for k, v in attributes.items() if allow_list.allowed(k)}
+    )
+
 
 
 def _get_response_property(response: GenerateContentResponse, path: str):
