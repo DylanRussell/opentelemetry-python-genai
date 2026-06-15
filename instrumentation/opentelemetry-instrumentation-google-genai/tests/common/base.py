@@ -3,12 +3,12 @@
 
 import os
 import unittest
+from unittest.mock import patch
 
 import google.genai
 
 from .auth import FakeCredentials
 from .instrumentation_context import InstrumentationContext
-from unittest.mock import patch
 from .otel_mocker import OTelMocker
 
 

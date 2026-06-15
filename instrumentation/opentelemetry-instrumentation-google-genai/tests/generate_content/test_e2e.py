@@ -435,7 +435,7 @@ def fixture_genai_sdk_backend(request):
     return request.param
 
 
-@pytest.fixture(name="use_vertex", autouse=True)
+@pytest.fixture(name="use_vertex")
 def fixture_use_vertex(genai_sdk_backend):
     result = bool(genai_sdk_backend == "vertexaiapi")
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "1" if result else "0"
@@ -504,9 +504,7 @@ def fixture_generate_content_stream(client, is_async):
     "enable_completion_hook", ["enable_completion_hook"], indirect=True
 )
 @pytest.mark.vcr
-def test_upload_hook_non_streaming(
-    generate_content, model, otel_mocker: OTelMocker
-):
+def test_upload_hook_non_streaming(model, generate_content, otel_mocker: OTelMocker):
     expected_input = [
         {
             "parts": [
