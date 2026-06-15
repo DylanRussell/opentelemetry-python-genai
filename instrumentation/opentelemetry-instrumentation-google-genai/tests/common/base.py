@@ -8,14 +8,19 @@ import google.genai
 
 from .auth import FakeCredentials
 from .instrumentation_context import InstrumentationContext
+from unittest.mock import patch
 from .otel_mocker import OTelMocker
 
 
 class TestCase(unittest.TestCase):
     def setUp(self):
-        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = (
-            "SPAN_AND_EVENT"
+        self.env_patcher = patch.dict(
+            os.environ,
+            {
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_AND_EVENT",
+            },
         )
+        self.env_patcher.start()
         self._otel = OTelMocker()
         self._otel.install()
         self._instrumentation_context = None
@@ -32,7 +37,7 @@ class TestCase(unittest.TestCase):
             self._instrumentation_context.uninstall()
             self._instrumentation_context = None
         self._otel.uninstall()
-        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = ""
+        self.env_patcher.stop()
 
     def _lazy_init(self):
         self._instrumentation_context = InstrumentationContext(
