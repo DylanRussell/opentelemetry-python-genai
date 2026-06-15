@@ -327,7 +327,6 @@ def _apply_request_attributes(
     )
 
 
-
 def _get_response_property(response: GenerateContentResponse, path: str):
     path_segments = path.split(".")
     current_context = response
