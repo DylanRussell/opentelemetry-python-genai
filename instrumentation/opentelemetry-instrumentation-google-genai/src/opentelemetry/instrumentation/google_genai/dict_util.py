@@ -110,8 +110,9 @@ def flatten_dict(
     exclude_keys: Set[str],
 ) -> FlattenedDict:
     result = {}
-    for key, value in [(k, v) for k, v in d.items() if k not in exclude_keys]:
-        result.update(
-            _flatten_value(f"{key_prefix}.{key}", value, exclude_keys)
-        )
+    for key, value in d.items():
+        if key not in exclude_keys:
+            result.update(
+                _flatten_value(f"{key_prefix}.{key}", value, exclude_keys)
+            )
     return result
