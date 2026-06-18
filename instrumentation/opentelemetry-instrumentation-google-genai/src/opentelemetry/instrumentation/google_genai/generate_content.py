@@ -3,7 +3,7 @@
 
 import json
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any, Optional, Union
 
 from google.genai.models import AsyncModels, Models
@@ -411,7 +411,7 @@ def _create_instrumented_generate_content(
         wrapped: Callable[..., Any],
         instance: Any,
         args: tuple[Any, ...],
-        kwargs: Mapping[str, Any],
+        kwargs: dict[str, Any],
     ):
         def _execute(
             model: str,
@@ -492,7 +492,7 @@ def _create_instrumented_generate_content_stream(
         wrapped: Callable[..., Any],
         instance: Any,
         args: tuple[Any, ...],
-        kwargs: Mapping[str, Any],
+        kwargs: dict[str, Any],
     ):
         def _execute(
             model: str,
@@ -573,7 +573,7 @@ def _create_instrumented_async_generate_content(
         wrapped: Callable[..., Any],
         instance: Any,
         args: tuple[Any, ...],
-        kwargs: Mapping[str, Any],
+        kwargs: dict[str, Any],
     ):
         async def _execute(
             model: str,
@@ -654,7 +654,7 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
         wrapped: Callable[..., Any],
         instance: Any,
         args: tuple[Any, ...],
-        kwargs: Mapping[str, Any],
+        kwargs: dict[str, Any],
     ):
         async def _execute(
             model: str,
