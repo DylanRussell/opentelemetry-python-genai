@@ -67,8 +67,8 @@ Limitations
 ***********
 
 When using the Google GenAI SDK with automatic function calling enabled,
-the OpenTelemetry instrumentation creates an `execute_tool` span for each tool call the SDK executes, these spans are nested under 
-the `generate_content` span. 
+the OpenTelemetry instrumentation creates an ``execute_tool`` span for each tool call the SDK executes,
+these spans are nested under the ``generate_content`` span.
 
 Only tool calls that the SDK executes are traced, if you disable the automatic function calling and instead
 do the function calling in your application, our instrumentation cannot trace them.
