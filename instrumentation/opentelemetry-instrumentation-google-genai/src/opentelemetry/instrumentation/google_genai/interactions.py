@@ -228,7 +228,7 @@ def _create_instrumented_interactions_create(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Interaction | InteractionsStreamWrapper:
-        # Verrex ai does not support the interactions API yet, but eventually will.
+        # Vertex AI does not support the interactions API yet, but eventually will.
         # SDK will raise an exception if model or agent is not passed or if input data is not passed.
         invocation = telemetry_handler.inference(
             provider=(
