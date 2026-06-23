@@ -15,7 +15,9 @@ class TestInteractionsAsync(TestCase):
             self.client.aio.interactions.create(*args, **kwargs)
         )
 
-    def run_streaming_interaction(self, *args: Any, **kwargs: Any) -> list[Any]:
+    def run_streaming_interaction(
+        self, *args: Any, **kwargs: Any
+    ) -> list[Any]:
         async def _run() -> list[Any]:
             stream = await self.client.aio.interactions.create(*args, **kwargs)
             events = []

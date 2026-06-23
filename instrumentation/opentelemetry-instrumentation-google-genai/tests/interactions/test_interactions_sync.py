@@ -12,6 +12,8 @@ class TestInteractionsSync(TestCase):
     def run_interaction(self, *args: Any, **kwargs: Any) -> Any:
         return self.client.interactions.create(*args, **kwargs)
 
-    def run_streaming_interaction(self, *args: Any, **kwargs: Any) -> list[Any]:
+    def run_streaming_interaction(
+        self, *args: Any, **kwargs: Any
+    ) -> list[Any]:
         stream = self.client.interactions.create(*args, **kwargs)
         return list(stream)

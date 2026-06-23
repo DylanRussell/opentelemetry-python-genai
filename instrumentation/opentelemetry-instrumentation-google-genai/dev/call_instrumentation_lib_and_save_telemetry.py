@@ -4,7 +4,6 @@
 import os
 
 from google import genai
-from google.genai import types
 from google.protobuf import text_format
 
 from opentelemetry import _logs as logs
@@ -62,18 +61,31 @@ def add(a: int, b: int) -> int:
 
 def main():
     GoogleGenAiSdkInstrumentor().instrument()
+    # set vertex ai to False to get the interactions API.
     client = genai.Client(
+        # vertexai=False,
         project=os.environ["PROJECT_ID"],
         location=os.environ["LOCATION"],
     )
+
     response = client.models.generate_content(
         model=os.environ["MODEL"],
         contents=os.environ["PROMPT"],
         config=types.GenerateContentConfig(tools=[add]),
     )
-    write_spans_to_file("test_span")
-    write_logs_to_file("test_log")
-    print(response.text)
+    # Example interactions API call..
+    # response = client.interactions.create(
+    #     model=os.environ["MODEL"],
+    #     input={
+    #         "type": "text",
+    #         "text": "What is the current weather in Tokyo?",
+    #     },
+    #     tools=[{"type": "google_search"}],
+    # )
+
+    write_spans_to_file("span_google_search")
+    write_logs_to_file("log_google_search")
+    print(response)
 
 
 if __name__ == "__main__":

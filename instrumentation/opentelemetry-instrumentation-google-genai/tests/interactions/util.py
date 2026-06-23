@@ -38,6 +38,7 @@ def create_mock_interaction(
     mock_interaction.model = model_name
     mock_interaction.usage = mock_usage
     mock_interaction.steps = [mock_user_step, mock_model_step]
+    mock_interaction.output_text = output_text
 
     return mock_interaction
 

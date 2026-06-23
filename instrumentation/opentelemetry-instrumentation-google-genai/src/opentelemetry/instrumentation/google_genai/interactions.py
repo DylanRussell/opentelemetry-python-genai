@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-import base64
-from collections.abc import AsyncIterable, Callable, Iterable
+from collections.abc import AsyncIterable, Callable, Iterable, Sequence
 from typing import Any, cast
 
 from google.genai._interactions._streaming import Stream
@@ -17,7 +16,6 @@ from google.genai._interactions.types.interaction_create_params import Input
 from google.genai._interactions.types.interaction_sse_event import (
     InteractionSSEEvent,
 )
-from google.genai.types import Content
 from wrapt import wrap_function_wrapper
 
 from opentelemetry import context as context_api
@@ -33,14 +31,9 @@ from opentelemetry.util.genai.stream import (
     SyncStreamWrapper,
 )
 from opentelemetry.util.genai.types import (
-    Blob,
     GenericPart,
     InputMessage,
-    MessagePart,
     OutputMessage,
-    Reasoning,
-    ServerToolCall,
-    ServerToolCallResponse,
     Text,
     ToolCallRequest,
     ToolCallResponse,
@@ -75,7 +68,9 @@ def _apply_interaction_response_attributes(
     invocation.cache_read_input_tokens = usage.total_cached_tokens
 
     if telemetry_handler.should_capture_content():
-        invocation.output_messages = _interactions_response_to_messages(response)
+        invocation.output_messages = _interactions_response_to_messages(
+            response
+        )
 
 
 def _get_field(obj: Any, name: str) -> Any:
@@ -83,181 +78,73 @@ def _get_field(obj: Any, name: str) -> Any:
         return obj.get(name)
     return getattr(obj, name, None)
 
+
 # Logic for parsing Input is tricky:
 # https://github.com/open-telemetry/donation-openinference/blob/6cdd644d79fccf50aedcb614187f924ddfcafb7b/python/instrumentation/openinference-instrumentation-google-genai/src/openinference/instrumentation/google_genai/interactions_attributes.py#L103
-def _content_param_to_part(part: Any) -> MessagePart:
-    part_type = _get_field(part, "type")
-
-    if part_type == "text":
-        return Text(content=_get_field(part, "text") or "")
-
-    part_text = _get_field(part, "text")
-    if part_text is not None:
-        return Text(content=part_text)
-
-    inline_data = _get_field(part, "inline_data")
-    if inline_data:
-        return Blob(
-            mime_type=_get_field(inline_data, "mime_type"),
-            modality="image",
-            content=_get_field(inline_data, "data") or b"",
-        )
-
-    file_data = _get_field(part, "file_data")
-    if file_data:
-        return Uri(
-            mime_type=_get_field(file_data, "mime_type"),
-            modality="image",
-            uri=_get_field(file_data, "file_uri") or "",
-        )
-
-    fn_call = _get_field(part, "function_call")
-    if fn_call:
-        return ToolCallRequest(
-            id=_get_field(fn_call, "id"),
-            name=_get_field(fn_call, "name") or "",
-            arguments=_get_field(fn_call, "args") or {},
-        )
-
-    fn_resp = _get_field(part, "function_response")
-    if fn_resp:
-        return ToolCallResponse(
-            id=_get_field(fn_resp, "id"),
-            response=_get_field(fn_resp, "response") or {},
-        )
-
-    mime_type = _get_field(part, "mime_type")
-    uri = _get_field(part, "uri")
-    data = _get_field(part, "data")
-
-    if uri:
-        return Uri(
-            mime_type=mime_type,
-            modality=part_type or "image",
-            uri=uri,
-        )
-    elif data:
-        content_bytes = data
-        if isinstance(data, str):
-            try:
-                content_bytes = base64.b64decode(data)
-            except Exception:
-                content_bytes = data.encode("utf-8")
-        return Blob(
-            mime_type=mime_type,
-            modality=part_type or "image",
-            content=content_bytes,
-        )
-
-    return GenericPart(value=type(part).__name__)
-
-
-def _get_thought_text(summary_list: Iterable[Any]) -> str:
-    texts = []
-    for s in summary_list:
-        text = _get_field(s, "text")
-        if text:
-            texts.append(text)
-    return "\n".join(texts)
-
-
-def _interactions_input_to_messages(input_data: Input | None) -> list[InputMessage]:
+# IT doesn't make sense this be a List[InputMessage] as per the sem-conv
+# as this API doesn't take the conversation histroy as inputs, unlike the generate_content API.
+# This API stores conversation history server side in a conversation ID param.
+def _interactions_input_to_messages(
+    input_data: Input | None,
+) -> list[InputMessage]:
     # None will end up raising an exception by the SDK
     if input_data is None:
         return []
     if isinstance(input_data, str):
         return [InputMessage(role="user", parts=[Text(content=input_data)])]
 
-    # Content is iterable over key/value pairs, but is not a list..
-    if not isinstance(input_data, Iterable) or isinstance(input_data, Content):
+    if not isinstance(input_data, Sequence):
         input_data = [input_data]
 
-    messages = []
+    parts = []
     for item in input_data:
-        if isinstance(item, Content):
-            item = {"type": "user_input", "content": item.parts}
-
         item_type = _get_field(item, "type")
-        if item_type == "user_input":
-            parts = []
-            content = _get_field(item, "content")
-            for part in content:
-                parts.append(_content_param_to_part(part))
-            messages.append(InputMessage(role="user", parts=parts))
-        elif item_type == "model_output":
-            parts = []
-            content = _get_field(item, "content")
-            for part in content:
-                parts.append(_content_param_to_part(part))
-            messages.append(InputMessage(role="assistant", parts=parts))
-        elif item_type == "thought":
-            summary = _get_field(item, "summary")
-            text = _get_thought_text(summary)
-            messages.append(InputMessage(role="assistant", parts=[Reasoning(content=text)]))
-        elif item_type == "function_call":
+        if item_type == "function_call":
             call_id = _get_field(item, "id")
             name = _get_field(item, "name")
             arguments = _get_field(item, "arguments")
-            part = ToolCallRequest(id=call_id, name=name or "", arguments=arguments)
-            messages.append(InputMessage(role="assistant", parts=[part]))
+            part = ToolCallRequest(
+                id=call_id, name=name or "", arguments=arguments
+            )
+            parts.append(part)
         elif item_type == "function_result":
             call_id = _get_field(item, "call_id")
             result = _get_field(item, "result")
             part = ToolCallResponse(id=call_id, response=result)
-            messages.append(InputMessage(role="tool", parts=[part]))
-        elif item_type in (
-            "code_execution_call",
-            "google_search_call",
-            "google_maps_call",
-            "file_search_call",
-            "mcp_server_tool_call",
-            "url_context_call",
-        ):
-            call_id = _get_field(item, "id")
-            arguments = _get_field(item, "arguments")
-            part = ServerToolCall(name=str(item_type), server_tool_call=arguments, id=call_id)
-            messages.append(InputMessage(role="assistant", parts=[part]))
-        elif item_type in (
-            "code_execution_result",
-            "google_search_result",
-            "google_maps_result",
-            "file_search_result",
-            "mcp_server_tool_result",
-            "url_context_result",
-        ):
-            call_id = _get_field(item, "call_id")
-            result = _get_field(item, "result")
-            part = ServerToolCallResponse(server_tool_call_response=result, id=call_id)
-            messages.append(InputMessage(role="tool", parts=[part]))
+            parts.append(part)
         elif isinstance(item, str):
-            messages.append(
-                InputMessage(role="user", parts=[Text(content=item)])
+            parts.append(Text(content=item))
+        elif item_type == "text":
+            part = Text(content=_get_field(item, "text") or "")
+            parts.append(part)
+        elif item_type == "document":
+            part = Uri(
+                mime_type=_get_field(item, "mime_type"),
+                modality="document",
+                uri=_get_field(item, "uri") or "",
             )
+            parts.append(part)
         elif item_type is not None:
             part = GenericPart(value=type(item).__name__)
-            messages.append(InputMessage(role="user", parts=[part]))
+            parts.append(part)
 
-    return messages
+    return [InputMessage(role="user", parts=parts)]
 
 
-def _interactions_response_to_messages(interaction: Interaction) -> list[OutputMessage]:
-    messages = []
-    for step in _get_field(interaction, "steps") or []:
-        if _get_field(step, "type") == "model_output":
-            parts = []
-            for part in _get_field(step, "content") or []:
-                part_text = _get_field(part, "text")
-                if part_text is not None:
-                    parts.append(Text(content=part_text))
-            messages.append(
-                OutputMessage(
-                    role="assistant",
-                    parts=parts,
-                    finish_reason="stop",
-                )
-            )
-            break
-    return messages
+# again a list of output messages doesn't quite make sense.
+# https://ai.google.dev/gemini-api/docs/migrate-to-interactions#basic-input-output -- there is now just
+# a list of steps returned which explains the steps the model took.
+# There are a large number of step types: https://ai.google.dev/api/interactions-api#Resource:Step
+def _interactions_response_to_messages(
+    interaction: Interaction,
+) -> list[OutputMessage]:
+    return [
+        OutputMessage(
+            role="assistant",
+            parts=[Text(content=interaction.output_text)],
+            finish_reason="stop",
+        )
+    ]
 
 
 class InteractionsStreamWrapper(SyncStreamWrapper[InteractionSSEEvent]):
@@ -349,7 +236,9 @@ def _create_instrumented_interactions_create(
                 if getattr(instance._client, "_is_vertex", False)
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
-            request_model=kwargs.get("model") or kwargs.get("agent") or "unknown",
+            request_model=kwargs.get("model")
+            or kwargs.get("agent")
+            or "unknown",
             operation_name="interactions.create",
             server_address=getattr(instance._client, "server", None),
         )
@@ -361,14 +250,18 @@ def _create_instrumented_interactions_create(
             invocation.attributes.update(dict(attrs))
 
         if telemetry_handler.should_capture_content():
-            invocation.input_messages = _interactions_input_to_messages(kwargs.get("input"))
+            invocation.input_messages = _interactions_input_to_messages(
+                kwargs.get("input")
+            )
             if system_instruction := kwargs.get("system_instruction"):
-                invocation.system_instruction = [Text(content=system_instruction)]
+                invocation.system_instruction = [
+                    Text(content=system_instruction)
+                ]
 
         if kwargs.get("stream", False):
             return InteractionsStreamWrapper(
                 wrapped(*args, **kwargs), invocation, telemetry_handler
-        )
+            )
         try:
             response = wrapped(*args, **kwargs)
             _apply_interaction_response_attributes(
@@ -406,7 +299,9 @@ def _create_instrumented_async_interactions_create(
                 if getattr(instance._client, "_is_vertex", False)
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
-            request_model=kwargs.get("model") or kwargs.get("agent") or "unknown",
+            request_model=kwargs.get("model")
+            or kwargs.get("agent")
+            or "unknown",
             operation_name="interactions.create",
             server_address=getattr(instance._client, "server", None),
         )
@@ -418,9 +313,13 @@ def _create_instrumented_async_interactions_create(
             invocation.attributes.update(dict(attrs))
 
         if telemetry_handler.should_capture_content():
-            invocation.input_messages = _interactions_input_to_messages(kwargs.get("input"))
+            invocation.input_messages = _interactions_input_to_messages(
+                kwargs.get("input")
+            )
             if system_instruction := kwargs.get("system_instruction"):
-                invocation.system_instruction = [Text(content=system_instruction)]
+                invocation.system_instruction = [
+                    Text(content=system_instruction)
+                ]
 
         if kwargs.get("stream", False):
             return AsyncInteractionsStreamWrapper(

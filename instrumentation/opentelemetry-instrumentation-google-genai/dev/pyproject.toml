@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "opentelemetry-instrumentation-google-genai",
-    "google-genai",
+    "google-genai>=2.0.0",
     "pyOpenSSL",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-grpc",
@@ -24,8 +24,8 @@ no-sources = false
 
 # NOT USED unless no-sources is false
 [tool.uv.sources]
-opentelemetry-util-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-genai.git", branch = "main", subdirectory="util/opentelemetry-util-genai" }
-opentelemetry-instrumentation-google-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-genai.git", branch = "main", subdirectory="instrumentation/opentelemetry-instrumentation-google-genai" }
+opentelemetry-util-genai = { git = "https://github.com/dylanrussell/opentelemetry-python-genai.git", branch = "interactions_api", subdirectory="util/opentelemetry-util-genai" }
+opentelemetry-instrumentation-google-genai = { git = "https://github.com/dylanrussell/opentelemetry-python-genai.git", branch = "interactions_api", subdirectory="instrumentation/opentelemetry-instrumentation-google-genai" }
 opentelemetry-sdk = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="opentelemetry-sdk" }
 opentelemetry-exporter-otlp-proto-grpc = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="exporter/opentelemetry-exporter-otlp-proto-grpc" }
 opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="opentelemetry-semantic-conventions" }

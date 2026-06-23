@@ -59,7 +59,9 @@ class TestCase(CommonTestCaseBase):
         self._create_mock = self._create_mock_impl(e)
         self._install_mocks()
 
-    def _create_mock_impl(self, e: Exception | None = None) -> unittest.mock.MagicMock:
+    def _create_mock_impl(
+        self, e: Exception | None = None
+    ) -> unittest.mock.MagicMock:
         mock = unittest.mock.MagicMock()
 
         def _default_impl(*args: Any, **kwargs: Any) -> Any:
@@ -87,9 +89,11 @@ class TestCase(CommonTestCaseBase):
             assert self._create_mock is not None
             res = self._create_mock(*args, **kwargs)
             if kwargs.get("stream"):
+
                 async def _async_generator() -> Any:
                     for item in res:
                         yield item
+
                 return _async_generator()
             return res
 
@@ -105,7 +109,9 @@ class TestCase(CommonTestCaseBase):
     def run_interaction(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError()
 
-    def run_streaming_interaction(self, *args: Any, **kwargs: Any) -> list[Any]:
+    def run_streaming_interaction(
+        self, *args: Any, **kwargs: Any
+    ) -> list[Any]:
         raise NotImplementedError()
 
     # The actual collapsed test cases:
@@ -122,23 +128,17 @@ class TestCase(CommonTestCaseBase):
 
     def test_generates_span(self) -> None:
         self.configure_valid_interaction()
-        self.run_interaction(
-            model="gemini-2.5-flash", input="Does this work?"
-        )
+        self.run_interaction(model="gemini-2.5-flash", input="Does this work?")
         self.otel.assert_has_span_named("interactions.create gemini-2.5-flash")
 
     def test_model_reflected_into_span_name(self) -> None:
         self.configure_valid_interaction()
-        self.run_interaction(
-            model="gemini-1.5-flash", input="Does this work?"
-        )
+        self.run_interaction(model="gemini-1.5-flash", input="Does this work?")
         self.otel.assert_has_span_named("interactions.create gemini-1.5-flash")
 
     def test_generated_span_has_minimal_genai_attributes(self) -> None:
         self.configure_valid_interaction()
-        self.run_interaction(
-            model="gemini-2.5-flash", input="Does this work?"
-        )
+        self.run_interaction(model="gemini-2.5-flash", input="Does this work?")
         span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
         self.assertEqual(span.attributes["gen_ai.provider.name"], "gemini")
         self.assertEqual(
@@ -157,14 +157,18 @@ class TestCase(CommonTestCaseBase):
             self.run_interaction(
                 model="gemini-2.5-flash", input="Does this work?"
             )
-            span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
+            span = self.otel.get_span_named(
+                "interactions.create gemini-2.5-flash"
+            )
             self.assertEqual(
                 span.attributes["extra_attribute_key"], "extra_attribute_value"
             )
         finally:
             context_api.detach(tok)
 
-    def test_span_and_event_still_written_when_response_is_exception(self) -> None:
+    def test_span_and_event_still_written_when_response_is_exception(
+        self,
+    ) -> None:
         self.configure_exception(ValueError("Uh oh!"))
         with self.assertRaises(ValueError):
             self.run_interaction(
@@ -178,21 +182,13 @@ class TestCase(CommonTestCaseBase):
         event = self.otel.get_event_named(
             "gen_ai.client.inference.operation.details"
         )
-        self.assertEqual(
-            span.attributes["error.type"],
-            "ValueError"
-        )
-        self.assertEqual(
-            event.attributes["error.type"],
-            "ValueError"
-        )
+        self.assertEqual(span.attributes["error.type"], "ValueError")
+        self.assertEqual(event.attributes["error.type"], "ValueError")
 
     def test_generated_span_has_vertex_ai_system_when_configured(self) -> None:
         self.set_use_vertex(True)
         self.configure_valid_interaction()
-        self.run_interaction(
-            model="gemini-2.5-flash", input="Does this work?"
-        )
+        self.run_interaction(model="gemini-2.5-flash", input="Does this work?")
         span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
         self.assertEqual(span.attributes["gen_ai.provider.name"], "vertex_ai")
         self.assertEqual(
@@ -204,9 +200,7 @@ class TestCase(CommonTestCaseBase):
             input_tokens=15,
             output_tokens=25,
         )
-        self.run_interaction(
-            model="gemini-2.5-flash", input="Some input"
-        )
+        self.run_interaction(model="gemini-2.5-flash", input="Some input")
         span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
         self.assertEqual(span.attributes["gen_ai.usage.input_tokens"], 15)
         self.assertEqual(span.attributes["gen_ai.usage.output_tokens"], 25)
