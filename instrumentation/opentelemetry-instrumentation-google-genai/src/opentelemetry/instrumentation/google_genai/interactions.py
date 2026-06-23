@@ -81,9 +81,9 @@ def _get_field(obj: Any, name: str) -> Any:
 
 # Logic for parsing Input is tricky:
 # https://github.com/open-telemetry/donation-openinference/blob/6cdd644d79fccf50aedcb614187f924ddfcafb7b/python/instrumentation/openinference-instrumentation-google-genai/src/openinference/instrumentation/google_genai/interactions_attributes.py#L103
-# IT doesn't make sense this be a List[InputMessage] as per the sem-conv
-# as this API doesn't take the conversation histroy as inputs, unlike the generate_content API.
-# This API stores conversation history server side in a conversation ID param.
+# It doesn't make sense for this to be a List[InputMessage] (per semconv),
+# because this API doesn't take conversation history as input (unlike the generate_content API).
+# Conversation history is stored server-side and referenced via a interaction ID parameter.
 def _interactions_input_to_messages(
     input_data: Input | None,
 ) -> list[InputMessage]:
@@ -131,10 +131,11 @@ def _interactions_input_to_messages(
     return [InputMessage(role="user", parts=parts)]
 
 
-# again a list of output messages doesn't quite make sense.
-# https://ai.google.dev/gemini-api/docs/migrate-to-interactions#basic-input-output -- there is now just
-# a list of steps returned which explains the steps the model took.
-# There are a large number of step types: https://ai.google.dev/api/interactions-api#Resource:Step
+# It doesn't make sense for this to be a list of OutputMessage (per semconv),
+# because this API doesn't return conversation history as output (unlike the generate_content API).
+# Model's response is returned as a list of steps:
+# https://ai.google.dev/gemini-api/docs/migrate-to-interactions#basic-input-output
+# https://ai.google.dev/api/interactions-api#Resource:Step
 def _interactions_response_to_messages(
     interaction: Interaction,
 ) -> list[OutputMessage]:

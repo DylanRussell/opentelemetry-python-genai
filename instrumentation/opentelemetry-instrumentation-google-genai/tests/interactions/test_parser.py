@@ -46,13 +46,21 @@ class TestInteractionsParser(unittest.TestCase):
         self.assertEqual(messages[0].parts[0].content, "Hello text step")
 
     def test_input_to_messages_document_step(self) -> None:
-        steps = [{"type": "document", "mime_type": "application/pdf", "uri": "https://example.com/doc.pdf"}]
+        steps = [
+            {
+                "type": "document",
+                "mime_type": "application/pdf",
+                "uri": "https://example.com/doc.pdf",
+            }
+        ]
         messages = _interactions_input_to_messages(steps)
         self.assertEqual(len(messages[0].parts), 1)
         self.assertIsInstance(messages[0].parts[0], Uri)
         self.assertEqual(messages[0].parts[0].mime_type, "application/pdf")
         self.assertEqual(messages[0].parts[0].modality, "document")
-        self.assertEqual(messages[0].parts[0].uri, "https://example.com/doc.pdf")
+        self.assertEqual(
+            messages[0].parts[0].uri, "https://example.com/doc.pdf"
+        )
 
     def test_input_to_messages_tool_call_step(self) -> None:
         steps = [

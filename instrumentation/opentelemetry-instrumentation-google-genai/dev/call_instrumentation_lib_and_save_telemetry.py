@@ -4,6 +4,7 @@
 import os
 
 from google import genai
+from google.genai import types
 from google.protobuf import text_format
 
 from opentelemetry import _logs as logs
