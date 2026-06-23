@@ -15,6 +15,10 @@ from .generate_content import (
     instrument_generate_content,
     uninstrument_generate_content,
 )
+from .interactions import (
+    instrument_interactions,
+    uninstrument_interactions,
+)
 
 
 class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
@@ -22,6 +26,7 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
         self, generate_content_config_key_allowlist: Optional[AllowList] = None
     ):
         self._generate_content_snapshot = None
+        self._interactions_snapshot = None
         self._generate_content_config_key_allowlist = (
             generate_content_config_key_allowlist
             or AllowList.from_env(
@@ -56,6 +61,10 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
             telemetry_handler,
             generate_content_config_key_allowlist=self._generate_content_config_key_allowlist,
         )
+        self._interactions_snapshot = instrument_interactions(
+            telemetry_handler,
+        )
 
     def _uninstrument(self, **kwargs: Any):
         uninstrument_generate_content(self._generate_content_snapshot)
+        uninstrument_interactions(self._interactions_snapshot)

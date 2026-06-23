@@ -63,7 +63,6 @@ def add(a: int, b: int) -> int:
 def main():
     GoogleGenAiSdkInstrumentor().instrument()
     client = genai.Client(
-        vertexai=True,
         project=os.environ["PROJECT_ID"],
         location=os.environ["LOCATION"],
     )
