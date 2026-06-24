@@ -520,7 +520,7 @@ class GenerateContentStreamWrapper(SyncStreamWrapper[GenerateContentResponse]):
             )
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
@@ -560,7 +560,7 @@ class AsyncGenerateContentStreamWrapper(
             )
         self._self_invocation.stop()
 
-    def _on_stream_error(self, error: Exception) -> None:
+    def _on_stream_error(self, error: BaseException) -> None:
         self._self_invocation.fail(error)
 
 
