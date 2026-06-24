@@ -615,17 +615,17 @@ def _create_instrumented_generate_content_stream(
                             wrapped_config.system_instruction
                         )[0]
                     )
-                return GenerateContentStreamWrapper(
-                    wrapped(
-                        model=model,
-                        contents=contents,
-                        config=wrapped_config if has_wrapped_tools else config,
-                        *_args,
-                        **_kwargs,
-                    ),
-                    invocation,
-                    telemetry_handler,
-                )
+            return GenerateContentStreamWrapper(
+                wrapped(
+                    model=model,
+                    contents=contents,
+                    config=wrapped_config if has_wrapped_tools else config,
+                    *_args,
+                    **_kwargs,
+                ),
+                invocation,
+                telemetry_handler,
+            )
 
         return _execute(*args, **kwargs)
 
@@ -764,18 +764,17 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
                             wrapped_config.system_instruction
                         )[0]
                     )
-
-                return AsyncGenerateContentStreamWrapper(
-                    await wrapped(
-                        model=model,
-                        contents=contents,
-                        config=wrapped_config if has_wrapped_tools else config,
-                        *_args,
-                        **_kwargs,
-                    ),
-                    invocation,
-                    telemetry_handler,
-                )
+            return AsyncGenerateContentStreamWrapper(
+                await wrapped(
+                    model=model,
+                    contents=contents,
+                    config=wrapped_config if has_wrapped_tools else config,
+                    *_args,
+                    **_kwargs,
+                ),
+                invocation,
+                telemetry_handler,
+            )
 
         return await _execute(*args, **kwargs)
 
