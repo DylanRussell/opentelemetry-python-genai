@@ -8,10 +8,19 @@ import unittest.mock
 from typing import Any
 from unittest.mock import patch
 
-from google.genai._interactions.resources.interactions import (
-    AsyncInteractionsResource,
-    InteractionsResource,
-)
+try:
+    from google.genai._interactions.resources.interactions import (
+        AsyncInteractionsResource,
+        InteractionsResource,
+    )
+except ImportError:
+    # In version 2.9 of google-genai these were moved.
+    from google.genai._gaos.interactions import (
+        AsyncInteractions as AsyncInteractionsResource,
+    )
+    from google.genai._gaos.interactions import (
+        Interactions as InteractionsResource,
+    )
 
 from opentelemetry import context as context_api
 from opentelemetry.instrumentation.google_genai import (

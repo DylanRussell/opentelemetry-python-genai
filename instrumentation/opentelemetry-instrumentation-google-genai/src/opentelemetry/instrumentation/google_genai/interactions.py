@@ -6,16 +6,39 @@ from __future__ import annotations
 from collections.abc import AsyncIterable, Callable, Iterable, Sequence
 from typing import Any, cast
 
-from google.genai._interactions._streaming import Stream
-from google.genai._interactions.resources.interactions import (
-    AsyncInteractionsResource,
-    InteractionsResource,
-)
-from google.genai._interactions.types.interaction import Interaction, Usage
-from google.genai._interactions.types.interaction_create_params import Input
-from google.genai._interactions.types.interaction_sse_event import (
-    InteractionSSEEvent,
-)
+try:
+    # Google GenAI < 2.9.0
+    from google.genai._interactions._streaming import Stream
+    from google.genai._interactions.resources.interactions import (
+        AsyncInteractionsResource,
+        InteractionsResource,
+    )
+    from google.genai._interactions.types.interaction import Interaction, Usage
+    from google.genai._interactions.types.interaction_create_params import (
+        Input,
+    )
+    from google.genai._interactions.types.interaction_sse_event import (
+        InteractionSSEEvent,
+    )
+except ImportError:
+    # Google GenAI >= 2.9.0
+    from google.genai._gaos.interactions import (
+        AsyncInteractions as AsyncInteractionsResource,
+    )
+    from google.genai._gaos.interactions import (
+        Interactions as InteractionsResource,
+    )
+    from google.genai._gaos.interactions import (
+        Stream,
+    )
+    from google.genai._gaos.types.interactions import (
+        Interaction,
+        InteractionSSEEvent,
+        Usage,
+    )
+    from google.genai._gaos.types.interactions import (
+        InteractionsInput as Input,
+    )
 from wrapt import wrap_function_wrapper
 
 from opentelemetry import context as context_api
@@ -71,6 +94,25 @@ def _apply_interaction_response_attributes(
         invocation.output_messages = _interactions_response_to_messages(
             response
         )
+
+
+def _get_client_info(instance: Any) -> tuple[bool, str | None]:
+    is_vertex = False
+    server_address = None
+    # This attribute does not exist past v2.9 of google-genai, instead sdk_configuration is used..
+    if hasattr(instance, "_client"):
+        client = instance._client
+        is_vertex = getattr(client, "_is_vertex", False)
+        server_address = getattr(client, "server", None)
+    elif hasattr(instance, "sdk_configuration"):
+        config = instance.sdk_configuration
+        server_url = getattr(config, "server_url", "")
+        if server_url:
+            server_address = server_url
+            if "aiplatform.googleapis.com" in server_url:
+                is_vertex = True
+
+    return is_vertex, server_address
 
 
 def _get_field(obj: Any, name: str) -> Any:
@@ -231,15 +273,16 @@ def _create_instrumented_interactions_create(
     ) -> Interaction | InteractionsStreamWrapper:
         # Vertex AI does not support the interactions API yet, but eventually will.
         # SDK will raise an exception if model or agent is not passed or if input data is not passed.
+        is_vertex, server_address = _get_client_info(instance)
         invocation = telemetry_handler.inference(
             provider=(
                 GenAIAttributes.GenAiSystemValues.VERTEX_AI.value
-                if getattr(instance._client, "_is_vertex", False)
+                if is_vertex
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
             request_model=kwargs.get("model") or kwargs.get("agent"),
             operation_name="interactions.create",
-            server_address=getattr(instance._client, "server", None),
+            server_address=server_address,
         )
 
         attrs = context_api.get_value(
@@ -292,15 +335,16 @@ def _create_instrumented_async_interactions_create(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Interaction | AsyncInteractionsStreamWrapper:
+        is_vertex, server_address = _get_client_info(instance)
         invocation = telemetry_handler.inference(
             provider=(
                 GenAIAttributes.GenAiSystemValues.VERTEX_AI.value
-                if getattr(instance._client, "_is_vertex", False)
+                if is_vertex
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
             request_model=kwargs.get("model") or kwargs.get("agent"),
             operation_name="interactions.create",
-            server_address=getattr(instance._client, "server", None),
+            server_address=server_address,
         )
 
         attrs = context_api.get_value(
@@ -347,14 +391,27 @@ def instrument_interactions(
     telemetry_handler: TelemetryHandler,
 ) -> object:
     snapshot = _InteractionsMethodsSnapshot()
+
+    try:
+        import google.genai._interactions.resources.interactions  # noqa: F401, PLC0415
+
+        module_path = "google.genai._interactions.resources.interactions"
+        sync_class = "InteractionsResource"
+        async_class = "AsyncInteractionsResource"
+    except ImportError:
+        # In version 2.9 of google-genai these were moved.
+        module_path = "google.genai._gaos.interactions"
+        sync_class = "Interactions"
+        async_class = "AsyncInteractions"
+
     wrap_function_wrapper(
-        "google.genai._interactions.resources.interactions",
-        "InteractionsResource.create",
+        module_path,
+        f"{sync_class}.create",
         _create_instrumented_interactions_create(telemetry_handler),
     )
     wrap_function_wrapper(
-        "google.genai._interactions.resources.interactions",
-        "AsyncInteractionsResource.create",
+        module_path,
+        f"{async_class}.create",
         _create_instrumented_async_interactions_create(telemetry_handler),
     )
     return snapshot
