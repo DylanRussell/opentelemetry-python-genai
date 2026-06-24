@@ -237,9 +237,7 @@ def _create_instrumented_interactions_create(
                 if getattr(instance._client, "_is_vertex", False)
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
-            request_model=kwargs.get("model")
-            or kwargs.get("agent")
-            or "unknown",
+            request_model=kwargs.get("model") or kwargs.get("agent"),
             operation_name="interactions.create",
             server_address=getattr(instance._client, "server", None),
         )
@@ -300,9 +298,7 @@ def _create_instrumented_async_interactions_create(
                 if getattr(instance._client, "_is_vertex", False)
                 else GenAIAttributes.GenAiSystemValues.GEMINI.value
             ),
-            request_model=kwargs.get("model")
-            or kwargs.get("agent")
-            or "unknown",
+            request_model=kwargs.get("model") or kwargs.get("agent"),
             operation_name="interactions.create",
             server_address=getattr(instance._client, "server", None),
         )
