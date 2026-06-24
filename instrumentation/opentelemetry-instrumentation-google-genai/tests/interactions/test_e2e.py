@@ -1,8 +1,11 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
 import json
 import os
-import yaml
 
 import pytest
+import yaml
 from google.genai import Client
 from google.genai.types import HttpOptions
 

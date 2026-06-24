@@ -173,6 +173,24 @@ def _interactions_input_to_messages(
     return [InputMessage(role="user", parts=parts)]
 
 
+def _get_interaction_output_text(interaction: Interaction) -> str:
+    if getattr(interaction, "output_text", None):
+        return interaction.output_text
+
+    texts = []
+    if interaction.steps:
+        for step in interaction.steps:
+            if getattr(step, "type", None) == "model_output":
+                content = getattr(step, "content", None)
+                if content:
+                    for item in content:
+                        if getattr(item, "type", None) == "text" and hasattr(
+                            item, "text"
+                        ):
+                            texts.append(item.text)
+    return "".join(texts)
+
+
 # It doesn't make sense for this to be a list of OutputMessage (per semconv),
 # because this API doesn't return conversation history as output (unlike the generate_content API).
 # Model's response is returned as a list of steps:
@@ -181,10 +199,11 @@ def _interactions_input_to_messages(
 def _interactions_response_to_messages(
     interaction: Interaction,
 ) -> list[OutputMessage]:
+    output_text = _get_interaction_output_text(interaction)
     return [
         OutputMessage(
             role="assistant",
-            parts=[Text(content=interaction.output_text)],
+            parts=[Text(content=output_text)],
             finish_reason="stop",
         )
     ]
