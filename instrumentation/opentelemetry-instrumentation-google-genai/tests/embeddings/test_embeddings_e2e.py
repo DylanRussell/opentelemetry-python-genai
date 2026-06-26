@@ -118,3 +118,4 @@ def test_embeddings_e2e(client, otel_mocker: OTelMocker):
     assert attrs[GenAIAttributes.GEN_AI_PROVIDER_NAME] == "gemini"
     assert attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL] == "gemini-embedding-2"
     assert attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT] == 3072
+    assert attrs[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 2
