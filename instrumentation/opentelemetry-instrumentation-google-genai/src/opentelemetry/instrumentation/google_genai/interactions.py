@@ -41,7 +41,6 @@ except ImportError:
     )
 from wrapt import wrap_function_wrapper
 
-from opentelemetry import context as context_api
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
@@ -62,8 +61,6 @@ from opentelemetry.util.genai.types import (
     ToolCallResponse,
     Uri,
 )
-
-from .generate_content import GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY
 
 
 class _InteractionsMethodsSnapshot:
@@ -304,12 +301,6 @@ def _create_instrumented_interactions_create(
             server_address=server_address,
         )
 
-        attrs = context_api.get_value(
-            GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY
-        )
-        if attrs:
-            invocation.attributes.update(dict(attrs))
-
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(
                 kwargs.get("input")
@@ -365,12 +356,6 @@ def _create_instrumented_async_interactions_create(
             operation_name="interactions.create",
             server_address=server_address,
         )
-
-        attrs = context_api.get_value(
-            GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY
-        )
-        if attrs:
-            invocation.attributes.update(dict(attrs))
 
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(

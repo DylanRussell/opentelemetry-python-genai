@@ -22,10 +22,7 @@ except ImportError:
         Interactions as InteractionsResource,
     )
 
-from opentelemetry import context as context_api
-from opentelemetry.instrumentation.google_genai import (
-    GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY,
-)
+
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
@@ -153,27 +150,6 @@ class TestCase(CommonTestCaseBase):
         self.assertEqual(
             span.attributes["gen_ai.operation.name"], "interactions.create"
         )
-
-    def test_generated_span_has_extra_genai_attributes(self) -> None:
-        self.configure_valid_interaction()
-        tok = context_api.attach(
-            context_api.set_value(
-                GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY,
-                {"extra_attribute_key": "extra_attribute_value"},
-            )
-        )
-        try:
-            self.run_interaction(
-                model="gemini-2.5-flash", input="Does this work?"
-            )
-            span = self.otel.get_span_named(
-                "interactions.create gemini-2.5-flash"
-            )
-            self.assertEqual(
-                span.attributes["extra_attribute_key"], "extra_attribute_value"
-            )
-        finally:
-            context_api.detach(tok)
 
     def test_span_and_event_still_written_when_response_is_exception(
         self,
