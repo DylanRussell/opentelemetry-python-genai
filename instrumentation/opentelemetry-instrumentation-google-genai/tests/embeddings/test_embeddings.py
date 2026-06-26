@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
-import unittest
 from unittest.mock import AsyncMock, MagicMock
 
 from google.genai.models import AsyncModels, Models
@@ -39,7 +38,9 @@ class TestEmbeddings(TestCase):
         )
 
         self.embed_content_mock = MagicMock(return_value=self.mock_response)
-        self.async_embed_content_mock = AsyncMock(return_value=self.mock_response)
+        self.async_embed_content_mock = AsyncMock(
+            return_value=self.mock_response
+        )
 
         Models.embed_content = self.embed_content_mock
         AsyncModels.embed_content = self.async_embed_content_mock
@@ -69,10 +70,16 @@ class TestEmbeddings(TestCase):
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
         attrs = span.attributes
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_OPERATION_NAME], "embeddings")
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_OPERATION_NAME], "embeddings"
+        )
         self.assertEqual(attrs[GenAIAttributes.GEN_AI_PROVIDER_NAME], "gemini")
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL], "text-embedding-004")
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT], 3)
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL], "text-embedding-004"
+        )
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT], 3
+        )
         self.assertEqual(attrs[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS], 5)
 
     def test_async_embed_content(self):
@@ -97,10 +104,16 @@ class TestEmbeddings(TestCase):
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
         attrs = span.attributes
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_OPERATION_NAME], "embeddings")
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_OPERATION_NAME], "embeddings"
+        )
         self.assertEqual(attrs[GenAIAttributes.GEN_AI_PROVIDER_NAME], "gemini")
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL], "text-embedding-004")
-        self.assertEqual(attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT], 3)
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL], "text-embedding-004"
+        )
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT], 3
+        )
         self.assertEqual(attrs[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS], 5)
 
     def test_embed_content_multiple_inputs(self):
@@ -114,6 +127,16 @@ class TestEmbeddings(TestCase):
         span = spans[0]
 
         attrs = span.attributes
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_OPERATION_NAME], "embeddings"
+        )
+        self.assertEqual(attrs[GenAIAttributes.GEN_AI_PROVIDER_NAME], "gemini")
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_REQUEST_MODEL], "text-embedding-004"
+        )
+        self.assertEqual(
+            attrs[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT], 3
+        )
 
     def test_embed_content_error(self):
         error_mock = MagicMock(side_effect=ValueError("invalid model"))

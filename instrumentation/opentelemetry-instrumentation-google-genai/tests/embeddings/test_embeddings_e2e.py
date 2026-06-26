@@ -2,18 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+
+import google.genai
 import pytest
 import yaml
-import google.genai
 from google.genai import types
-from opentelemetry.instrumentation.google_genai import GoogleGenAiSdkInstrumentor
-from opentelemetry.semconv._incubating.attributes import gen_ai_attributes as GenAIAttributes
+
+from opentelemetry.instrumentation.google_genai import (
+    GoogleGenAiSdkInstrumentor,
+)
+from opentelemetry.semconv._incubating.attributes import (
+    gen_ai_attributes as GenAIAttributes,
+)
 from opentelemetry.trace import StatusCode
 
 # Disable mTLS client certificates to prevent workstation-specific OpenSSL/cryptography dependencies
 os.environ["GOOGLE_API_USE_CLIENT_CERTIFICATE"] = "false"
 
-from ..common.auth import FakeCredentials
 from ..common.otel_mocker import OTelMocker
 
 # Real key needed to re-record VCR against real gemini API.

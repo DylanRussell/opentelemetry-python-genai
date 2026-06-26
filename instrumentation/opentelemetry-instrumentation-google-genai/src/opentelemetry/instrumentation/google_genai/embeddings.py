@@ -42,7 +42,7 @@ def _apply_embedding_response_attributes(
             ] = invocation.dimension_count
 
     total_input_tokens = 0
-    for emb in (response.embeddings or []):
+    for emb in response.embeddings or []:
         stats = getattr(emb, "statistics", None)
         if stats and getattr(stats, "token_count", None) is not None:
             total_input_tokens += stats.token_count
@@ -57,7 +57,9 @@ def _get_client_info(instance: Any) -> tuple[bool, str | None]:
         api_client = instance._api_client
         is_vertex = getattr(api_client, "vertexai", False)
         if hasattr(api_client, "_http_options"):
-            server_address = getattr(api_client._http_options, "base_url", None)
+            server_address = getattr(
+                api_client._http_options, "base_url", None
+            )
     elif hasattr(instance, "_client"):
         client = instance._client
         is_vertex = getattr(client, "_is_vertex", False)
