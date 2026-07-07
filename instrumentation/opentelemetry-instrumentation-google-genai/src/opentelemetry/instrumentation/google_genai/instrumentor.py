@@ -11,6 +11,10 @@ from opentelemetry.util.genai.completion_hook import load_completion_hook
 from opentelemetry.util.genai.handler import TelemetryHandler
 
 from .allowlist_util import AllowList
+from .embeddings import (
+    instrument_embeddings,
+    uninstrument_embeddings,
+)
 from .generate_content import (
     instrument_generate_content,
     uninstrument_generate_content,
@@ -27,6 +31,7 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
     ):
         self._generate_content_snapshot = None
         self._interactions_snapshot = None
+        self._embedding_snapshot = None
         self._generate_content_config_key_allowlist = (
             generate_content_config_key_allowlist
             or AllowList.from_env(
@@ -64,7 +69,9 @@ class GoogleGenAiSdkInstrumentor(BaseInstrumentor):
         self._interactions_snapshot = instrument_interactions(
             telemetry_handler,
         )
+        self._embedding_snapshot = instrument_embeddings(telemetry_handler)
 
     def _uninstrument(self, **kwargs: Any):
         uninstrument_generate_content(self._generate_content_snapshot)
         uninstrument_interactions(self._interactions_snapshot)
+        uninstrument_embeddings(self._embedding_snapshot)

@@ -44,8 +44,7 @@ Check out the `manual example <examples/manual>`_ for more details.
 Instrumenting all clients
 *************************
 
-
-When using the instrumentor, all clients will automatically trace GenAI ``generate_content`` operations and ``interactions.create`` operations.
+When using the instrumentor, all clients will automatically trace GenAI ``generate_content``, ``embed_content`` and ``interactions.create`` operations.
 You can also optionally capture prompts and responses as log events.
 
 Make sure to configure OpenTelemetry tracing, logging, and metrics to capture all telemetry emitted by the instrumentation.

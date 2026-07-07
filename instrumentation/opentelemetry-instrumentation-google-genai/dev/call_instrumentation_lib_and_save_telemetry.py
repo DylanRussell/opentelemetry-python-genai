@@ -62,7 +62,7 @@ def add(a: int, b: int) -> int:
 
 def main():
     GoogleGenAiSdkInstrumentor().instrument()
-    # set vertex ai to False to get the interactions API.
+    # set vertex ai to False to get the interactions/embedding API.
     client = genai.Client(
         # vertexai=False,
         project=os.environ["PROJECT_ID"],
@@ -74,6 +74,10 @@ def main():
         contents=os.environ["PROMPT"],
         config=types.GenerateContentConfig(tools=[add]),
     )
+    # embed_response = client.models.embed_content(
+    #     model=os.environ["MODEL"],
+    #     contents=os.environ["PROMPT"],
+    # )
     # Example interactions API call..
     # response = client.interactions.create(
     #     model=os.environ["MODEL"],
