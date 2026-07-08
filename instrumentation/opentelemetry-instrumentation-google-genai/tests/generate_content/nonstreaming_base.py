@@ -310,6 +310,14 @@ class NonStreamingTestCase(TestCase):
             span.attributes["gen_ai.usage.reasoning.output_tokens"], 17
         )
 
+    def test_generated_span_records_response_model(self):
+        self.configure_valid_response(model_version="gemini-2.0-flash-001")
+        self.generate_content(model="gemini-2.0-flash", contents="Some input")
+        span = self.otel.get_span_named("generate_content gemini-2.0-flash")
+        self.assertEqual(
+            span.attributes["gen_ai.response.model"], "gemini-2.0-flash-001"
+        )
+
     @patch.dict(
         "os.environ",
         {
