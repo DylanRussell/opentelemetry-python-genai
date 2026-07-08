@@ -317,6 +317,15 @@ class NonStreamingTestCase(TestCase):
         self.assertEqual(
             span.attributes["gen_ai.response.model"], "gemini-2.0-flash-001"
         )
+        self.otel.assert_has_event_named(
+            "gen_ai.client.inference.operation.details"
+        )
+        event = self.otel.get_event_named(
+            "gen_ai.client.inference.operation.details"
+        )
+        self.assertEqual(
+            event.attributes["gen_ai.response.model"], "gemini-2.0-flash-001"
+        )
 
     @patch.dict(
         "os.environ",
