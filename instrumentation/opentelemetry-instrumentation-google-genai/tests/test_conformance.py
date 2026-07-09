@@ -26,6 +26,7 @@ from opentelemetry.test_util_genai.conformance import (  # noqa: E402
 from .conformance.embedding import EmbeddingScenario
 from .conformance.generate_content import GenerateContentScenario
 from .conformance.inference import InferenceScenario
+from .conformance.tool_calling import ToolCallingScenario
 
 
 @pytest.mark.parametrize(
@@ -34,6 +35,7 @@ from .conformance.inference import InferenceScenario
         InferenceScenario(),
         EmbeddingScenario(),
         GenerateContentScenario(),
+        ToolCallingScenario(),
     ],
     ids=lambda s: type(s).__name__,
 )

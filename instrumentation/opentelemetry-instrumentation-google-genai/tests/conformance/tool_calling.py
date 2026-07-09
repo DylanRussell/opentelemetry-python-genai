@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Conformance scenario: google-genai embeddings."""
+"""Conformance scenario: google-genai tool execution."""
 
 from __future__ import annotations
 
@@ -15,15 +15,24 @@ from opentelemetry.instrumentation.google_genai import (
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.test_util_genai.conformance import Scenario
+from opentelemetry.test_util_genai.conformance import (
+    ExpectedViolation,
+    Scenario,
+)
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
-class EmbeddingScenario(Scenario):
-    expected_spans = ("embeddings",)
+class ToolCallingScenario(Scenario):
+    expected_spans = ("generate_content", "execute_tool")
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
+    )
+    expected_violations = (
+        ExpectedViolation(
+            advice_id="genai_operation_name_unknown",
+            message_substring="generate_content",
+        ),
     )
 
     def run(
@@ -34,6 +43,10 @@ class EmbeddingScenario(Scenario):
         logger_provider: LoggerProvider,
         vcr: Any,
     ) -> None:
+        def get_weather(location: str) -> str:
+            """Get weather for location"""
+            return "sunny"
+
         with instrument(
             GoogleGenAiSdkInstrumentor(),
             tracer_provider=tracer_provider,
@@ -41,11 +54,12 @@ class EmbeddingScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
-            with vcr.use_cassette("embedding_conformance.yaml"):
+            with vcr.use_cassette("tool_calling_conformance.yaml"):
                 client = Client(
                     api_key="test_google_genai_api_key", vertexai=False
                 )
-                client.models.embed_content(
-                    model="gemini-embedding-2",
-                    contents="The quick brown fox jumps over the lazy dog",
+                client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents="What is the weather in Boston?",
+                    config={"tools": [get_weather]},
                 )

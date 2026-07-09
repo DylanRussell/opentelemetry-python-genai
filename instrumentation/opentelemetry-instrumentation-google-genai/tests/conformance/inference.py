@@ -15,7 +15,10 @@ from opentelemetry.instrumentation.google_genai import (
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.test_util_genai.conformance import Scenario
+from opentelemetry.test_util_genai.conformance import (
+    ExpectedViolation,
+    Scenario,
+)
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
@@ -24,6 +27,12 @@ class InferenceScenario(Scenario):
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
+    )
+    expected_violations = (
+        ExpectedViolation(
+            advice_id="genai_operation_name_unknown",
+            message_substring="interactions.create",
+        ),
     )
 
     def run(
@@ -42,7 +51,9 @@ class InferenceScenario(Scenario):
             content_capture="SPAN_ONLY",
         ):
             with vcr.use_cassette("inference_conformance.yaml"):
-                client = Client()
+                client = Client(
+                    api_key="test_google_genai_api_key", vertexai=False
+                )
                 client.interactions.create(
                     model="gemini-2.5-flash",
                     input="Hello, how can you help me today?",
