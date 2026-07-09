@@ -369,6 +369,19 @@ class TestTelemetryHandler(unittest.TestCase):
         )
         self.assertEqual(span_system[0]["type"], "text")
 
+    def test_llm_conversation_id(self):  # pylint: disable=no-self-use
+        with self.telemetry_handler.inference(
+            "test-provider",
+            request_model="test-model",
+        ) as invocation:
+            invocation.conversation_id = "test-conversation-id"
+
+        span = _get_single_span(self.span_exporter)
+        span_attrs = _get_span_attributes(span)
+        self.assertEqual(
+            span_attrs[GenAI.GEN_AI_CONVERSATION_ID], "test-conversation-id"
+        )
+
     @patch.dict(
         os.environ,
         {

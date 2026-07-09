@@ -92,6 +92,7 @@ class InferenceInvocation(GenAIInvocation):
         self.top_k: float | None = None
         self.request_choice_count: int | None = None
         self.output_type: str | None = None
+        self.conversation_id: str | None = None
         self._start(self._get_base_attributes())
 
     def _get_message_attributes(
@@ -138,6 +139,7 @@ class InferenceInvocation(GenAIInvocation):
                 self.thinking_tokens or 0
             )
         optional_attrs = (
+            (GenAI.GEN_AI_CONVERSATION_ID, self.conversation_id),
             (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.temperature),
             (GenAI.GEN_AI_REQUEST_TOP_P, self.top_p),
             (GenAI.GEN_AI_REQUEST_TOP_K, self.top_k),

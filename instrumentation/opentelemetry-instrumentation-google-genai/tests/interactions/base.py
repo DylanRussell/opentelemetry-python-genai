@@ -151,6 +151,16 @@ class TestCase(CommonTestCaseBase):
             span.attributes["gen_ai.operation.name"], "interactions.create"
         )
 
+    def test_generated_span_has_conversation_id(self) -> None:
+        self.configure_valid_interaction()
+        self.run_interaction(
+            model="gemini-2.5-flash",
+            input="Follow-up question",
+            previous_interaction_id="prev-123",
+        )
+        span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
+        self.assertEqual(span.attributes["gen_ai.conversation.id"], "prev-123")
+
     def test_span_and_event_still_written_when_response_is_exception(
         self,
     ) -> None:

@@ -301,6 +301,12 @@ def _create_instrumented_interactions_create(
             server_address=server_address,
         )
 
+        previous_interaction_id = kwargs.get(
+            "previous_interaction_id"
+        ) or _get_field(kwargs.get("config"), "previous_interaction_id")
+        if previous_interaction_id:
+            invocation.conversation_id = str(previous_interaction_id)
+
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(
                 kwargs.get("input")
@@ -356,6 +362,12 @@ def _create_instrumented_async_interactions_create(
             operation_name="interactions.create",
             server_address=server_address,
         )
+
+        previous_interaction_id = kwargs.get(
+            "previous_interaction_id"
+        ) or _get_field(kwargs.get("config"), "previous_interaction_id")
+        if previous_interaction_id:
+            invocation.conversation_id = str(previous_interaction_id)
 
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(
