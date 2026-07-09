@@ -160,6 +160,13 @@ class TestCase(CommonTestCaseBase):
         )
         span = self.otel.get_span_named("interactions.create gemini-2.5-flash")
         self.assertEqual(span.attributes["gen_ai.conversation.id"], "prev-123")
+        self.otel.assert_has_event_named(
+            "gen_ai.client.inference.operation.details"
+        )
+        event = self.otel.get_event_named(
+            "gen_ai.client.inference.operation.details"
+        )
+        self.assertEqual(event.attributes["gen_ai.conversation.id"], "prev-123")
 
     def test_span_and_event_still_written_when_response_is_exception(
         self,
