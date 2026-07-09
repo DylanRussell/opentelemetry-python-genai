@@ -166,7 +166,9 @@ class TestCase(CommonTestCaseBase):
         event = self.otel.get_event_named(
             "gen_ai.client.inference.operation.details"
         )
-        self.assertEqual(event.attributes["gen_ai.conversation.id"], "prev-123")
+        self.assertEqual(
+            event.attributes["gen_ai.conversation.id"], "prev-123"
+        )
 
     def test_span_and_event_still_written_when_response_is_exception(
         self,
