@@ -15,7 +15,9 @@ def get_client_info(instance: Any) -> tuple[bool, str | None]:
         api_client = instance._api_client
         is_vertex = getattr(api_client, "vertexai", False)
         if hasattr(api_client, "_http_options"):
-            server_address = getattr(api_client._http_options, "base_url", None)
+            server_address = getattr(
+                api_client._http_options, "base_url", None
+            )
     elif hasattr(instance, "_client"):
         client = instance._client
         is_vertex = getattr(client, "_is_vertex", False)
