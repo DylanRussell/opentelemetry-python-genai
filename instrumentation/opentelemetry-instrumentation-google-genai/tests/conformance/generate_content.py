@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Conformance scenario: google-genai chat completion (inference)."""
+"""Conformance scenario: google-genai generate_content."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from opentelemetry.test_util_genai.conformance import Scenario
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
-class InferenceScenario(Scenario):
-    expected_spans = ("interactions.create",)
+class GenerateContentScenario(Scenario):
+    expected_spans = ("generate_content",)
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
@@ -41,9 +41,9 @@ class InferenceScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
-            with vcr.use_cassette("inference_conformance.yaml"):
+            with vcr.use_cassette("generate_content_conformance.yaml"):
                 client = Client()
-                client.interactions.create(
+                client.models.generate_content(
                     model="gemini-2.5-flash",
-                    input="Hello, how can you help me today?",
+                    contents="Say this is a test",
                 )

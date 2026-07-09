@@ -24,6 +24,7 @@ from opentelemetry.test_util_genai.conformance import (  # noqa: E402
 )
 
 from .conformance.embedding import EmbeddingScenario
+from .conformance.generate_content import GenerateContentScenario
 from .conformance.inference import InferenceScenario
 
 
@@ -32,6 +33,7 @@ from .conformance.inference import InferenceScenario
     [
         InferenceScenario(),
         EmbeddingScenario(),
+        GenerateContentScenario(),
     ],
     ids=lambda s: type(s).__name__,
 )
