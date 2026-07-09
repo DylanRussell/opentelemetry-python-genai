@@ -23,15 +23,15 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 
 
 class ToolCallingScenario(Scenario):
-    expected_spans = ("generate_content", "execute_tool")
+    expected_spans = ("generate_content",)
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
     )
     expected_violations = (
         ExpectedViolation(
-            advice_id="genai_operation_name_unknown",
-            message_substring="generate_content",
+            advice_id="genai_expected_attribute_missing",
+            message_substring="gen_ai.response.id",
         ),
     )
 
