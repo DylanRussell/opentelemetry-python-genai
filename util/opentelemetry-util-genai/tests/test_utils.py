@@ -368,6 +368,7 @@ class TestTelemetryHandler(unittest.TestCase):
             span_system[0]["content"], "You are a helpful assistant."
         )
         self.assertEqual(span_system[0]["type"], "text")
+
     @patch.dict(
         os.environ,
         {
