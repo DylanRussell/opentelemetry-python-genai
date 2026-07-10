@@ -150,6 +150,10 @@ class TestCase(CommonTestCaseBase):
         self.assertEqual(
             span.attributes["gen_ai.operation.name"], "interactions.create"
         )
+        self.assertEqual(
+            span.attributes["server.address"],
+            "generativelanguage.googleapis.com",
+        )
 
     def test_generated_span_has_response_id(self) -> None:
         self.configure_valid_interaction(interaction_id="interaction-123")
