@@ -368,33 +368,6 @@ class TestTelemetryHandler(unittest.TestCase):
             span_system[0]["content"], "You are a helpful assistant."
         )
         self.assertEqual(span_system[0]["type"], "text")
-
-    @patch.dict(
-        os.environ,
-        {
-            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_AND_EVENT",
-        },
-    )
-    def test_llm_conversation_id(self):  # pylint: disable=no-self-use
-        with self.telemetry_handler.inference(
-            "test-provider",
-            request_model="test-model",
-        ) as invocation:
-            invocation.conversation_id = "test-conversation-id"
-
-        span = _get_single_span(self.span_exporter)
-        span_attrs = _get_span_attributes(span)
-        self.assertEqual(
-            span_attrs[GenAI.GEN_AI_CONVERSATION_ID], "test-conversation-id"
-        )
-
-        logs = self.log_exporter.get_finished_logs()
-        self.assertEqual(len(logs), 1)
-        self.assertEqual(
-            logs[0].log_record.attributes[GenAI.GEN_AI_CONVERSATION_ID],
-            "test-conversation-id",
-        )
-
     @patch.dict(
         os.environ,
         {

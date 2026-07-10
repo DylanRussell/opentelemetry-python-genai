@@ -79,6 +79,8 @@ def _apply_interaction_response_attributes(
     telemetry_handler: TelemetryHandler,
 ) -> None:
     invocation.response_model_name = response.model
+    if getattr(response, "id", None):
+        invocation.response_id = response.id
 
     usage = response.usage or Usage()
 
@@ -301,12 +303,6 @@ def _create_instrumented_interactions_create(
             server_address=server_address,
         )
 
-        previous_interaction_id = kwargs.get(
-            "previous_interaction_id"
-        ) or _get_field(kwargs.get("config"), "previous_interaction_id")
-        if previous_interaction_id:
-            invocation.conversation_id = str(previous_interaction_id)
-
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(
                 kwargs.get("input")
@@ -362,12 +358,6 @@ def _create_instrumented_async_interactions_create(
             operation_name="interactions.create",
             server_address=server_address,
         )
-
-        previous_interaction_id = kwargs.get(
-            "previous_interaction_id"
-        ) or _get_field(kwargs.get("config"), "previous_interaction_id")
-        if previous_interaction_id:
-            invocation.conversation_id = str(previous_interaction_id)
 
         if telemetry_handler.should_capture_content():
             invocation.input_messages = _interactions_input_to_messages(
