@@ -392,14 +392,20 @@ def instrument_interactions(
         sync_class = "Interactions"
         async_class = "AsyncInteractions"
 
-    wrap_function_wrapper(
+    wrapped = wrap_function_wrapper(
         module_path,
         f"{sync_class}.create",
         _create_instrumented_interactions_create(telemetry_handler),
     )
-    wrap_function_wrapper(
+    wrapped.__wrapped__.__code__ = wrapped.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
+    wrapped2 = wrap_function_wrapper(
         module_path,
         f"{async_class}.create",
         _create_instrumented_async_interactions_create(telemetry_handler),
+    )
+    wrapped2.__wrapped__.__code__ = wrapped2.__wrapped__.__code__.replace(
+        co_filename=__file__
     )
     return snapshot

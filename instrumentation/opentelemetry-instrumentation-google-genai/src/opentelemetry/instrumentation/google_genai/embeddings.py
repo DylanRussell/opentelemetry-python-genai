@@ -150,17 +150,22 @@ def instrument_embeddings(
 ) -> object:
     snapshot = _EmbeddingMethodsSnapshot()
 
-    wrap_function_wrapper(
+    wrapped = wrap_function_wrapper(
         "google.genai.models",
         "Models.embed_content",
         _create_instrumented_embed_content(telemetry_handler),
     )
-    wrap_function_wrapper(
+    wrapped2 = wrap_function_wrapper(
         "google.genai.models",
         "AsyncModels.embed_content",
         _create_instrumented_async_embed_content(telemetry_handler),
     )
-
+    wrapped.__wrapped__.__code__ = wrapped.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
+    wrapped2.__wrapped__.__code__ = wrapped2.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
     # Wrap BaseApiClient to capture raw responses
     def instrumented_request(wrapped, instance, args, kwargs):
         response = wrapped(*args, **kwargs)

@@ -804,7 +804,7 @@ def instrument_generate_content(
 ) -> object:
     os.environ["OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT"] = "true"
     snapshot = _MethodsSnapshot()
-    wrap_function_wrapper(
+    wrapped = wrap_function_wrapper(
         "google.genai.models",
         "Models.generate_content",
         _create_instrumented_generate_content(
@@ -812,7 +812,7 @@ def instrument_generate_content(
             generate_content_config_key_allowlist,
         ),
     )
-    wrap_function_wrapper(
+    wrapped2 = wrap_function_wrapper(
         "google.genai.models",
         "Models.generate_content_stream",
         _create_instrumented_generate_content_stream(
@@ -820,7 +820,7 @@ def instrument_generate_content(
             generate_content_config_key_allowlist,
         ),
     )
-    wrap_function_wrapper(
+    wrapped3 = wrap_function_wrapper(
         "google.genai.models",
         "AsyncModels.generate_content",
         _create_instrumented_async_generate_content(
@@ -828,12 +828,24 @@ def instrument_generate_content(
             generate_content_config_key_allowlist,
         ),
     )
-    wrap_function_wrapper(
+    wrapped4 = wrap_function_wrapper(
         "google.genai.models",
         "AsyncModels.generate_content_stream",
         _create_instrumented_async_generate_content_stream(
             telemetry_handler,
             generate_content_config_key_allowlist,
         ),
+    )
+    wrapped.__wrapped__.__code__ = wrapped.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
+    wrapped2.__wrapped__.__code__ = wrapped2.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
+    wrapped3.__wrapped__.__code__ = wrapped3.__wrapped__.__code__.replace(
+        co_filename=__file__
+    )
+    wrapped4.__wrapped__.__code__ = wrapped4.__wrapped__.__code__.replace(
+        co_filename=__file__
     )
     return snapshot
