@@ -1164,8 +1164,8 @@ instruments = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'instruments'", specifier = ">=0.51.0" },
     { name = "opentelemetry-api", specifier = "~=1.43" },
-    { name = "opentelemetry-instrumentation", specifier = "~=0.64b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = "~=0.64b0" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
 ]
 provides-extras = ["instruments"]
@@ -1189,8 +1189,8 @@ instruments = [
 requires-dist = [
     { name = "claude-agent-sdk", marker = "extra == 'instruments'", specifier = ">=0.1.14" },
     { name = "opentelemetry-api", specifier = "~=1.43" },
-    { name = "opentelemetry-instrumentation", specifier = "~=0.64b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = "~=0.64b0" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
 ]
 provides-extras = ["instruments"]
@@ -1211,7 +1211,7 @@ instruments = [
 [package.metadata]
 requires-dist = [
     { name = "langchain", marker = "extra == 'instruments'", specifier = ">=0.3.21" },
-    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
 ]
 provides-extras = ["instruments"]
@@ -1235,8 +1235,8 @@ instruments = [
 requires-dist = [
     { name = "openai", marker = "extra == 'instruments'", specifier = ">=1.26.0" },
     { name = "opentelemetry-api", specifier = "~=1.43" },
-    { name = "opentelemetry-instrumentation", specifier = "~=0.64b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = "~=0.64b0" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
 ]
 provides-extras = ["instruments"]
@@ -1259,9 +1259,9 @@ instruments = [
 [package.metadata]
 requires-dist = [
     { name = "openai-agents", marker = "extra == 'instruments'", specifier = ">=0.3.3" },
-    { name = "opentelemetry-api", specifier = ">=1.43" },
-    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0" },
+    { name = "opentelemetry-api", specifier = "~=1.43" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
 ]
 provides-extras = ["instruments"]
@@ -1282,9 +1282,9 @@ instruments = [
 
 [package.metadata]
 requires-dist = [
-    { name = "opentelemetry-api", specifier = "~=1.30" },
-    { name = "opentelemetry-instrumentation", specifier = "~=0.51b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = "~=0.51b0" },
+    { name = "opentelemetry-api", specifier = "~=1.43" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "weaviate-client", marker = "extra == 'instruments'", specifier = ">=3.0" },
 ]
 provides-extras = ["instruments"]
@@ -1308,11 +1308,11 @@ instruments = [
 [package.metadata]
 requires-dist = [
     { name = "google-genai", marker = "extra == 'instruments'", specifier = ">=1.32.0,<3" },
-    { name = "opentelemetry-api", specifier = "~=1.40" },
-    { name = "opentelemetry-instrumentation", specifier = ">=0.61b0,<2" },
-    { name = "opentelemetry-semantic-conventions", specifier = ">=0.61b0,<2" },
+    { name = "opentelemetry-api", specifier = "~=1.43" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
-    { name = "wrapt", specifier = ">=1.0.0,<3.0.0" },
+    { name = "wrapt", specifier = ">=1.17.0,<3.0.0" },
 ]
 provides-extras = ["instruments"]
 
@@ -1415,14 +1415,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-instrumentation" },
-    { name = "opentelemetry-sdk" },
-    { name = "opentelemetry-semantic-conventions" },
-    { name = "opentelemetry-test-utils" },
+    { name = "opentelemetry-api", specifier = "~=1.43" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-sdk", specifier = "~=1.43" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-test-utils", specifier = ">=0.64b0,<1" },
     { name = "opentelemetry-util-genai", editable = "util/opentelemetry-util-genai" },
-    { name = "pytest" },
-    { name = "pyyaml" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]
@@ -1462,8 +1462,8 @@ upload = [
 requires-dist = [
     { name = "fsspec", marker = "extra == 'upload'", specifier = ">=2025.9.0" },
     { name = "opentelemetry-api", specifier = "~=1.43" },
-    { name = "opentelemetry-instrumentation", specifier = "~=0.64b0" },
-    { name = "opentelemetry-semantic-conventions", specifier = "~=0.64b0" },
+    { name = "opentelemetry-instrumentation", specifier = ">=0.64b0,<1" },
+    { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0,<1" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "wrapt", specifier = ">=1.0.0,<3.0.0" },
 ]
