@@ -67,10 +67,20 @@ GENERATE_CONTENT_EXTRA_ATTRIBUTES_CONTEXT_KEY = context_api.create_key(
 class _MethodsSnapshot:
     def __init__(self):
         self._original_generate_content = Models.generate_content
+        self._original_generate_content_code = Models.generate_content.__code__
         self._original_generate_content_stream = Models.generate_content_stream
+        self._original_generate_content_stream_code = (
+            Models.generate_content_stream.__code__
+        )
         self._original_async_generate_content = AsyncModels.generate_content
+        self._original_async_generate_content_code = (
+            AsyncModels.generate_content.__code__
+        )
         self._original_async_generate_content_stream = (
             AsyncModels.generate_content_stream
+        )
+        self._original_async_generate_content_stream_code = (
+            AsyncModels.generate_content_stream.__code__
         )
 
     @property
@@ -90,12 +100,33 @@ class _MethodsSnapshot:
         return self._original_async_generate_content_stream
 
     def restore(self):
+        self._original_generate_content.__code__ = (
+            self._original_generate_content_code
+        )
+        self._original_generate_content_stream.__code__ = (
+            self._original_generate_content_stream_code
+        )
+        self._original_async_generate_content.__code__ = (
+            self._original_async_generate_content_code
+        )
+        self._original_async_generate_content_stream.__code__ = (
+            self._original_async_generate_content_stream_code
+        )
+
         Models.generate_content = self._original_generate_content
         Models.generate_content_stream = self._original_generate_content_stream
         AsyncModels.generate_content = self._original_async_generate_content
         AsyncModels.generate_content_stream = (
             self._original_async_generate_content_stream
         )
+
+
+# Magic incantation used by native Google ADK instrumentation to identify
+# instrumented functions and suppress its own internal tracing when OTel is active.
+def _set_co_filename(wrapped: object) -> None:
+    wrapped.__wrapped__.__code__ = wrapped.__wrapped__.__code__.replace(
+        co_filename=__file__.replace("\\", "/")
+    )
 
 
 def _guess_genai_system_from_env():
@@ -836,16 +867,8 @@ def instrument_generate_content(
             generate_content_config_key_allowlist,
         ),
     )
-    wrapped.__wrapped__.__code__ = wrapped.__wrapped__.__code__.replace(
-        co_filename=__file__
-    )
-    wrapped2.__wrapped__.__code__ = wrapped2.__wrapped__.__code__.replace(
-        co_filename=__file__
-    )
-    wrapped3.__wrapped__.__code__ = wrapped3.__wrapped__.__code__.replace(
-        co_filename=__file__
-    )
-    wrapped4.__wrapped__.__code__ = wrapped4.__wrapped__.__code__.replace(
-        co_filename=__file__
-    )
+    _set_co_filename(wrapped)
+    _set_co_filename(wrapped2)
+    _set_co_filename(wrapped3)
+    _set_co_filename(wrapped4)
     return snapshot

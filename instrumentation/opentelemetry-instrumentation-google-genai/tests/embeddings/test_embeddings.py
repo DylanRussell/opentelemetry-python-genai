@@ -42,14 +42,10 @@ class TestEmbeddings(TestCase):
             return_value=self.mock_response
         )
 
-        def _sync_embed_wrapped(*args, **kwargs):
-            if args and isinstance(args[0], (Models, AsyncModels)):
-                args = args[1:]
+        def _sync_embed_wrapped(self_obj, *args, **kwargs):
             return self.embed_content_mock(*args, **kwargs)
 
-        async def _async_embed_wrapped(*args, **kwargs):
-            if args and isinstance(args[0], (Models, AsyncModels)):
-                args = args[1:]
+        async def _async_embed_wrapped(self_obj, *args, **kwargs):
             return await self.async_embed_content_mock(*args, **kwargs)
 
         Models.embed_content = _sync_embed_wrapped
