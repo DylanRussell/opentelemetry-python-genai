@@ -181,6 +181,7 @@ def instrument_embeddings(
     )
     _set_co_filename(wrapped)
     _set_co_filename(wrapped2)
+
     # Wrap BaseApiClient to capture raw responses
     def instrumented_request(wrapped, instance, args, kwargs):
         response = wrapped(*args, **kwargs)

@@ -8,8 +8,6 @@ from google.genai.models import AsyncModels, Models
 from opentelemetry.instrumentation.google_genai import (
     GoogleGenAiSdkInstrumentor,
 )
-
-
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
@@ -57,10 +55,14 @@ def test_co_filename_on_wrapped_functions(
             co_filename = func.__code__.co_filename.replace("\\", "/")
             assert (
                 "opentelemetry/instrumentation/google_genai" in co_filename
-            ), f"Expected opentelemetry/instrumentation/google_genai in {co_filename}"
+            ), (
+                f"Expected opentelemetry/instrumentation/google_genai in {co_filename}"
+            )
 
     for func in wrapped_functions:
         co_filename = func.__code__.co_filename.replace("\\", "/")
         assert (
             "opentelemetry/instrumentation/google_genai" not in co_filename
-        ), f"Expected opentelemetry/instrumentation/google_genai removed from {co_filename} upon uninstrument"
+        ), (
+            f"Expected opentelemetry/instrumentation/google_genai removed from {co_filename} upon uninstrument"
+        )
