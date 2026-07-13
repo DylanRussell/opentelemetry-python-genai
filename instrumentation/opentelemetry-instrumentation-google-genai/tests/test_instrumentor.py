@@ -10,22 +10,18 @@ from opentelemetry.instrumentation.google_genai import (
 )
 from opentelemetry.test_util_genai.instrumentor import instrument
 
-
-def _get_interaction_classes():
-    try:
-        from google.genai._interactions.resources.interactions import (
-            AsyncInteractionsResource,
-            InteractionsResource,
-        )
-
-        return InteractionsResource, AsyncInteractionsResource
-    except ImportError:
-        from google.genai._gaos.interactions import (
-            AsyncInteractions,
-            Interactions,
-        )
-
-        return Interactions, AsyncInteractions
+try:
+    from google.genai._interactions.resources.interactions import (
+        AsyncInteractionsResource,
+        InteractionsResource,
+    )
+except ImportError:
+    from google.genai._gaos.interactions import (
+        AsyncInteractions as AsyncInteractionsResource,
+    )
+    from google.genai._gaos.interactions import (
+        Interactions as InteractionsResource,
+    )
 
 
 def test_co_filename_on_wrapped_functions(
@@ -33,7 +29,6 @@ def test_co_filename_on_wrapped_functions(
 ):
     # ADK is relying on the __code__ attribute to suppress their instrumentation:
     # https://github.com/google/adk-python/blob/0d4d3783f7825a620c95a7b9dca919db790b879f/src/google/adk/telemetry/tracing.py#L650
-    sync_interactions, async_interactions = _get_interaction_classes()
     wrapped_functions = [
         Models.generate_content,
         Models.generate_content_stream,
@@ -41,8 +36,8 @@ def test_co_filename_on_wrapped_functions(
         AsyncModels.generate_content_stream,
         Models.embed_content,
         AsyncModels.embed_content,
-        sync_interactions.create,
-        async_interactions.create,
+        InteractionsResource.create,
+        AsyncInteractionsResource.create,
     ]
 
     with instrument(
