@@ -136,6 +136,8 @@ def _apply_interaction_response_attributes(
 ) -> None:
     if isinstance(invocation, InferenceInvocation):
         invocation.response_model_name = response.model
+        if getattr(response, "id", None):
+            invocation.response_id = response.id
 
     usage = response.usage or Usage()
 
