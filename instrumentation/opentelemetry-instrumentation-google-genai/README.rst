@@ -15,10 +15,10 @@ GenAI operations in aggregate.
 Experimental
 ------------
 
-The ``interactions`` and ``embed_content`` methods are newly instrumented, and may contain issues, 
-please treat the instrumentation those produce as experimental still.
+The ``interactions`` and ``embed_content`` methods are newly instrumented and may contain issues.
+Please treat the telemetry produced by these methods as experimental.
 
-``interactions`` API currently does not support automatic function calling, so no ``execute_tool`` spans
+The ``interactions`` API currently does not support automatic function calling, so no ``execute_tool`` spans
 are generated.
 
 
