@@ -364,6 +364,51 @@ def _maybe_get_tool_definitions(
     return definitions if definitions else None
 
 
+def _start_interactions_invocation(
+    telemetry_handler: TelemetryHandler,
+    instance: InteractionsResource | AsyncInteractionsResource,
+    kwargs: dict[str, Any],
+) -> InferenceInvocation | AgentInvocation:
+    # Vertex AI does not support the interactions API yet, but eventually will.
+    # SDK will raise an exception if model or agent is not passed or if input data is not passed.
+    is_vertex, server_address = _get_client_info(instance)
+    provider = (
+        GenAIAttributes.GenAiSystemValues.VERTEX_AI.value
+        if is_vertex
+        else GenAIAttributes.GenAiSystemValues.GEMINI.value
+    )
+    if agent := kwargs.get("agent"):
+        invocation: InferenceInvocation | AgentInvocation = (
+            telemetry_handler.invoke_remote_agent(
+                provider=provider,
+                request_model=kwargs.get("model"),
+                server_address=server_address,
+                agent_name=agent,
+            )
+        )
+    else:
+        invocation = telemetry_handler.inference(
+            provider=provider,
+            request_model=kwargs.get("model"),
+            operation_name="interactions.create",
+            server_address=server_address,
+        )
+    invocation.tool_definitions = _maybe_get_tool_definitions(
+        kwargs.get("tools")
+    )
+
+    if telemetry_handler.should_capture_content():
+        invocation.input_messages = _interactions_input_to_messages(
+            kwargs.get("input")
+        )
+        if system_instruction := kwargs.get("system_instruction"):
+            invocation.system_instruction = [
+                Text(content=system_instruction)
+            ]
+
+    return invocation
+
+
 def _create_instrumented_interactions_create(
     telemetry_handler: TelemetryHandler,
 ) -> Callable[
@@ -381,42 +426,9 @@ def _create_instrumented_interactions_create(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Interaction | InteractionsStreamWrapper:
-        # Vertex AI does not support the interactions API yet, but eventually will.
-        # SDK will raise an exception if model or agent is not passed or if input data is not passed.
-        is_vertex, server_address = _get_client_info(instance)
-        provider = (
-            GenAIAttributes.GenAiSystemValues.VERTEX_AI.value
-            if is_vertex
-            else GenAIAttributes.GenAiSystemValues.GEMINI.value
+        invocation = _start_interactions_invocation(
+            telemetry_handler, instance, kwargs
         )
-        if agent := kwargs.get("agent"):
-            invocation: InferenceInvocation | AgentInvocation = (
-                telemetry_handler.invoke_remote_agent(
-                    provider=provider,
-                    request_model=kwargs.get("model"),
-                    server_address=server_address,
-                    agent_name=agent,
-                )
-            )
-        else:
-            invocation = telemetry_handler.inference(
-                provider=provider,
-                request_model=kwargs.get("model"),
-                operation_name="interactions.create",
-                server_address=server_address,
-            )
-        invocation.tool_definitions = _maybe_get_tool_definitions(
-            kwargs.get("tools")
-        )
-
-        if telemetry_handler.should_capture_content():
-            invocation.input_messages = _interactions_input_to_messages(
-                kwargs.get("input")
-            )
-            if system_instruction := kwargs.get("system_instruction"):
-                invocation.system_instruction = [
-                    Text(content=system_instruction)
-                ]
 
         if kwargs.get("stream", False):
             return InteractionsStreamWrapper(
@@ -455,40 +467,9 @@ def _create_instrumented_async_interactions_create(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Interaction | AsyncInteractionsStreamWrapper:
-        is_vertex, server_address = _get_client_info(instance)
-        provider = (
-            GenAIAttributes.GenAiSystemValues.VERTEX_AI.value
-            if is_vertex
-            else GenAIAttributes.GenAiSystemValues.GEMINI.value
+        invocation = _start_interactions_invocation(
+            telemetry_handler, instance, kwargs
         )
-        if agent := kwargs.get("agent"):
-            invocation: InferenceInvocation | AgentInvocation = (
-                telemetry_handler.invoke_remote_agent(
-                    provider=provider,
-                    request_model=kwargs.get("model"),
-                    server_address=server_address,
-                    agent_name=agent,
-                )
-            )
-        else:
-            invocation = telemetry_handler.inference(
-                provider=provider,
-                request_model=kwargs.get("model"),
-                operation_name="interactions.create",
-                server_address=server_address,
-            )
-        invocation.tool_definitions = _maybe_get_tool_definitions(
-            kwargs.get("tools")
-        )
-
-        if telemetry_handler.should_capture_content():
-            invocation.input_messages = _interactions_input_to_messages(
-                kwargs.get("input")
-            )
-            if system_instruction := kwargs.get("system_instruction"):
-                invocation.system_instruction = [
-                    Text(content=system_instruction)
-                ]
 
         if kwargs.get("stream", False):
             return AsyncInteractionsStreamWrapper(
