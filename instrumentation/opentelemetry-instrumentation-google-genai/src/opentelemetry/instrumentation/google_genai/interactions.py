@@ -402,9 +402,7 @@ def _start_interactions_invocation(
             kwargs.get("input")
         )
         if system_instruction := kwargs.get("system_instruction"):
-            invocation.system_instruction = [
-                Text(content=system_instruction)
-            ]
+            invocation.system_instruction = [Text(content=system_instruction)]
 
     return invocation
 
