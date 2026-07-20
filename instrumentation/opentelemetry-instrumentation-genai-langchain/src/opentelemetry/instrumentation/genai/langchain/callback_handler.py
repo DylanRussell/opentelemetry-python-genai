@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional, cast
 from uuid import UUID
 
@@ -441,7 +440,7 @@ class OpenTelemetryLangChainCallbackHandler(BaseCallbackHandler):
                 arguments = inputs
             else:
                 arguments = input_str
-                
+
             tool_invocation.arguments = (
                 arguments
                 if isinstance(arguments, str)
