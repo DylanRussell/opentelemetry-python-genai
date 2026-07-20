@@ -83,12 +83,12 @@ def _wrap_tool_function(
                 tool_description=tool_function.__doc__,
             ) as tool_invocation:
                 # Do this before calling the tool in case that crashes.
-                if telemetry_handler.should_capture_content():
+                if tool_invocation.should_capture_content_on_span:
                     tool_invocation.arguments = gen_ai_json_dumps(
                         _get_function_args(tool_function, args, kwargs)
                     )
                 result = await tool_function(*args, **kwargs)
-                if telemetry_handler.should_capture_content():
+                if tool_invocation.should_capture_content_on_span:
                     tool_invocation.tool_result = gen_ai_json_dumps(
                         _to_otel_value(result)
                     )
