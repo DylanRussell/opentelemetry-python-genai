@@ -440,11 +440,8 @@ class OpenTelemetryLangChainCallbackHandler(BaseCallbackHandler):
             if inputs is not None:
                 arguments = inputs
             else:
-                try:
-                    arguments = json.loads(input_str)
-                except (json.JSONDecodeError, ValueError):
-                    arguments = input_str
-
+                arguments = input_str
+                
             tool_invocation.arguments = (
                 arguments
                 if isinstance(arguments, str)
