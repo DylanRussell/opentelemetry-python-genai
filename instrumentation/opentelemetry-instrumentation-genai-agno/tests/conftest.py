@@ -12,9 +12,7 @@ pytest_plugins = ["opentelemetry.test_util_genai.fixtures"]
 
 
 @pytest.fixture
-def instrument_agno(
-    tracer_provider, logger_provider, meter_provider
-):
+def instrument_agno(tracer_provider, logger_provider, meter_provider):
     """Fixture to instrument Agno with test providers."""
     from opentelemetry.instrumentation.genai.agno import (  # noqa: PLC0415
         AgnoInstrumentor,
