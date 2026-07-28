@@ -11,6 +11,9 @@ from typing import Any, Awaitable, Callable, cast
 
 from wrapt import wrap_function_wrapper
 
+from opentelemetry.instrumentation.genai.agno.utils import (
+    prepare_tool_definitions,
+)
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.types import (
@@ -186,8 +189,9 @@ def _start_agent_invocation(
 ) -> Any:
     agent_name = getattr(instance, "name", None) or "Agent"
     invocation = handler.invoke_local_agent(agent_name=agent_name)
-    _set_invocation_input(
-        invocation, instance, args, kwargs, capture_content
+    _set_invocation_input(invocation, instance, args, kwargs, capture_content)
+    invocation.tool_definitions = prepare_tool_definitions(
+        getattr(instance, "tools", None)
     )
     return invocation
 
@@ -228,6 +232,9 @@ def _agent_run(
         ) as invocation:
             result = wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
+            invocation.tool_definitions = prepare_tool_definitions(
+                getattr(instance, "tools", None)
+            )
             return result
 
     return traced_method
@@ -249,6 +256,9 @@ def _agent_arun(
         ) as invocation:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
+            invocation.tool_definitions = prepare_tool_definitions(
+                getattr(instance, "tools", None)
+            )
             return result
 
     return cast(Callable[..., Any], traced_method)
@@ -269,9 +279,7 @@ def _tool_call_execute(
             handler, instance, capture_content
         ) as invocation:
             result = wrapped(*args, **kwargs)
-            _set_tool_invocation_output(
-                invocation, result, capture_content
-            )
+            _set_tool_invocation_output(invocation, result, capture_content)
             return result
 
     return traced_method
@@ -292,9 +300,7 @@ def _tool_call_aexecute(
             handler, instance, capture_content
         ) as invocation:
             result = await wrapped(*args, **kwargs)
-            _set_tool_invocation_output(
-                invocation, result, capture_content
-            )
+            _set_tool_invocation_output(invocation, result, capture_content)
             return result
 
     return cast(Callable[..., Any], traced_method)

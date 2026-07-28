@@ -38,8 +38,15 @@ class AgentScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
+
+            def sample_tool(x: int) -> int:
+                """Double a number."""
+                return x * 2
+
             agent = Agent(
-                name="test-conformance-agent", session_id="session-conformance"
+                name="test-conformance-agent",
+                session_id="session-conformance",
+                tools=[sample_tool],
             )
             mock_output = RunOutput(
                 agent_id="test-conformance-agent",
@@ -47,8 +54,11 @@ class AgentScenario(Scenario):
                 content="Conformance Hello back!",
                 session_id="session-conformance",
             )
-            with patch.object(Agent, "run", wraps=agent.run), patch(
-                "agno.models.base.Model.response", return_value=mock_output
+            with (
+                patch.object(Agent, "run", wraps=agent.run),
+                patch(
+                    "agno.models.base.Model.response", return_value=mock_output
+                ),
             ):
                 try:
                     agent.run("hello conformance world")

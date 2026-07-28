@@ -26,8 +26,9 @@ def test_agent_run_spans(
         session_id="session-123",
     )
 
-    with patch.object(Agent, "run", wraps=agent.run), patch(
-        "agno.models.base.Model.response", return_value=mock_output
+    with (
+        patch.object(Agent, "run", wraps=agent.run),
+        patch("agno.models.base.Model.response", return_value=mock_output),
     ):
         try:
             res = agent.run("hello world")

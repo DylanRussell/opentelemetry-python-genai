@@ -83,4 +83,3 @@ class AgnoInstrumentor(BaseInstrumentor):
         This removes all patches applied during instrumentation.
         """
         unpatch_agent()
-

@@ -36,9 +36,7 @@ in_memory_log_exporter = InMemoryLogRecordExporter()
 in_memory_span_exporter = InMemorySpanExporter()
 
 trace_provider = TracerProvider(resource=resource)
-trace_provider.add_span_processor(
-    SimpleSpanProcessor(in_memory_span_exporter)
-)
+trace_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
 trace.set_tracer_provider(trace_provider)
 logger_provider = LoggerProvider(resource=resource)
 logger_provider.add_log_record_processor(
