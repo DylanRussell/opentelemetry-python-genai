@@ -106,8 +106,8 @@ def _extract_arguments_str(args_val: Any) -> str:
         try:
             return json.dumps(args_val, ensure_ascii=False)
         except Exception:
-            return str(args_val)
-    return str(args_val)
+            pass
+    return str(cast(object, args_val))
 
 
 def _set_tool_invocation_input(
