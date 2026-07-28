@@ -14,7 +14,7 @@ from opentelemetry.util.genai.types import (
 
 
 def _get_property_value(obj: Any, property_name: str) -> Any:
-    if isinstance(obj, dict):   
+    if isinstance(obj, dict):
         return cast(dict[str, Any], obj).get(property_name)
 
     return getattr(obj, property_name, None)
@@ -112,9 +112,7 @@ def prepare_tool_definitions(
             try:
                 import agno.tools.function  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
 
-                fn_cls = _get_property_value(
-                    agno.tools.function, "Function"
-                )
+                fn_cls = _get_property_value(agno.tools.function, "Function")
                 func = fn_cls.from_callable(tool)
                 name = _get_property_value(func, "name") or ""
                 desc = _extract_desc(func)
