@@ -17,6 +17,9 @@ from agno.tools.function import Function
 from opentelemetry.instrumentation.genai.agno.utils import (
     prepare_tool_definitions,
 )
+from opentelemetry.semconv._incubating.attributes import (
+    gen_ai_attributes as GenAIAttributes,
+)
 from opentelemetry.util.genai.types import FunctionToolDefinition
 
 
@@ -154,21 +157,26 @@ def test_agent_run_with_tools(
         patch.object(Agent, "run", wraps=agent.run),
         patch("agno.models.base.Model.response", return_value=mock_output),
     ):
-        try:
-            res = agent.run("what is the weather in Seattle?")
-            assert res is not None
-        except Exception:
-            pass
+        res = agent.run("what is the weather in Seattle?")
+        assert res is not None
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "invoke_agent test-tools-sync-agent"
-    assert span.attributes.get("gen_ai.operation.name") == "invoke_agent"
-    assert span.attributes.get("gen_ai.agent.name") == "test-tools-sync-agent"
-    assert "gen_ai.tool.definitions" in span.attributes
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_NAME)
+        == "test-tools-sync-agent"
+    )
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS in span.attributes
 
-    tool_defs = json.loads(span.attributes["gen_ai.tool.definitions"])
+    tool_defs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_TOOL_DEFINITIONS]
+    )
     assert isinstance(tool_defs, list)
     assert len(tool_defs) == 1
     assert tool_defs[0]["name"] == "sample_tool"
@@ -199,11 +207,8 @@ def test_agent_arun_with_tools(
         with patch(
             "agno.models.base.Model.aresponse", return_value=mock_output
         ):
-            try:
-                res = await agent.arun("what is the weather in San Francisco?")
-                assert res is not None
-            except Exception:
-                pass
+            res = await agent.arun("what is the weather in San Francisco?")
+            assert res is not None
 
     asyncio.run(_run_async())
 
@@ -211,11 +216,19 @@ def test_agent_arun_with_tools(
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "invoke_agent test-tools-async-agent"
-    assert span.attributes.get("gen_ai.operation.name") == "invoke_agent"
-    assert span.attributes.get("gen_ai.agent.name") == "test-tools-async-agent"
-    assert "gen_ai.tool.definitions" in span.attributes
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_NAME)
+        == "test-tools-async-agent"
+    )
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS in span.attributes
 
-    tool_defs = json.loads(span.attributes["gen_ai.tool.definitions"])
+    tool_defs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_TOOL_DEFINITIONS]
+    )
     assert isinstance(tool_defs, list)
     assert len(tool_defs) == 1
     assert tool_defs[0]["name"] == "sample_tool"
@@ -241,14 +254,11 @@ def test_agent_run_without_tools(
         patch.object(Agent, "run", wraps=agent.run),
         patch("agno.models.base.Model.response", return_value=mock_output),
     ):
-        try:
-            res = agent.run("hello")
-            assert res is not None
-        except Exception:
-            pass
+        res = agent.run("hello")
+        assert res is not None
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "invoke_agent test-no-tools-agent"
-    assert "gen_ai.tool.definitions" not in span.attributes
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS not in span.attributes

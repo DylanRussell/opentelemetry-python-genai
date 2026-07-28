@@ -12,6 +12,10 @@ from agno.agent import Agent
 from agno.run.agent import RunOutput
 from agno.tools.function import Function, FunctionCall
 
+from opentelemetry.semconv._incubating.attributes import (
+    gen_ai_attributes as GenAIAttributes,
+)
+
 
 def test_agent_run_spans(
     instrument_agno,
@@ -30,18 +34,21 @@ def test_agent_run_spans(
         patch.object(Agent, "run", wraps=agent.run),
         patch("agno.models.base.Model.response", return_value=mock_output),
     ):
-        try:
-            res = agent.run("hello world")
-            assert res is not None
-        except Exception:
-            pass
+        res = agent.run("hello world")
+        assert res is not None
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "invoke_agent test-sync-agent"
-    assert span.attributes.get("gen_ai.operation.name") == "invoke_agent"
-    assert span.attributes.get("gen_ai.agent.name") == "test-sync-agent"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_NAME)
+        == "test-sync-agent"
+    )
 
 
 def test_agent_arun_spans(
@@ -61,11 +68,8 @@ def test_agent_arun_spans(
         with patch(
             "agno.models.base.Model.aresponse", return_value=mock_output
         ):
-            try:
-                res = await agent.arun("hello async world")
-                assert res is not None
-            except Exception:
-                pass
+            res = await agent.arun("hello async world")
+            assert res is not None
 
     asyncio.run(_run_async())
 
@@ -73,8 +77,14 @@ def test_agent_arun_spans(
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "invoke_agent test-async-agent"
-    assert span.attributes.get("gen_ai.operation.name") == "invoke_agent"
-    assert span.attributes.get("gen_ai.agent.name") == "test-async-agent"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_NAME)
+        == "test-async-agent"
+    )
 
 
 def test_tool_call_execute_spans(
@@ -100,9 +110,16 @@ def test_tool_call_execute_spans(
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "execute_tool sample_tool"
-    assert span.attributes.get("gen_ai.operation.name") == "execute_tool"
-    assert span.attributes.get("gen_ai.tool.name") == "sample_tool"
-    assert span.attributes.get("gen_ai.tool.call.id") == "call-123"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "execute_tool"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_NAME) == "sample_tool"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID) == "call-123"
+    )
 
 
 def test_tool_call_aexecute_spans(
@@ -132,6 +149,13 @@ def test_tool_call_aexecute_spans(
     assert len(spans) == 1
     span = spans[0]
     assert span.name == "execute_tool sample_tool"
-    assert span.attributes.get("gen_ai.operation.name") == "execute_tool"
-    assert span.attributes.get("gen_ai.tool.name") == "sample_tool"
-    assert span.attributes.get("gen_ai.tool.call.id") == "call-456"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "execute_tool"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_NAME) == "sample_tool"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID) == "call-456"
+    )

@@ -115,7 +115,7 @@ def _set_tool_invocation_input(
     instance: Any,
     capture_content: bool,
 ) -> None:
-    if capture_content:
+    if getattr(invocation, "should_capture_content_on_span", False):
         arguments = getattr(instance, "arguments", None)
         if arguments is not None:
             invocation.arguments = _extract_arguments_str(arguments)
@@ -126,7 +126,10 @@ def _set_tool_invocation_output(
     result: Any,
     capture_content: bool,
 ) -> None:
-    if capture_content and result is not None:
+    if (
+        getattr(invocation, "should_capture_content_on_span", False)
+        and result is not None
+    ):
         invocation.tool_result = _extract_output_content(result)
 
 
@@ -232,9 +235,6 @@ def _agent_run(
         ) as invocation:
             result = wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
-            invocation.tool_definitions = prepare_tool_definitions(
-                getattr(instance, "tools", None)
-            )
             return result
 
     return traced_method
@@ -256,9 +256,6 @@ def _agent_arun(
         ) as invocation:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
-            invocation.tool_definitions = prepare_tool_definitions(
-                getattr(instance, "tools", None)
-            )
             return result
 
     return cast(Callable[..., Any], traced_method)
