@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 from opentelemetry.util.genai.types import (
     FunctionToolDefinition,
@@ -13,10 +13,19 @@ from opentelemetry.util.genai.types import (
 )
 
 
+def _get_property_value(obj: Any, property_name: str) -> Any:
+    if isinstance(obj, dict):   
+        return cast(dict[str, Any], obj).get(property_name)
+
+    return getattr(obj, property_name, None)
+
+
 def _extract_desc(tool: Any) -> str | None:
-    desc = getattr(tool, "description", None)
-    if not desc and getattr(tool, "entrypoint", None):
-        desc = getattr(tool.entrypoint, "__doc__", None)
+    desc = _get_property_value(tool, "description")
+    if not desc:
+        entrypoint = _get_property_value(tool, "entrypoint")
+        if entrypoint:
+            desc = _get_property_value(entrypoint, "__doc__")
     return str(desc).strip() if desc else None
 
 
@@ -46,48 +55,54 @@ def prepare_tool_definitions(
         if isinstance(tool, dict):
             if (
                 "type" in tool
-                and tool.get("type") == "function"
-                and isinstance(tool.get("function"), dict)
+                and _get_property_value(tool, "type") == "function"
+                and isinstance(_get_property_value(tool, "function"), dict)
             ):
-                func_dict = tool["function"]
+                func_dict = _get_property_value(tool, "function")
                 _add_def(
-                    str(func_dict.get("name") or ""),
-                    str(func_dict["description"])
-                    if func_dict.get("description") is not None
+                    str(_get_property_value(func_dict, "name") or ""),
+                    str(_get_property_value(func_dict, "description"))
+                    if _get_property_value(func_dict, "description")
+                    is not None
                     else None,
-                    func_dict.get("parameters"),
+                    _get_property_value(func_dict, "parameters"),
                 )
             elif "name" in tool:
                 _add_def(
-                    str(tool.get("name") or ""),
-                    str(tool["description"])
-                    if tool.get("description") is not None
+                    str(_get_property_value(tool, "name") or ""),
+                    str(_get_property_value(tool, "description"))
+                    if _get_property_value(tool, "description") is not None
                     else None,
-                    tool.get("parameters"),
+                    _get_property_value(tool, "parameters"),
                 )
         elif hasattr(tool, "functions") or hasattr(tool, "get_functions"):
             try:
+                funcs = None
                 if hasattr(tool, "get_functions") and callable(
-                    getattr(tool, "get_functions", None)
+                    _get_property_value(tool, "get_functions")
                 ):
-                    funcs = tool.get_functions()
+                    funcs_fn = _get_property_value(tool, "get_functions")
+                    if callable(funcs_fn):
+                        funcs = funcs_fn()
                 else:
-                    funcs = getattr(tool, "functions", None)
+                    funcs = _get_property_value(tool, "functions")
                 if isinstance(funcs, dict):
-                    sub_defs = prepare_tool_definitions(list(funcs.values()))
+                    sub_defs = prepare_tool_definitions(
+                        list(cast(dict[str, Any], funcs).values())
+                    )
                     if sub_defs:
                         for defn in sub_defs:
                             _add_def(
-                                getattr(defn, "name", "") or "",
-                                getattr(defn, "description", None),
-                                getattr(defn, "parameters", None),
+                                _get_property_value(defn, "name") or "",
+                                _get_property_value(defn, "description"),
+                                _get_property_value(defn, "parameters"),
                             )
             except Exception:
                 pass
         elif hasattr(tool, "name") and hasattr(tool, "parameters"):
-            name = getattr(tool, "name", "") or ""
+            name = _get_property_value(tool, "name") or ""
             desc = _extract_desc(tool)
-            params = getattr(tool, "parameters", None)
+            params = _get_property_value(tool, "parameters")
             _add_def(
                 str(name),
                 desc,
@@ -95,22 +110,23 @@ def prepare_tool_definitions(
             )
         elif callable(tool):
             try:
-                from agno.tools.function import (  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
-                    Function,
-                )
+                import agno.tools.function  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
 
-                func = Function.from_callable(tool)
-                name = getattr(func, "name", "") or ""
+                fn_cls = _get_property_value(
+                    agno.tools.function, "Function"
+                )
+                func = fn_cls.from_callable(tool)
+                name = _get_property_value(func, "name") or ""
                 desc = _extract_desc(func)
-                params = getattr(func, "parameters", None)
+                params = _get_property_value(func, "parameters")
                 _add_def(
                     str(name),
                     desc,
                     params,
                 )
             except Exception:
-                name = getattr(tool, "__name__", str(tool))
-                desc = getattr(tool, "__doc__", None)
+                name = _get_property_value(tool, "__name__") or str(tool)
+                desc = _get_property_value(tool, "__doc__")
                 _add_def(
                     str(name),
                     str(desc).strip() if desc is not None else None,
