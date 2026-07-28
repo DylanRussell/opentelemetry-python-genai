@@ -21,14 +21,12 @@ from opentelemetry.test_util_genai.conformance import (  # noqa: E402
 )
 
 from .conformance.agent import AgentScenario
-from .conformance.tool import ToolScenario
 
 
 @pytest.mark.parametrize(
     "scenario",
     [
         pytest.param(AgentScenario()),
-        pytest.param(ToolScenario()),
     ],
     ids=lambda s: type(s).__name__,
 )

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from agno.agent import Agent
 from agno.models.response import ModelResponse
+from agno.tools.function import Function, FunctionCall
 from tests.mock_model import MockModel
 
 from opentelemetry.instrumentation.genai.agno import AgnoInstrumentor
@@ -21,8 +22,11 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 
 
 class AgentScenario(Scenario):
-    expected_spans = {"invoke_agent": 1}
-    expected_metrics = ("gen_ai.client.operation.duration",)
+    expected_spans = {"invoke_agent": 1, "execute_tool": 1}
+    expected_metrics = (
+        "gen_ai.client.operation.duration",
+        "gen_ai.client.token.usage",
+    )
 
     def run(
         self,
@@ -39,10 +43,24 @@ class AgentScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
+
+            def sample_tool(x: int) -> int:
+                """Double a number."""
+                return x * 2
+
+            func = Function.from_callable(sample_tool)
+            func_call = FunctionCall(
+                function=func,
+                arguments={"x": 5},
+                call_id="call-conformance",
+            )
+            func_call.execute()
+
             agent = Agent(
                 name="test-conformance-agent",
                 model=MockModel(id="mock-model"),
                 session_id="session-conformance",
+                tools=[sample_tool],
             )
             mock_output = ModelResponse(content="Conformance Hello back!")
             with (

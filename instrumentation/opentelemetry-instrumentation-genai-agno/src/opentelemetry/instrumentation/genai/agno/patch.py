@@ -16,6 +16,10 @@ from opentelemetry.instrumentation.genai.agno.utils import (
 )
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
+from opentelemetry.util.genai.invocation import (
+    AgentInvocation,
+    ToolInvocation,
+)
 from opentelemetry.util.genai.types import (
     InputMessage,
     OutputMessage,
@@ -111,7 +115,7 @@ def _extract_arguments_str(args_val: Any) -> str:
 
 
 def _set_tool_invocation_input(
-    invocation: Any,
+    invocation: ToolInvocation,
     instance: Any,
     capture_content: bool,
 ) -> None:
@@ -134,7 +138,7 @@ def _set_tool_invocation_output(
 
 
 def _set_invocation_input(
-    invocation: Any,
+    invocation: AgentInvocation,
     instance: Any,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
@@ -189,7 +193,7 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-) -> Any:
+) -> AgentInvocation:
     agent_name = getattr(instance, "name", None) or "Agent"
     invocation = handler.invoke_local_agent(agent_name=agent_name)
     _set_invocation_input(invocation, instance, args, kwargs, capture_content)
@@ -203,7 +207,7 @@ def _start_tool_invocation(
     handler: TelemetryHandler,
     instance: Any,
     capture_content: bool,
-) -> Any:
+) -> ToolInvocation:
     function_obj = getattr(instance, "function", None)
     tool_name = getattr(function_obj, "name", None) or "tool"
     tool_desc = getattr(function_obj, "description", None)
