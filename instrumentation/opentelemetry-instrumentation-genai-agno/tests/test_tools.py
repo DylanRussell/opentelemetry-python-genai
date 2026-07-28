@@ -10,9 +10,10 @@ import json
 from unittest.mock import patch
 
 from agno.agent import Agent
-from agno.run.agent import RunOutput
+from agno.models.response import ModelResponse
 from agno.tools import Toolkit
 from agno.tools.function import Function
+from tests.mock_model import MockModel
 
 from opentelemetry.instrumentation.genai.agno.utils import (
     prepare_tool_definitions,
@@ -145,13 +146,12 @@ def test_agent_run_with_tools(
         """Get weather for location."""
         return "sunny"
 
-    agent = Agent(name="test-tools-sync-agent", tools=[sample_tool])
-    mock_output = RunOutput(
-        agent_id="test-tools-sync-agent",
-        agent_name="test-tools-sync-agent",
-        content="The weather is sunny.",
-        session_id="session-tools-123",
+    agent = Agent(
+        name="test-tools-sync-agent",
+        model=MockModel(id="mock-model"),
+        tools=[sample_tool],
     )
+    mock_output = ModelResponse(content="The weather is sunny.")
 
     with (
         patch.object(Agent, "run", wraps=agent.run),
@@ -195,13 +195,12 @@ def test_agent_arun_with_tools(
         """Get weather for location."""
         return "sunny"
 
-    agent = Agent(name="test-tools-async-agent", tools=[sample_tool])
-    mock_output = RunOutput(
-        agent_id="test-tools-async-agent",
-        agent_name="test-tools-async-agent",
-        content="The weather is sunny.",
-        session_id="session-tools-456",
+    agent = Agent(
+        name="test-tools-async-agent",
+        model=MockModel(id="mock-model"),
+        tools=[sample_tool],
     )
+    mock_output = ModelResponse(content="The weather is sunny.")
 
     async def _run_async() -> None:
         with patch(
@@ -242,13 +241,8 @@ def test_agent_run_without_tools(
     span_exporter,
 ) -> None:
     """Test that Agent.run does not emit gen_ai.tool.definitions when no tools are present."""
-    agent = Agent(name="test-no-tools-agent")
-    mock_output = RunOutput(
-        agent_id="test-no-tools-agent",
-        agent_name="test-no-tools-agent",
-        content="Hello without tools!",
-        session_id="session-no-tools",
-    )
+    agent = Agent(name="test-no-tools-agent", model=MockModel(id="mock-model"))
+    mock_output = ModelResponse(content="Hello without tools!")
 
     with (
         patch.object(Agent, "run", wraps=agent.run),

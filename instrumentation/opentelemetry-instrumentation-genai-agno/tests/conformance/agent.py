@@ -9,7 +9,8 @@ from typing import Any
 from unittest.mock import patch
 
 from agno.agent import Agent
-from agno.run.agent import RunOutput
+from agno.models.response import ModelResponse
+from tests.mock_model import MockModel
 
 from opentelemetry.instrumentation.genai.agno import AgnoInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
@@ -45,22 +46,15 @@ class AgentScenario(Scenario):
 
             agent = Agent(
                 name="test-conformance-agent",
+                model=MockModel(id="mock-model"),
                 session_id="session-conformance",
                 tools=[sample_tool],
             )
-            mock_output = RunOutput(
-                agent_id="test-conformance-agent",
-                agent_name="test-conformance-agent",
-                content="Conformance Hello back!",
-                session_id="session-conformance",
-            )
+            mock_output = ModelResponse(content="Conformance Hello back!")
             with (
                 patch.object(Agent, "run", wraps=agent.run),
                 patch(
                     "agno.models.base.Model.response", return_value=mock_output
                 ),
             ):
-                try:
-                    agent.run("hello conformance world")
-                except Exception:
-                    pass
+                agent.run("hello conformance world")

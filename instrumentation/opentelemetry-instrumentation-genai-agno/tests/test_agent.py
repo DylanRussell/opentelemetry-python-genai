@@ -9,8 +9,9 @@ import asyncio
 from unittest.mock import patch
 
 from agno.agent import Agent
-from agno.run.agent import RunOutput
+from agno.models.response import ModelResponse
 from agno.tools.function import Function, FunctionCall
+from tests.mock_model import MockModel
 
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
@@ -22,13 +23,8 @@ def test_agent_run_spans(
     span_exporter,
 ) -> None:
     """Test that Agent.run emits an invoke_agent span."""
-    agent = Agent(name="test-sync-agent")
-    mock_output = RunOutput(
-        agent_id="test-sync-agent",
-        agent_name="test-sync-agent",
-        content="Hello back!",
-        session_id="session-123",
-    )
+    agent = Agent(name="test-sync-agent", model=MockModel(id="mock-model"))
+    mock_output = ModelResponse(content="Hello back!")
 
     with (
         patch.object(Agent, "run", wraps=agent.run),
@@ -56,13 +52,8 @@ def test_agent_arun_spans(
     span_exporter,
 ) -> None:
     """Test that Agent.arun emits an invoke_agent span."""
-    agent = Agent(name="test-async-agent")
-    mock_output = RunOutput(
-        agent_id="test-async-agent",
-        agent_name="test-async-agent",
-        content="Async hello back!",
-        session_id="session-456",
-    )
+    agent = Agent(name="test-async-agent", model=MockModel(id="mock-model"))
+    mock_output = ModelResponse(content="Async hello back!")
 
     async def _run_async() -> None:
         with patch(
