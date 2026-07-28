@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from agno.agent import Agent
 from agno.run.agent import RunOutput
+from agno.tools.function import Function, FunctionCall
 
 
 def test_agent_run_spans(
@@ -73,3 +74,63 @@ def test_agent_arun_spans(
     assert span.name == "invoke_agent test-async-agent"
     assert span.attributes.get("gen_ai.operation.name") == "invoke_agent"
     assert span.attributes.get("gen_ai.agent.name") == "test-async-agent"
+
+
+def test_tool_call_execute_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that FunctionCall.execute emits an execute_tool span."""
+
+    def sample_tool(x: int) -> int:
+        """Double a number."""
+        return x * 2
+
+    func = Function.from_callable(sample_tool)
+    func_call = FunctionCall(
+        function=func,
+        arguments={"x": 5},
+        call_id="call-123",
+    )
+    res = func_call.execute()
+    assert res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "execute_tool sample_tool"
+    assert span.attributes.get("gen_ai.operation.name") == "execute_tool"
+    assert span.attributes.get("gen_ai.tool.name") == "sample_tool"
+    assert span.attributes.get("gen_ai.tool.call.id") == "call-123"
+
+
+def test_tool_call_aexecute_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that FunctionCall.aexecute emits an execute_tool span."""
+
+    def sample_tool(x: int) -> int:
+        """Double a number."""
+        return x * 2
+
+    func = Function.from_callable(sample_tool)
+    func_call = FunctionCall(
+        function=func,
+        arguments={"x": 5},
+        call_id="call-456",
+    )
+
+    async def _run_async() -> None:
+        res = await func_call.aexecute()
+        assert res is not None
+
+    asyncio.run(_run_async())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "execute_tool sample_tool"
+    assert span.attributes.get("gen_ai.operation.name") == "execute_tool"
+    assert span.attributes.get("gen_ai.tool.name") == "sample_tool"
+    assert span.attributes.get("gen_ai.tool.call.id") == "call-456"
