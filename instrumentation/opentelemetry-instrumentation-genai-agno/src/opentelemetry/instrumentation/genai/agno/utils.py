@@ -65,11 +65,14 @@ def prepare_tool_definitions(
                     else None,
                     tool.get("parameters"),
                 )
-        elif hasattr(tool, "get_functions") and callable(
-            getattr(tool, "get_functions", None)
-        ):
+        elif hasattr(tool, "functions") or hasattr(tool, "get_functions"):
             try:
-                funcs = tool.get_functions()
+                if hasattr(tool, "get_functions") and callable(
+                    getattr(tool, "get_functions", None)
+                ):
+                    funcs = tool.get_functions()
+                else:
+                    funcs = getattr(tool, "functions", None)
                 if isinstance(funcs, dict):
                     sub_defs = prepare_tool_definitions(list(funcs.values()))
                     if sub_defs:
@@ -92,7 +95,9 @@ def prepare_tool_definitions(
             )
         elif callable(tool):
             try:
-                from agno.tools.function import Function
+                from agno.tools.function import (  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
+                    Function,
+                )
 
                 func = Function.from_callable(tool)
                 name = getattr(func, "name", "") or ""

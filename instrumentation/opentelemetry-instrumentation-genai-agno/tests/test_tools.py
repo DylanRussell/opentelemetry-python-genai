@@ -150,8 +150,9 @@ def test_agent_run_with_tools(
         session_id="session-tools-123",
     )
 
-    with patch.object(Agent, "run", wraps=agent.run), patch(
-        "agno.models.base.Model.response", return_value=mock_output
+    with (
+        patch.object(Agent, "run", wraps=agent.run),
+        patch("agno.models.base.Model.response", return_value=mock_output),
     ):
         try:
             res = agent.run("what is the weather in Seattle?")
@@ -236,8 +237,9 @@ def test_agent_run_without_tools(
         session_id="session-no-tools",
     )
 
-    with patch.object(Agent, "run", wraps=agent.run), patch(
-        "agno.models.base.Model.response", return_value=mock_output
+    with (
+        patch.object(Agent, "run", wraps=agent.run),
+        patch("agno.models.base.Model.response", return_value=mock_output),
     ):
         try:
             res = agent.run("hello")
