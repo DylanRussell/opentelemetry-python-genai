@@ -39,16 +39,10 @@ class AgentScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
-
-            def sample_tool(x: int) -> int:
-                """Double a number."""
-                return x * 2
-
             agent = Agent(
                 name="test-conformance-agent",
                 model=MockModel(id="mock-model"),
                 session_id="session-conformance",
-                tools=[sample_tool],
             )
             mock_output = ModelResponse(content="Conformance Hello back!")
             with (

@@ -46,7 +46,4 @@ class ToolScenario(Scenario):
                 arguments={"x": 5},
                 call_id="call-conformance",
             )
-            try:
-                func_call.execute()
-            except Exception:
-                pass
+            func_call.execute()
