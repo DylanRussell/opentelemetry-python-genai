@@ -173,18 +173,6 @@ def _set_invocation_output(
         ]
     if hasattr(result, "session_id") and getattr(result, "session_id"):
         invocation.conversation_id = str(getattr(result, "session_id"))
-    if hasattr(result, "metrics") and getattr(result, "metrics"):
-        metrics = getattr(result, "metrics")
-        if (
-            hasattr(metrics, "input_tokens")
-            and getattr(metrics, "input_tokens") is not None
-        ):
-            invocation.input_tokens = int(getattr(metrics, "input_tokens"))
-        if (
-            hasattr(metrics, "output_tokens")
-            and getattr(metrics, "output_tokens") is not None
-        ):
-            invocation.output_tokens = int(getattr(metrics, "output_tokens"))
 
 
 def _start_agent_invocation(

@@ -23,10 +23,7 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 
 class AgentScenario(Scenario):
     expected_spans = {"invoke_agent": 1, "execute_tool": 1}
-    expected_metrics = (
-        "gen_ai.client.operation.duration",
-        "gen_ai.client.token.usage",
-    )
+    expected_metrics = ("gen_ai.client.operation.duration",)
 
     def run(
         self,
