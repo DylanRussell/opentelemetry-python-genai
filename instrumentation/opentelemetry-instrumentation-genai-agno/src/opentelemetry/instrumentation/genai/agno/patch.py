@@ -119,7 +119,7 @@ def _set_tool_invocation_input(
     instance: Any,
     capture_content: bool,
 ) -> None:
-    if getattr(invocation, "should_capture_content_on_span", False):
+    if capture_content:
         arguments = getattr(instance, "arguments", None)
         if arguments is not None:
             invocation.arguments = _extract_arguments_str(arguments)
@@ -130,10 +130,7 @@ def _set_tool_invocation_output(
     result: Any,
     capture_content: bool,
 ) -> None:
-    if (
-        getattr(invocation, "should_capture_content_on_span", False)
-        and result is not None
-    ):
+    if capture_content and result is not None:
         invocation.tool_result = _extract_output_content(result)
 
 
