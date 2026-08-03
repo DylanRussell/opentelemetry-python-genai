@@ -356,7 +356,9 @@ async def test_step_aexecute_spans(
     pytest.importorskip("agno.workflow.step")
     from agno.workflow.step import Step  # noqa: PLC0415
 
-    step = Step(name="test-step-async", executor=lambda step_input: "test output")
+    step = Step(
+        name="test-step-async", executor=lambda step_input: "test output"
+    )
     with patch.object(Step, "aexecute", wraps=step.aexecute):
         try:
             await step.aexecute("test input")
