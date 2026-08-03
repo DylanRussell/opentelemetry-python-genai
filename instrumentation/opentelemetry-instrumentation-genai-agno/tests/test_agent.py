@@ -286,12 +286,9 @@ def test_workflow_run_spans(
     pytest.importorskip("agno.workflow.workflow")
     from agno.workflow.workflow import Workflow  # noqa: PLC0415
 
-    workflow = Workflow(name="test-workflow")
+    workflow = Workflow(name="test-workflow", steps=[])
     with patch.object(Workflow, "run", wraps=workflow.run):
-        try:
-            workflow.run("test input")
-        except Exception:
-            pass
+        workflow.run("test input")
 
     spans = span_exporter.get_finished_spans()
     assert any(
@@ -311,12 +308,9 @@ async def test_workflow_arun_spans(
     pytest.importorskip("agno.workflow.workflow")
     from agno.workflow.workflow import Workflow  # noqa: PLC0415
 
-    workflow = Workflow(name="test-workflow-async")
+    workflow = Workflow(name="test-workflow-async", steps=[])
     with patch.object(Workflow, "arun", wraps=workflow.arun):
-        try:
-            await workflow.arun("test input")
-        except Exception:
-            pass
+        await workflow.arun("test input")
 
     spans = span_exporter.get_finished_spans()
     assert any(
@@ -324,4 +318,3 @@ async def test_workflow_arun_spans(
         == "invoke_workflow"
         for span in spans
     )
-
