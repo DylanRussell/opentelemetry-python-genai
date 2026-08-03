@@ -87,6 +87,15 @@ class WorkflowInvocation(GenAIInvocation):
             key: value for key, value in optional_attrs if value is not None
         }
 
+    def _get_metric_attributes(self) -> dict[str, AttributeValue]:
+        attrs: dict[str, AttributeValue] = {
+            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
+        }
+        if self._name is not None:
+            attrs[GenAI.GEN_AI_WORKFLOW_NAME] = self._name
+        attrs.update(self.metric_attributes)
+        return attrs
+
     def _apply_finish(self, error: Error | None = None) -> None:
         attributes: dict[str, AttributeValue] = self._get_messages_for_span()
         if error is not None:
@@ -97,4 +106,4 @@ class WorkflowInvocation(GenAIInvocation):
             inputs=self.input_messages,
             outputs=self.output_messages,
         )
-        # TODO: Add workflow metrics when supported
+        self._metrics_recorder.record(self)
