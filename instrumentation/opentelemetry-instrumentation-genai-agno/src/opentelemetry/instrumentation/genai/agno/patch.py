@@ -38,8 +38,6 @@ _AGNO_TOOLS_MODULE = "agno.tools.function"
 _FUNCTION_CALL_CLASS = "FunctionCall"
 _AGNO_WORKFLOW_MODULE = "agno.workflow.workflow"
 _WORKFLOW_CLASS = "Workflow"
-_AGNO_STEP_MODULE = "agno.workflow.step"
-_STEP_CLASS = "Step"
 _AGNO_MODELS_MODULE = "agno.models.base"
 _MODEL_CLASS = "Model"
 
@@ -97,19 +95,6 @@ def patch_agent(handler: TelemetryHandler) -> None:
         pass
     try:
         wrap_function_wrapper(
-            _AGNO_STEP_MODULE,
-            f"{_STEP_CLASS}.execute",
-            _step_execute(handler),
-        )
-        wrap_function_wrapper(
-            _AGNO_STEP_MODULE,
-            f"{_STEP_CLASS}.aexecute",
-            _step_aexecute(handler),
-        )
-    except (ImportError, AttributeError):
-        pass
-    try:
-        wrap_function_wrapper(
             _AGNO_MODELS_MODULE,
             f"{_MODEL_CLASS}.response",
             _model_response(handler),
@@ -146,19 +131,12 @@ def unpatch_agent() -> None:
         unwrap(agno.tools.function.FunctionCall, "aexecute")
     except (ImportError, AttributeError):
         pass
-    # Workflow / step depend on optional packages (like fastapi), may fail to import.
+    # Workflow depends on optional packages (like fastapi), may fail to import.
     try:
         import agno.workflow.workflow  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
 
         unwrap(agno.workflow.workflow.Workflow, "run")
         unwrap(agno.workflow.workflow.Workflow, "arun")
-    except (ImportError, AttributeError):
-        pass
-    try:
-        import agno.workflow.step  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
-
-        unwrap(agno.workflow.step.Step, "execute")
-        unwrap(agno.workflow.step.Step, "aexecute")
     except (ImportError, AttributeError):
         pass
     try:
@@ -481,56 +459,6 @@ def _workflow_arun(
     ) -> Any:
         with _start_workflow_invocation(
             handler, instance, args, kwargs, capture_content
-        ) as invocation:
-            result = await wrapped(*args, **kwargs)
-            _set_invocation_output(invocation, result, capture_content)
-            return result
-
-    return cast(Callable[..., Any], traced_method)
-
-
-def _step_execute(
-    handler: TelemetryHandler,
-) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
-    def traced_method(
-        wrapped: Callable[..., Any],
-        instance: Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-    ) -> Any:
-        with _start_workflow_invocation(
-            handler,
-            instance,
-            args,
-            kwargs,
-            capture_content,
-        ) as invocation:
-            result = wrapped(*args, **kwargs)
-            _set_invocation_output(invocation, result, capture_content)
-            return result
-
-    return traced_method
-
-
-def _step_aexecute(
-    handler: TelemetryHandler,
-) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
-    async def traced_method(
-        wrapped: Callable[..., Awaitable[Any]],
-        instance: Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-    ) -> Any:
-        with _start_workflow_invocation(
-            handler,
-            instance,
-            args,
-            kwargs,
-            capture_content,
         ) as invocation:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)

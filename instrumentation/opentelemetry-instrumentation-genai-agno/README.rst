@@ -33,7 +33,6 @@ The instrumentation automatically traces:
 * ``Agent.run`` and ``Agent.arun``
 * ``Team.run`` and ``Team.arun``
 * ``Workflow.run`` and ``Workflow.arun``
-* ``Step.execute`` and ``Step.aexecute``
 * ``Model.response`` and ``Model.aresponse``
 * ``FunctionCall.execute`` and ``FunctionCall.aexecute``
 
