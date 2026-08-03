@@ -232,12 +232,6 @@ def _set_invocation_input(
     kwargs: dict[str, Any],
     capture_content: bool,
 ) -> None:
-    agent_id = getattr(instance, "agent_id", None) or getattr(
-        instance, "id", None
-    )
-    if agent_id and hasattr(invocation, "agent_id"):
-        invocation.agent_id = str(agent_id)
-
     if capture_content and (args or "input" in kwargs):
         input_val = args[0] if args else kwargs.get("input")
         if input_val is not None:
@@ -272,8 +266,7 @@ def _start_agent_invocation(
     kwargs: dict[str, Any],
     capture_content: bool,
 ) -> AgentInvocation:
-    default_name = "Team" if instance.__class__.__name__ == "Team" else "Agent"
-    agent_name = getattr(instance, "name", None) or default_name
+    agent_name = getattr(instance, "name", None)
     invocation = handler.invoke_local_agent(agent_name=agent_name)
     _set_invocation_input(invocation, instance, args, kwargs, capture_content)
     invocation.tool_definitions = prepare_tool_definitions(
@@ -392,10 +385,8 @@ def _start_workflow_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-    *,
-    default_name: str = "Workflow",
 ) -> WorkflowInvocation:
-    workflow_name = getattr(instance, "name", None) or default_name
+    workflow_name = getattr(instance, "name", None)
     invocation = handler.workflow(name=workflow_name)
     _set_invocation_input(invocation, instance, args, kwargs, capture_content)
     return invocation
@@ -515,7 +506,6 @@ def _step_execute(
             args,
             kwargs,
             capture_content,
-            default_name="Step",
         ) as invocation:
             result = wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
@@ -541,7 +531,6 @@ def _step_aexecute(
             args,
             kwargs,
             capture_content,
-            default_name="Step",
         ) as invocation:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)

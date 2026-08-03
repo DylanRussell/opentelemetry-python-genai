@@ -282,6 +282,7 @@ def test_workflow_run_spans(
     span_exporter,
 ) -> None:
     """Test that Workflow.run emits an invoke_workflow span."""
+    pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.workflow")
     from agno.workflow.workflow import Workflow  # noqa: PLC0415
 
@@ -306,6 +307,7 @@ async def test_workflow_arun_spans(
     span_exporter,
 ) -> None:
     """Test that Workflow.arun emits an invoke_workflow span."""
+    pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.workflow")
     from agno.workflow.workflow import Workflow  # noqa: PLC0415
 
@@ -329,6 +331,7 @@ def test_step_execute_spans(
     span_exporter,
 ) -> None:
     """Test that Step.execute emits an invoke_workflow span."""
+    pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.step")
     from agno.workflow.step import Step  # noqa: PLC0415
 
@@ -353,6 +356,7 @@ async def test_step_aexecute_spans(
     span_exporter,
 ) -> None:
     """Test that Step.aexecute emits an invoke_workflow span."""
+    pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.step")
     from agno.workflow.step import Step  # noqa: PLC0415
 

@@ -23,3 +23,4 @@
 #
 # There is currently nothing to pin: agno has no test-only dependency that isn't already
 # provided by a declared bound or by the shared test fixtures.
+fastapi
