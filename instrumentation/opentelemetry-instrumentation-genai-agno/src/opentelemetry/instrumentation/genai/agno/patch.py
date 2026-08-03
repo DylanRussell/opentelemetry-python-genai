@@ -256,9 +256,9 @@ def _set_invocation_output(
         output_str = _extract_output_content(result)
         invocation.output_messages = [
             OutputMessage(
-                role="assistant",
+                role=str(getattr(result, "role", "assistant")),
                 parts=[Text(content=output_str)],
-                finish_reason="stop",
+                finish_reason=str(getattr(result, "finish_reason", "stop")),
             )
         ]
     if hasattr(result, "session_id") and getattr(result, "session_id"):
@@ -422,7 +422,7 @@ def _start_model_invocation(
         messages_val: Any = args[0] if args else kwargs.get("messages")
         if messages_val and isinstance(messages_val, (list, tuple)):
             input_msgs: list[InputMessage] = []
-            for msg in cast("list[Any]", messages_val):
+            for msg in cast(list[Any], messages_val):
                 role = str(getattr(msg, "role", "user"))
                 content: Any = getattr(msg, "content", "")
                 content_str = str(content) if content is not None else ""
@@ -447,7 +447,7 @@ def _set_model_invocation_output(
             )
             invocation.output_messages = [
                 OutputMessage(
-                    role="assistant",
+                    role=str(getattr(result, "role", "assistant")),
                     parts=[Text(content=output_str)],
                     finish_reason=str(
                         getattr(result, "finish_reason", "stop")

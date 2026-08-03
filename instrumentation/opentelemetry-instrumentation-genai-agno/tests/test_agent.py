@@ -282,7 +282,7 @@ def test_workflow_run_spans(
     span_exporter,
 ) -> None:
     """Test that Workflow.run emits an invoke_workflow span."""
-    pytest.importorskip("fastapi")
+    pytest.importorskip("agno.workflow.workflow")
     from agno.workflow.workflow import Workflow  # noqa: PLC0415
 
     workflow = Workflow(name="test-workflow")
@@ -300,18 +300,66 @@ def test_workflow_run_spans(
     )
 
 
+@pytest.mark.asyncio
+async def test_workflow_arun_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Workflow.arun emits an invoke_workflow span."""
+    pytest.importorskip("agno.workflow.workflow")
+    from agno.workflow.workflow import Workflow  # noqa: PLC0415
+
+    workflow = Workflow(name="test-workflow-async")
+    with patch.object(Workflow, "arun", wraps=workflow.arun):
+        try:
+            await workflow.arun("test input")
+        except Exception:
+            pass
+
+    spans = span_exporter.get_finished_spans()
+    assert any(
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+        for span in spans
+    )
+
+
 def test_step_execute_spans(
     instrument_agno,
     span_exporter,
 ) -> None:
     """Test that Step.execute emits an invoke_workflow span."""
-    pytest.importorskip("fastapi")
+    pytest.importorskip("agno.workflow.step")
     from agno.workflow.step import Step  # noqa: PLC0415
 
-    step = Step(name="test-step")
+    step = Step(name="test-step", executor=lambda step_input: "test output")
     with patch.object(Step, "execute", wraps=step.execute):
         try:
             step.execute("test input")
+        except Exception:
+            pass
+
+    spans = span_exporter.get_finished_spans()
+    assert any(
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+        for span in spans
+    )
+
+
+@pytest.mark.asyncio
+async def test_step_aexecute_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Step.aexecute emits an invoke_workflow span."""
+    pytest.importorskip("agno.workflow.step")
+    from agno.workflow.step import Step  # noqa: PLC0415
+
+    step = Step(name="test-step-async", executor=lambda step_input: "test output")
+    with patch.object(Step, "aexecute", wraps=step.aexecute):
+        try:
+            await step.aexecute("test input")
         except Exception:
             pass
 
