@@ -3,6 +3,7 @@
 | --------------- | ------------------ | --------------- | -------------- |
 | [opentelemetry-instrumentation-genai-agno](./opentelemetry-instrumentation-genai-agno) | agno >= 2.0.0 | No | development
 | [opentelemetry-instrumentation-genai-anthropic](./opentelemetry-instrumentation-genai-anthropic) | anthropic >= 0.16.0 | No | development
+| [opentelemetry-instrumentation-genai-bedrock](./opentelemetry-instrumentation-genai-bedrock) | boto3 >= 1.40.46 | No | development
 | [opentelemetry-instrumentation-genai-claude-agent-sdk](./opentelemetry-instrumentation-genai-claude-agent-sdk) | claude-agent-sdk >= 0.1.14 | No | development
 | [opentelemetry-instrumentation-genai-crewai](./opentelemetry-instrumentation-genai-crewai) | crewai >= 1.10.1 | No | development
 | [opentelemetry-instrumentation-genai-langchain](./opentelemetry-instrumentation-genai-langchain) | langchain >= 0.3.21 | No | development
