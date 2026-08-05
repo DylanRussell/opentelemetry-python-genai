@@ -219,7 +219,9 @@ def _provision_genai_root() -> Path:
                 upstream_archive_url, upstream_target, label="upstream-semconv"
             )
 
-        filtered = _materialize_filtered_upstream(genai_target, upstream_target)
+        filtered = _materialize_filtered_upstream(
+            genai_target, upstream_target
+        )
         _rewrite_manifest_dependency(genai_target, filtered)
     stamp.touch()
     return genai_target
