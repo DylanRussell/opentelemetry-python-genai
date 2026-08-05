@@ -31,3 +31,15 @@ environment variable ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` to o
 ::
 
     export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT
+
+Prompts and completions can also be redirected via a completion hook by
+setting ``OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK`` or by passing
+``instrument(completion_hook=...)``.
+
+References
+----------
+
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `OpenTelemetry GenAI semantic conventions <https://opentelemetry.io/docs/specs/semconv/gen-ai/>`_
+* `Amazon Bedrock Documentation <https://docs.aws.amazon.com/bedrock/>`_
+* `Boto3 Documentation <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_
