@@ -24,7 +24,7 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 
 class WorkflowScenario(Scenario):
     expected_spans = {"invoke_workflow": 1}
-    expected_metrics = ("gen_ai.client.operation.duration",)
+    expected_metrics = ("gen_ai.invoke_workflow.duration",)
 
     def run(
         self,

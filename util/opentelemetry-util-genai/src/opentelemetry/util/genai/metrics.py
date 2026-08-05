@@ -17,6 +17,7 @@ from opentelemetry.util.genai.instruments import (
     create_time_per_output_chunk_histogram,
     create_time_to_first_chunk_histogram,
     create_token_histogram,
+    create_workflow_duration_histogram,
 )
 from opentelemetry.util.types import Attributes
 
@@ -28,6 +29,9 @@ class InvocationMetricsRecorder:
 
     def __init__(self, meter: Meter):
         self._duration_histogram: Histogram = create_duration_histogram(meter)
+        self._workflow_duration_histogram: Histogram = (
+            create_workflow_duration_histogram(meter)
+        )
         self._token_histogram: Histogram = create_token_histogram(meter)
         self._time_to_first_chunk_histogram: Histogram = (
             create_time_to_first_chunk_histogram(meter)
@@ -57,6 +61,19 @@ class InvocationMetricsRecorder:
                 attributes=attributes | {GenAI.GEN_AI_TOKEN_TYPE: token_type},
                 context=invocation._span_context,
             )
+
+    def record_workflow(self, invocation: GenAIInvocation) -> None:
+        """Record duration metric for a workflow invocation."""
+        attributes = invocation._get_metric_attributes()
+        duration_seconds = max(
+            timeit.default_timer() - invocation._monotonic_start_s,
+            0.0,
+        )
+        self._workflow_duration_histogram.record(
+            duration_seconds,
+            attributes=attributes,
+            context=invocation._span_context,
+        )
 
     def record_time_to_first_chunk(
         self,

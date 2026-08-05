@@ -1,1 +1,1 @@
-Record `gen_ai.client.operation.duration` metric on workflow invocations (`WorkflowInvocation`).
+Record `gen_ai.invoke_workflow.duration` metric on workflow invocations (`WorkflowInvocation`).

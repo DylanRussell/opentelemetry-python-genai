@@ -311,8 +311,8 @@ class TestWorkflowInvocationMetrics(TestBase):
             invocation.stop()
 
         metrics = self._harvest_metrics()
-        self.assertIn("gen_ai.client.operation.duration", metrics)
-        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertIn("gen_ai.invoke_workflow.duration", metrics)
+        duration_points = metrics["gen_ai.invoke_workflow.duration"]
         self.assertEqual(len(duration_points), 1)
         duration_point = duration_points[0]
         self.assertEqual(

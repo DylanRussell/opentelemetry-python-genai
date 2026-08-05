@@ -106,4 +106,4 @@ class WorkflowInvocation(GenAIInvocation):
             inputs=self.input_messages,
             outputs=self.output_messages,
         )
-        self._metrics_recorder.record(self)
+        self._metrics_recorder.record_workflow(self)

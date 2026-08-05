@@ -204,7 +204,7 @@ def _set_tool_invocation_output(
 
 
 def _set_invocation_input(
-    invocation: Any,
+    invocation: AgentInvocation | WorkflowInvocation,
     instance: Any,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
@@ -220,7 +220,7 @@ def _set_invocation_input(
 
 
 def _set_invocation_output(
-    invocation: Any,
+    invocation: AgentInvocation | WorkflowInvocation,
     result: Any,
     capture_content: bool,
 ) -> None:
