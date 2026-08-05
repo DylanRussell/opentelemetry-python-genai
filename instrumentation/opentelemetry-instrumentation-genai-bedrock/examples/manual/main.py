@@ -6,7 +6,6 @@ import json
 
 import boto3
 
-# NOTE: OpenTelemetry Python Logs API is in beta
 from opentelemetry import _logs, trace
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
     OTLPLogExporter,
