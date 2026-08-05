@@ -134,14 +134,14 @@ def unpatch_agent() -> None:
         pass
     # Workflow depends on optional packages (like fastapi), may fail to import.
     try:
-        import agno.workflow.workflow  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
+        import agno.workflow.workflow  # pylint: disable=import-outside-toplevel
 
         unwrap(agno.workflow.workflow.Workflow, "run")
         unwrap(agno.workflow.workflow.Workflow, "arun")
     except (ImportError, AttributeError):
         pass
     try:
-        import agno.models.base  # pylint: disable=import-outside-toplevel  # noqa: PLC0415
+        import agno.models.base  # pylint: disable=import-outside-toplevel
 
         unwrap(agno.models.base.Model, "response")
         unwrap(agno.models.base.Model, "aresponse")
