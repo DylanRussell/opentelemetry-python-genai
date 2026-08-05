@@ -234,7 +234,11 @@ def _set_invocation_output(
                 finish_reason=str(getattr(result, "finish_reason", "stop")),
             )
         ]
-    if hasattr(result, "session_id") and getattr(result, "session_id"):
+    if (
+        isinstance(invocation, AgentInvocation)
+        and hasattr(result, "session_id")
+        and getattr(result, "session_id")
+    ):
         invocation.conversation_id = str(getattr(result, "session_id"))
 
 

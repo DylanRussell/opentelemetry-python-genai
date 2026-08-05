@@ -284,7 +284,7 @@ def test_workflow_run_spans(
     """Test that Workflow.run emits an invoke_workflow span."""
     pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.workflow")
-    from agno.workflow.workflow import Workflow  # noqa: PLC0415
+    from agno.workflow.workflow import Workflow
 
     workflow = Workflow(name="test-workflow", steps=[])
     with patch.object(Workflow, "run", wraps=workflow.run):
@@ -306,7 +306,7 @@ async def test_workflow_arun_spans(
     """Test that Workflow.arun emits an invoke_workflow span."""
     pytest.importorskip("fastapi")
     pytest.importorskip("agno.workflow.workflow")
-    from agno.workflow.workflow import Workflow  # noqa: PLC0415
+    from agno.workflow.workflow import Workflow
 
     workflow = Workflow(name="test-workflow-async", steps=[])
     with patch.object(Workflow, "arun", wraps=workflow.arun):
