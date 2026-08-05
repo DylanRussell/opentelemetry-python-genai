@@ -207,25 +207,20 @@ def _provision_genai_root() -> Path:
     )
 
     upstream_pins = _load_version_pins(genai_target / "versions.env")
-    try:
-        upstream_version = upstream_pins["SEMCONV_VERSION"]
-    except KeyError as missing:
-        raise RuntimeError(
-            f"genai repo's versions.env is missing {missing!s}"
-        ) from missing
+    upstream_version = upstream_pins.get("SEMCONV_VERSION")
+    if upstream_version is not None:
+        upstream_target = cache_root / f"upstream-{upstream_version}"
+        if not (upstream_target / "model").is_dir():
+            upstream_archive_url = (
+                "https://github.com/open-telemetry/semantic-conventions/"
+                f"archive/refs/tags/{upstream_version}.tar.gz"
+            )
+            _download_and_extract(
+                upstream_archive_url, upstream_target, label="upstream-semconv"
+            )
 
-    upstream_target = cache_root / f"upstream-{upstream_version}"
-    if not (upstream_target / "model").is_dir():
-        upstream_archive_url = (
-            "https://github.com/open-telemetry/semantic-conventions/"
-            f"archive/refs/tags/{upstream_version}.tar.gz"
-        )
-        _download_and_extract(
-            upstream_archive_url, upstream_target, label="upstream-semconv"
-        )
-
-    filtered = _materialize_filtered_upstream(genai_target, upstream_target)
-    _rewrite_manifest_dependency(genai_target, filtered)
+        filtered = _materialize_filtered_upstream(genai_target, upstream_target)
+        _rewrite_manifest_dependency(genai_target, filtered)
     stamp.touch()
     return genai_target
 

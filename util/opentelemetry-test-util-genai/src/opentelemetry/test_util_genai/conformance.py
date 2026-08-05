@@ -72,9 +72,7 @@ class ExpectedViolation:
     def matches(self, violation: dict[str, Any]) -> bool:
         return violation.get(
             "id"
-        ) == self.advice_id and self.message_substring in str(
-            violation.get("message", "")
-        )
+        ) == self.advice_id and self.message_substring in str(violation)
 
 
 class Scenario(ABC):
