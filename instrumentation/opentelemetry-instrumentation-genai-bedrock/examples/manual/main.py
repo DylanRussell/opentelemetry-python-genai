@@ -6,7 +6,7 @@ import json
 
 import boto3
 
-# NOTE: OpenTelemetry Python Logs and Events APIs are in beta
+# NOTE: OpenTelemetry Python Logs API is in beta
 from opentelemetry import _logs, trace
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
     OTLPLogExporter,
@@ -26,7 +26,7 @@ trace.get_tracer_provider().add_span_processor(
     BatchSpanProcessor(OTLPSpanExporter())
 )
 
-# configure logging and events
+# configure logging
 _logs.set_logger_provider(LoggerProvider())
 _logs.get_logger_provider().add_log_record_processor(
     BatchLogRecordProcessor(OTLPLogExporter())

@@ -30,7 +30,7 @@ environment variable ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` to o
 
 ::
 
-    export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT
+    export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
 
 Prompts and completions can also be redirected via a completion hook by
 setting ``OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK`` or by passing

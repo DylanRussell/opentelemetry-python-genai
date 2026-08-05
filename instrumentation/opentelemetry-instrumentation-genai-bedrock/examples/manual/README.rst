@@ -8,9 +8,9 @@ compatible endpoint.
 
 Note: `.env <.env>`_ file configures additional environment variables:
 
-- `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` configures
+- `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY` configures
   Amazon Bedrock instrumentation to capture prompt and completion contents on
-  events.
+  span attributes.
 
 Setup
 -----
