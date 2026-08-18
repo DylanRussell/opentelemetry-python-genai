@@ -58,8 +58,8 @@ if [[ -d "$changelog_dir" && -f /tmp/CHANGELOG_SECTION.md ]]; then
             frag_name=$(basename "$fragment")
             if [[ "$frag_name" != .* ]]; then
                 pr_num="${frag_name%%.*}"
-                if grep -q "\[#${pr_num}\]" /tmp/CHANGELOG_SECTION.md; then
-                    rm "$fragment"
+                if grep -Fq "[#${pr_num}]" /tmp/CHANGELOG_SECTION.md; then
+                    rm -f -- "$fragment"
                 fi
             fi
         fi
