@@ -82,7 +82,7 @@ def main():
     setup_mlflow_tracing()
 
     # 3. Configure DSPy with a Google Gemini model
-    model_name = os.getenv("MODEL", "gemini/gemini-2.0-flash")
+    model_name = os.getenv("MODEL", "gemini/gemini-3.6-flash")
     lm = dspy.LM(model_name)
     dspy.configure(lm=lm)
 
