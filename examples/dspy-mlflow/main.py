@@ -23,13 +23,15 @@ load_dotenv()
 
 def setup_gcp_otel_tracing():
     """Configures OpenTelemetry to send traces to the GCP OTLP HTTP endpoint."""
-    credentials, _ = google.auth.default()
+    project_id = os.getenv("GCP_PROJECT_ID", "ai-observability-cco-demo")
+    credentials, _ = google.auth.default(quota_project_id=project_id)
     trace_provider = TracerProvider(
         resource=Resource.create(
             attributes={
                 SERVICE_NAME: os.getenv(
                     "OTEL_SERVICE_NAME", "dspy-gemini-mlflow"
-                )
+                ),
+                "gcp.project_id": project_id,
             }
         )
     )
@@ -40,6 +42,7 @@ def setup_gcp_otel_tracing():
                 "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
                 "https://telemetry.googleapis.com:443/v1/traces",
             ),
+            headers={"x-goog-user-project": project_id},
         )
     )
     trace_provider.add_span_processor(processor)

@@ -17,11 +17,12 @@ Prerequisites
 
       export GEMINI_API_KEY="your-api-key"
 
-2. Authenticate with Google Cloud so Application Default Credentials (ADC) are available for exporting traces to Cloud Trace:
+2. Authenticate with Google Cloud and configure the target project (``ai-observability-cco-demo``) so Application Default Credentials (ADC) can export traces to Cloud Trace:
 
    .. code-block:: bash
 
       gcloud auth application-default login
+      export GCP_PROJECT_ID="ai-observability-cco-demo"
 
 Installation
 ------------
