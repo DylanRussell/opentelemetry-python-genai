@@ -5,25 +5,32 @@
 
 import os
 
-from dotenv import load_dotenv
 import dspy
 import google.auth
-from google.auth.transport.requests import AuthorizedSession
 import mlflow
+from dotenv import load_dotenv
+from google.auth.transport.requests import AuthorizedSession
+from mlflow.tracing.processor.otel import OtelSpanProcessor
+
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
     OTLPSpanExporter,
 )
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+)
 
 load_dotenv()
 
 
 def setup_gcp_otel_tracing():
-    """Configures OpenTelemetry to send traces to the GCP OTLP HTTP endpoint."""
-    project_id = os.getenv("GCP_PROJECT_ID", "ai-observability-cco-demo")
+    """Configures OpenTelemetry to send traces to GCP Cloud Trace and stdout."""
+    project_id = os.getenv("GCP_PROJECT_ID", "ai-observability-demo-project")
+    # Ensure gcp.project_id is included in OTel resource attributes for MLflow spans
+    os.environ["OTEL_RESOURCE_ATTRIBUTES"] = f"gcp.project_id={project_id}"
     credentials, _ = google.auth.default(quota_project_id=project_id)
     trace_provider = TracerProvider(
         resource=Resource.create(
@@ -35,22 +42,22 @@ def setup_gcp_otel_tracing():
             }
         )
     )
-    processor = BatchSpanProcessor(
-        OTLPSpanExporter(
-            session=AuthorizedSession(credentials),
-            endpoint=os.getenv(
-                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-                "https://telemetry.googleapis.com:443/v1/traces",
-            ),
-            headers={"x-goog-user-project": project_id},
-        )
+    gcp_exporter = OTLPSpanExporter(
+        session=AuthorizedSession(credentials),
+        endpoint=os.getenv(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "https://telemetry.googleapis.com:443/v1/traces",
+        ),
+        headers={"x-goog-user-project": project_id},
     )
-    trace_provider.add_span_processor(processor)
+    console_exporter = ConsoleSpanExporter()
+    trace_provider.add_span_processor(BatchSpanProcessor(gcp_exporter))
+    trace_provider.add_span_processor(BatchSpanProcessor(console_exporter))
     trace.set_tracer_provider(trace_provider)
-    return trace_provider
+    return trace_provider, gcp_exporter, console_exporter
 
 
-def setup_mlflow_tracing():
+def setup_mlflow_tracing(gcp_exporter, console_exporter):
     """Configures MLflow to use OTel GenAI Semantic Conventions and trace DSPy."""
     # Enable OpenTelemetry GenAI Semantic Conventions in MLflow
     os.environ["MLFLOW_ENABLE_OTEL_GENAI_SEMCONV"] = "true"
@@ -66,6 +73,16 @@ def setup_mlflow_tracing():
     # Enable automatic tracing for DSPy
     mlflow.dspy.autolog()
 
+    # Add OTel exporters to MLflow's tracer provider to export GenAI semconv spans
+    # to GCP Cloud Trace and stdout
+    mlflow_provider = mlflow.tracing.get_bridged_tracer_provider()
+    mlflow_provider.add_span_processor(
+        OtelSpanProcessor(gcp_exporter, export_metrics=False)
+    )
+    mlflow_provider.add_span_processor(
+        OtelSpanProcessor(console_exporter, export_metrics=False)
+    )
+
 
 class QuestionAnswer(dspy.Signature):
     """Answer questions with brief, accurate explanations."""
@@ -75,11 +92,11 @@ class QuestionAnswer(dspy.Signature):
 
 
 def main():
-    # 1. Setup OpenTelemetry tracing to export to the GCP OTLP HTTP endpoint
-    trace_provider = setup_gcp_otel_tracing()
+    # 1. Setup OpenTelemetry tracing to export to the GCP OTLP HTTP endpoint and stdout
+    trace_provider, gcp_exporter, console_exporter = setup_gcp_otel_tracing()
 
     # 2. Setup MLflow tracing with OpenTelemetry GenAI Semantic Conventions
-    setup_mlflow_tracing()
+    setup_mlflow_tracing(gcp_exporter, console_exporter)
 
     # 3. Configure DSPy with a Google Gemini model
     model_name = os.getenv("MODEL", "gemini/gemini-3.6-flash")
@@ -94,9 +111,9 @@ def main():
     result = qa_module(question=prompt)
     print(f"\nAnswer:\n{result.answer}")
 
-    # 5. Flush and shutdown the trace provider to ensure all spans are exported
+    # 5. Flush trace providers to ensure all spans are exported
     trace_provider.force_flush()
-    trace_provider.shutdown()
+    mlflow.tracing.get_bridged_tracer_provider().force_flush()
 
 
 if __name__ == "__main__":
