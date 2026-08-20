@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import pytest
 from agno.agent import Agent
-from agno.models.message import Message
 from agno.models.response import ModelResponse
 from agno.team import Team
 from agno.tools.function import Function, FunctionCall
@@ -219,61 +218,6 @@ def test_team_arun_spans(
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_AGENT_NAME)
         == "test-async-team"
-    )
-
-
-def test_model_response_spans(
-    instrument_agno,
-    span_exporter,
-) -> None:
-    """Test that Model.response emits a chat span."""
-    model = MockModel(id="test-mock-model")
-    mock_output = ModelResponse(content="Hello from model!", role="assistant")
-
-    with patch.object(MockModel, "invoke", return_value=mock_output):
-        res = model.response(
-            messages=[Message(role="user", content="hello model")]
-        )
-        assert res is not None
-
-    spans = span_exporter.get_finished_spans()
-    assert len(spans) == 1
-    span = spans[0]
-    assert span.name == "chat test-mock-model"
-    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MODEL)
-        == "test-mock-model"
-    )
-
-
-def test_model_aresponse_spans(
-    instrument_agno,
-    span_exporter,
-) -> None:
-    """Test that Model.aresponse emits a chat span."""
-    model = MockModel(id="test-mock-model-async")
-    mock_output = ModelResponse(
-        content="Async hello from model!", role="assistant"
-    )
-
-    async def _run_async() -> None:
-        with patch.object(MockModel, "ainvoke", return_value=mock_output):
-            res = await model.aresponse(
-                messages=[Message(role="user", content="hello async model")]
-            )
-            assert res is not None
-
-    asyncio.run(_run_async())
-
-    spans = span_exporter.get_finished_spans()
-    assert len(spans) == 1
-    span = spans[0]
-    assert span.name == "chat test-mock-model-async"
-    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MODEL)
-        == "test-mock-model-async"
     )
 
 

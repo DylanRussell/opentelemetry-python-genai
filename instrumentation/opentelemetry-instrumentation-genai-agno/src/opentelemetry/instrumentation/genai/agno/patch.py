@@ -19,7 +19,6 @@ from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
     AgentInvocation,
-    InferenceInvocation,
     ToolInvocation,
     WorkflowInvocation,
 )
@@ -39,8 +38,6 @@ _AGNO_TOOLS_MODULE = "agno.tools.function"
 _FUNCTION_CALL_CLASS = "FunctionCall"
 _AGNO_WORKFLOW_MODULE = "agno.workflow.workflow"
 _WORKFLOW_CLASS = "Workflow"
-_AGNO_MODELS_MODULE = "agno.models.base"
-_MODEL_CLASS = "Model"
 
 
 def patch_agent(handler: TelemetryHandler) -> None:
@@ -94,19 +91,6 @@ def patch_agent(handler: TelemetryHandler) -> None:
         )
     except (ImportError, AttributeError):
         pass
-    try:
-        wrap_function_wrapper(
-            _AGNO_MODELS_MODULE,
-            f"{_MODEL_CLASS}.response",
-            _model_response(handler),
-        )
-        wrap_function_wrapper(
-            _AGNO_MODELS_MODULE,
-            f"{_MODEL_CLASS}.aresponse",
-            _model_aresponse(handler),
-        )
-    except (ImportError, AttributeError):
-        pass
 
 
 def unpatch_agent() -> None:
@@ -138,13 +122,6 @@ def unpatch_agent() -> None:
 
         unwrap(agno.workflow.workflow.Workflow, "run")
         unwrap(agno.workflow.workflow.Workflow, "arun")
-    except (ImportError, AttributeError):
-        pass
-    try:
-        import agno.models.base  # pylint: disable=import-outside-toplevel
-
-        unwrap(agno.models.base.Model, "response")
-        unwrap(agno.models.base.Model, "aresponse")
     except (ImportError, AttributeError):
         pass
 
@@ -375,61 +352,6 @@ def _start_workflow_invocation(
     return invocation
 
 
-def _start_model_invocation(
-    handler: TelemetryHandler,
-    instance: Any,
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-    capture_content: bool,
-) -> InferenceInvocation:
-    provider_name = (
-        getattr(instance, "provider", None)
-        or instance.__class__.__name__
-        or "agno"
-    )
-    request_model = getattr(instance, "id", None)
-    invocation = handler.inference(
-        provider=str(provider_name),
-        request_model=str(request_model) if request_model else None,
-    )
-    if capture_content and (args or "messages" in kwargs):
-        messages_val: Any = args[0] if args else kwargs.get("messages")
-        if messages_val and isinstance(messages_val, (list, tuple)):
-            input_msgs: list[InputMessage] = []
-            for msg in cast(list[Any], messages_val):
-                role = str(getattr(msg, "role", "user"))
-                content: Any = getattr(msg, "content", "")
-                content_str = str(content) if content is not None else ""
-                input_msgs.append(
-                    InputMessage(role=role, parts=[Text(content=content_str)])
-                )
-            if input_msgs:
-                invocation.input_messages = input_msgs
-    return invocation
-
-
-def _set_model_invocation_output(
-    invocation: Any,
-    result: Any,
-    capture_content: bool,
-) -> None:
-    if capture_content and result is not None:
-        content = getattr(result, "content", None)
-        if content is not None:
-            output_str = (
-                str(content) if not isinstance(content, str) else content
-            )
-            invocation.output_messages = [
-                OutputMessage(
-                    role=str(getattr(result, "role", "assistant")),
-                    parts=[Text(content=output_str)],
-                    finish_reason=str(
-                        getattr(result, "finish_reason", "stop")
-                    ),
-                )
-            ]
-
-
 def _workflow_run(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
@@ -467,48 +389,6 @@ def _workflow_arun(
         ) as invocation:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
-            return result
-
-    return cast(Callable[..., Any], traced_method)
-
-
-def _model_response(
-    handler: TelemetryHandler,
-) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
-    def traced_method(
-        wrapped: Callable[..., Any],
-        instance: Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-    ) -> Any:
-        with _start_model_invocation(
-            handler, instance, args, kwargs, capture_content
-        ) as invocation:
-            result = wrapped(*args, **kwargs)
-            _set_model_invocation_output(invocation, result, capture_content)
-            return result
-
-    return traced_method
-
-
-def _model_aresponse(
-    handler: TelemetryHandler,
-) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
-    async def traced_method(
-        wrapped: Callable[..., Awaitable[Any]],
-        instance: Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-    ) -> Any:
-        with _start_model_invocation(
-            handler, instance, args, kwargs, capture_content
-        ) as invocation:
-            result = await wrapped(*args, **kwargs)
-            _set_model_invocation_output(invocation, result, capture_content)
             return result
 
     return cast(Callable[..., Any], traced_method)
