@@ -5,6 +5,7 @@
 
 import os
 
+from dotenv import load_dotenv
 import dspy
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
@@ -16,6 +17,8 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+load_dotenv()
 
 
 def setup_gcp_otel_tracing():
