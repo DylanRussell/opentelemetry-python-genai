@@ -11,7 +11,7 @@ from opentelemetry.sdk.trace import TracerProvider
 
 def test_instrumentation_dependencies() -> None:
     assert BedrockInstrumentor().instrumentation_dependencies() == (
-        "boto3 >= 1.40.46",
+        "boto3 >= 1.40.46, < 2",
     )
 
 
