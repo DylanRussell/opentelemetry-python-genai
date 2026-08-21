@@ -6,11 +6,10 @@ OpenTelemetry DSPy Instrumentation
 .. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-genai-dspy.svg
    :target: https://pypi.org/project/opentelemetry-instrumentation-genai-dspy/
 
-This library allows tracing executions made through the
-`DSPy framework <https://pypi.org/project/dspy/>`_.
-
-It produces spans following the `GenAI semantic conventions
-<https://opentelemetry.io/docs/specs/semconv/gen-ai/>`_.
+This package provides the setup for instrumenting the
+`DSPy framework <https://pypi.org/project/dspy/>`_ with OpenTelemetry
+Generative AI semantic conventions. DSPy operation instrumentation
+will be added in follow-up changes.
 
 Installation
 ------------
@@ -27,13 +26,8 @@ Usage
     from opentelemetry.instrumentation.genai.dspy import (
         DSPyInstrumentor,
     )
-    import dspy
 
     DSPyInstrumentor().instrument()
-
-    dspy.configure(lm=dspy.LM("gemini/gemini-3.6-flash"))
-    qa = dspy.ChainOfThought("question -> answer")
-    response = qa(question="Hello!")
 
 Message content capture is disabled by default. Set
 ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` to one of
