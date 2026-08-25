@@ -297,7 +297,7 @@ existing_span = get_current_inference_span()
 if existing_span is not None:
     # An inference span already exists in context.
     # Decide whether to enrich it or skip tracing:
-    existing_span.set_attribute(...)
+    existing_span.set_attribute("custom.attribute", "enriched")
     return wrapped(*args, **kwargs)
 ```
 

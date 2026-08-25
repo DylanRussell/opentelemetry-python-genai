@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import unittest
 
-from opentelemetry.context import attach, detach
+from opentelemetry.context import attach, detach, get_value, set_value
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 from opentelemetry.util.genai import (
+    INFERENCE_SPAN_KEY,
     get_current_inference_span,
     set_inference_span_in_context,
 )
@@ -28,90 +29,99 @@ class TestInferenceSpanContext(unittest.TestCase):
         self.handler = TelemetryHandler(tracer_provider=self.tracer_provider)
         self.tracer = self.tracer_provider.get_tracer(__name__)
 
+    def test_key_constant_value(self):
+        self.assertEqual(
+            INFERENCE_SPAN_KEY, "opentelemetry.genai.inference_span"
+        )
+
     def test_get_current_inference_span_none_by_default(self):
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
     def test_set_and_get_inference_span_in_context(self):
         span = self.tracer.start_span("test_span")
         ctx = set_inference_span_in_context(span)
-        assert get_current_inference_span(ctx) is span
-        assert get_current_inference_span() is None
+        self.assertIs(get_current_inference_span(ctx), span)
+        self.assertIsNone(get_current_inference_span())
 
         token = attach(ctx)
         try:
-            assert get_current_inference_span() is span
+            self.assertIs(get_current_inference_span(), span)
         finally:
             detach(token)
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
         span.end()
 
     def test_plain_string_key_interoperability(self):
-        from opentelemetry.context import get_value, set_value
-
         span = self.tracer.start_span("external_native_span")
         # An external native library sets the well-known string key
         ctx = set_value("opentelemetry.genai.inference_span", span)
         # Our helper can read it
-        assert get_current_inference_span(ctx) is span
+        self.assertIs(get_current_inference_span(ctx), span)
 
         # Our helper sets it, and an external library reading the string key gets it
         ctx2 = set_inference_span_in_context(span)
-        assert get_value("opentelemetry.genai.inference_span", ctx2) is span
+        self.assertIs(
+            get_value("opentelemetry.genai.inference_span", ctx2), span
+        )
+        self.assertIs(get_value(INFERENCE_SPAN_KEY, ctx2), span)
         span.end()
 
     def test_inference_invocation_attaches_and_cleans_up_context(self):
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
         invocation = self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         )
-        assert get_current_inference_span() is invocation.span
+        self.assertIs(get_current_inference_span(), invocation.span)
 
         invocation.stop()
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
     def test_inference_invocation_cleans_up_on_fail(self):
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
         invocation = self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         )
-        assert get_current_inference_span() is invocation.span
+        self.assertIs(get_current_inference_span(), invocation.span)
 
         invocation.fail(ValueError("test error"))
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
     def test_inference_invocation_context_manager(self):
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
         with self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
-            assert get_current_inference_span() is invocation.span
+            self.assertIs(get_current_inference_span(), invocation.span)
 
             # Downstream instrumentation can fetch and modify the span
             downstream_span = get_current_inference_span()
-            assert downstream_span is not None
-            downstream_span.set_attribute("custom.attribute", "enriched")
+            self.assertIsNotNone(downstream_span)
+            if downstream_span is not None:
+                downstream_span.set_attribute("custom.attribute", "enriched")
 
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
         spans = self.span_exporter.get_finished_spans()
-        assert len(spans) == 1
-        assert spans[0].attributes.get("custom.attribute") == "enriched"
+        self.assertEqual(len(spans), 1)
+        self.assertEqual(
+            spans[0].attributes.get("custom.attribute"), "enriched"
+        )
 
     def test_non_inference_invocations_do_not_set_inference_span(self):
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
 
         with self.handler.invoke_local_agent(agent_name="MathTutor"):
-            assert get_current_inference_span() is None
+            self.assertIsNone(get_current_inference_span())
 
             # Nested inference invocation properly sets the inference span
             with self.handler.inference(
                 "openai", request_model="gpt-4o-mini"
             ) as inf_inv:
-                assert get_current_inference_span() is inf_inv.span
+                self.assertIs(get_current_inference_span(), inf_inv.span)
 
-            assert get_current_inference_span() is None
+            self.assertIsNone(get_current_inference_span())
 
-        assert get_current_inference_span() is None
+        self.assertIsNone(get_current_inference_span())
