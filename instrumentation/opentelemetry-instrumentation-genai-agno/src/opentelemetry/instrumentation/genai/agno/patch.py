@@ -224,11 +224,7 @@ def _set_invocation_output(
                 finish_reason=_extract_finish_reason(result),
             )
         ]
-    if (
-        isinstance(invocation, AgentInvocation)
-        and result is not None
-        and result.session_id
-    ):
+    if result and result.session_id:
         invocation.conversation_id = str(result.session_id)
 
 

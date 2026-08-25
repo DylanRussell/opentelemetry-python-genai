@@ -140,6 +140,16 @@ class TelemetryHandlerWorkflowTest(_WorkflowTestBase):
         spans = self._get_finished_spans()
         self.assertEqual(len(spans), 1)
 
+    def test_stop_workflow_sets_conversation_id(self) -> None:
+        invocation = self.handler.workflow(name="wf")
+        invocation.conversation_id = "wf-conv-99"
+        invocation.stop()
+
+        spans = self._get_finished_spans()
+        self.assertEqual(
+            spans[0].attributes[GenAI.GEN_AI_CONVERSATION_ID], "wf-conv-99"
+        )
+
     # ------------------------------------------------------------------
     # fail_workflow
     # ------------------------------------------------------------------

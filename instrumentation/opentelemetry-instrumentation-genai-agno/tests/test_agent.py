@@ -362,3 +362,26 @@ def test_agno_run_status_handling(
     assert msg_err.role == "assistant"
     assert msg_err.finish_reason == "error"
     assert invocation_err.conversation_id is None
+
+
+def test_workflow_session_id_sets_conversation_id(
+    tracer_provider,
+) -> None:
+    from dataclasses import dataclass
+
+    from opentelemetry.instrumentation.genai.agno.patch import (
+        _set_invocation_output,
+    )
+    from opentelemetry.util.genai.handler import TelemetryHandler
+
+    @dataclass
+    class _WorkflowResult:
+        content: str = "workflow finished"
+        session_id: str = "wf-session-456"
+
+    invocation = TelemetryHandler(tracer_provider=tracer_provider).workflow(
+        name="wf"
+    )
+    _set_invocation_output(invocation, _WorkflowResult(), capture_content=True)
+    invocation.stop()
+    assert invocation.conversation_id == "wf-session-456"
