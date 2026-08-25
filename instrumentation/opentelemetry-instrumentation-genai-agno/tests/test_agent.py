@@ -18,6 +18,7 @@ from tests.mock_model import MockModel
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
+from opentelemetry.trace.status import StatusCode
 
 
 def test_agent_run_spans(
@@ -185,6 +186,35 @@ def test_team_run_spans(
     )
 
 
+def test_team_run_error_path(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Team.run records error.type and re-raises on failure."""
+    member = Agent(name="member-agent", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-sync-team",
+        members=[member],
+        model=MockModel(id="mock-model"),
+    )
+    with (
+        patch.object(
+            Team,
+            "initialize_team",
+            side_effect=RuntimeError("team failure"),
+        ),
+        pytest.raises(RuntimeError, match="team failure"),
+    ):
+        team.run("hello team world")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_agent test-sync-team"
+    assert span.attributes.get("error.type") == "RuntimeError"
+    assert span.status.status_code == StatusCode.ERROR
+
+
 def test_team_arun_spans(
     instrument_agno,
     span_exporter,
@@ -221,6 +251,39 @@ def test_team_arun_spans(
     )
 
 
+def test_team_arun_error_path(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Team.arun records error.type and re-raises on failure."""
+    member = Agent(name="member-agent", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-async-team",
+        members=[member],
+        model=MockModel(id="mock-model"),
+    )
+
+    async def _run_async() -> None:
+        with (
+            patch.object(
+                Team,
+                "initialize_team",
+                side_effect=RuntimeError("async team failure"),
+            ),
+            pytest.raises(RuntimeError, match="async team failure"),
+        ):
+            await team.arun("hello async team world")
+
+    asyncio.run(_run_async())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_agent test-async-team"
+    assert span.attributes.get("error.type") == "RuntimeError"
+    assert span.status.status_code == StatusCode.ERROR
+
+
 def test_workflow_run_spans(
     instrument_agno,
     span_exporter,
@@ -231,15 +294,46 @@ def test_workflow_run_spans(
     from agno.workflow.workflow import Workflow
 
     workflow = Workflow(name="test-workflow", steps=[])
-    with patch.object(Workflow, "run", wraps=workflow.run):
+    workflow.run("test input")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-workflow"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_WORKFLOW_NAME)
+        == "test-workflow"
+    )
+
+
+def test_workflow_run_error_path(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Workflow.run records error.type and re-raises on failure."""
+    pytest.importorskip("fastapi")
+    pytest.importorskip("agno.workflow.workflow")
+    from agno.workflow.workflow import Workflow
+
+    workflow = Workflow(name="test-workflow", steps=[])
+    with (
+        patch.object(
+            Workflow, "_execute", side_effect=RuntimeError("workflow failure")
+        ),
+        pytest.raises(RuntimeError, match="workflow failure"),
+    ):
         workflow.run("test input")
 
     spans = span_exporter.get_finished_spans()
-    assert any(
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
-        == "invoke_workflow"
-        for span in spans
-    )
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-workflow"
+    assert span.attributes.get("error.type") == "RuntimeError"
+    assert span.status.status_code == StatusCode.ERROR
 
 
 def test_workflow_arun_spans(
@@ -254,17 +348,54 @@ def test_workflow_arun_spans(
     workflow = Workflow(name="test-workflow-async", steps=[])
 
     async def _run_async() -> None:
-        with patch.object(Workflow, "arun", wraps=workflow.arun):
+        await workflow.arun("test input")
+
+    asyncio.run(_run_async())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-workflow-async"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_WORKFLOW_NAME)
+        == "test-workflow-async"
+    )
+
+
+def test_workflow_arun_error_path(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Workflow.arun records error.type and re-raises on failure."""
+    pytest.importorskip("fastapi")
+    pytest.importorskip("agno.workflow.workflow")
+    from agno.workflow.workflow import Workflow
+
+    workflow = Workflow(name="test-workflow-async", steps=[])
+
+    async def _run_async() -> None:
+        with (
+            patch.object(
+                Workflow,
+                "_aexecute",
+                side_effect=RuntimeError("async workflow failure"),
+            ),
+            pytest.raises(RuntimeError, match="async workflow failure"),
+        ):
             await workflow.arun("test input")
 
     asyncio.run(_run_async())
 
     spans = span_exporter.get_finished_spans()
-    assert any(
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
-        == "invoke_workflow"
-        for span in spans
-    )
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-workflow-async"
+    assert span.attributes.get("error.type") == "RuntimeError"
+    assert span.status.status_code == StatusCode.ERROR
 
 
 def test_none_role_becomes_assistant_and_finish_reason_stop(
@@ -282,6 +413,7 @@ def test_none_role_becomes_assistant_and_finish_reason_stop(
         content: str = "hi"
         role: str | None = None
         finish_reason: str | None = None
+        session_id: str | None = None
 
     invocation = TelemetryHandler(tracer_provider=tracer_provider).workflow(
         name="wf"
@@ -309,6 +441,7 @@ def test_status_error_becomes_finish_reason_error(
         role: str | None = None
         finish_reason: str | None = None
         status: str = "error"
+        session_id: str | None = None
 
     invocation = TelemetryHandler(tracer_provider=tracer_provider).workflow(
         name="wf"
