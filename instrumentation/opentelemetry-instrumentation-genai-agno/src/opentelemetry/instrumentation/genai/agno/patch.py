@@ -8,7 +8,14 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from agno.agent import RunOutput
+    from agno.run.workflow import WorkflowRunOutput
+    from agno.team import TeamRunOutput
+
+    AgnoRunOutput = RunOutput | TeamRunOutput | WorkflowRunOutput
 
 from wrapt import wrap_function_wrapper
 
@@ -197,26 +204,32 @@ def _set_invocation_input(
             ]
 
 
+def _extract_finish_reason(result: AgnoRunOutput) -> str:
+    if "error" in str(getattr(result, "status", "")).lower():
+        return "error"
+    return "stop"
+
+
 def _set_invocation_output(
     invocation: AgentInvocation | WorkflowInvocation,
-    result: Any,
+    result: AgnoRunOutput | None,
     capture_content: bool,
 ) -> None:
     if capture_content and result is not None:
         output_str = _extract_output_content(result)
         invocation.output_messages = [
             OutputMessage(
-                role=str(getattr(result, "role", "assistant")),
+                role="assistant",
                 parts=[Text(content=output_str)],
-                finish_reason=str(getattr(result, "finish_reason", "stop")),
+                finish_reason=_extract_finish_reason(result),
             )
         ]
     if (
         isinstance(invocation, AgentInvocation)
-        and hasattr(result, "session_id")
-        and getattr(result, "session_id")
+        and result is not None
+        and result.session_id
     ):
-        invocation.conversation_id = str(getattr(result, "session_id"))
+        invocation.conversation_id = str(result.session_id)
 
 
 def _start_agent_invocation(

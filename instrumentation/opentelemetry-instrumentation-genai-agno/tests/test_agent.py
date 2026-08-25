@@ -242,8 +242,7 @@ def test_workflow_run_spans(
     )
 
 
-@pytest.mark.asyncio
-async def test_workflow_arun_spans(
+def test_workflow_arun_spans(
     instrument_agno,
     span_exporter,
 ) -> None:
@@ -253,8 +252,12 @@ async def test_workflow_arun_spans(
     from agno.workflow.workflow import Workflow
 
     workflow = Workflow(name="test-workflow-async", steps=[])
-    with patch.object(Workflow, "arun", wraps=workflow.arun):
-        await workflow.arun("test input")
+
+    async def _run_async() -> None:
+        with patch.object(Workflow, "arun", wraps=workflow.arun):
+            await workflow.arun("test input")
+
+    asyncio.run(_run_async())
 
     spans = span_exporter.get_finished_spans()
     assert any(
@@ -262,3 +265,100 @@ async def test_workflow_arun_spans(
         == "invoke_workflow"
         for span in spans
     )
+
+
+def test_none_role_becomes_assistant_and_finish_reason_stop(
+    tracer_provider,
+) -> None:
+    from dataclasses import dataclass
+
+    from opentelemetry.instrumentation.genai.agno.patch import (
+        _set_invocation_output,
+    )
+    from opentelemetry.util.genai.handler import TelemetryHandler
+
+    @dataclass
+    class _Result:
+        content: str = "hi"
+        role: str | None = None
+        finish_reason: str | None = None
+
+    invocation = TelemetryHandler(tracer_provider=tracer_provider).workflow(
+        name="wf"
+    )
+    _set_invocation_output(invocation, _Result(), capture_content=True)
+    invocation.stop()
+    msg = invocation.output_messages[0]
+    assert msg.role == "assistant"
+    assert msg.finish_reason == "stop"
+
+
+def test_status_error_becomes_finish_reason_error(
+    tracer_provider,
+) -> None:
+    from dataclasses import dataclass
+
+    from opentelemetry.instrumentation.genai.agno.patch import (
+        _set_invocation_output,
+    )
+    from opentelemetry.util.genai.handler import TelemetryHandler
+
+    @dataclass
+    class _StatusResult:
+        content: str = "failed"
+        role: str | None = None
+        finish_reason: str | None = None
+        status: str = "error"
+
+    invocation = TelemetryHandler(tracer_provider=tracer_provider).workflow(
+        name="wf"
+    )
+    _set_invocation_output(invocation, _StatusResult(), capture_content=True)
+    invocation.stop()
+    msg = invocation.output_messages[0]
+    assert msg.role == "assistant"
+    assert msg.finish_reason == "error"
+
+
+def test_agno_run_status_handling(
+    tracer_provider,
+) -> None:
+    from dataclasses import dataclass
+
+    from agno.run.base import RunStatus
+
+    from opentelemetry.instrumentation.genai.agno.patch import (
+        _set_invocation_output,
+    )
+    from opentelemetry.util.genai.handler import TelemetryHandler
+
+    @dataclass
+    class _AgnoRunResult:
+        content: str = "completed run"
+        status: RunStatus = RunStatus.completed
+        session_id: str = "session-abc"
+
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.invoke_local_agent(agent_name="agent")
+    _set_invocation_output(invocation, _AgnoRunResult(), capture_content=True)
+    invocation.stop()
+    msg = invocation.output_messages[0]
+    assert msg.role == "assistant"
+    assert msg.finish_reason == "stop"
+    assert invocation.conversation_id == "session-abc"
+
+    @dataclass
+    class _AgnoErrorResult:
+        content: str = "errored run"
+        status: RunStatus = RunStatus.error
+        session_id: str | None = None
+
+    invocation_err = handler.invoke_local_agent(agent_name="agent")
+    _set_invocation_output(
+        invocation_err, _AgnoErrorResult(), capture_content=True
+    )
+    invocation_err.stop()
+    msg_err = invocation_err.output_messages[0]
+    assert msg_err.role == "assistant"
+    assert msg_err.finish_reason == "error"
+    assert invocation_err.conversation_id is None
