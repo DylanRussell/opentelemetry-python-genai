@@ -45,6 +45,20 @@ class TestInferenceSpanContext(unittest.TestCase):
         assert get_current_inference_span() is None
         span.end()
 
+    def test_plain_string_key_interoperability(self):
+        from opentelemetry.context import get_value, set_value
+
+        span = self.tracer.start_span("external_native_span")
+        # An external native library sets the well-known string key
+        ctx = set_value("opentelemetry.genai.inference_span", span)
+        # Our helper can read it
+        assert get_current_inference_span(ctx) is span
+
+        # Our helper sets it, and an external library reading the string key gets it
+        ctx2 = set_inference_span_in_context(span)
+        assert get_value("opentelemetry.genai.inference_span", ctx2) is span
+        span.end()
+
     def test_inference_invocation_attaches_and_cleans_up_context(self):
         assert get_current_inference_span() is None
 
@@ -89,9 +103,7 @@ class TestInferenceSpanContext(unittest.TestCase):
     def test_non_inference_invocations_do_not_set_inference_span(self):
         assert get_current_inference_span() is None
 
-        with self.handler.invoke_local_agent(
-            agent_name="MathTutor"
-        ) as agent_inv:
+        with self.handler.invoke_local_agent(agent_name="MathTutor"):
             assert get_current_inference_span() is None
 
             # Nested inference invocation properly sets the inference span

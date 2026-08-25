@@ -7,13 +7,12 @@ from __future__ import annotations
 
 from opentelemetry.context import (
     Context,
-    create_key,
     get_value,
     set_value,
 )
 from opentelemetry.trace import Span
 
-_INFERENCE_SPAN_KEY = create_key("opentelemetry_genai_inference_span")
+_INFERENCE_SPAN_KEY = "opentelemetry.genai.inference_span"
 
 
 def set_inference_span_in_context(
