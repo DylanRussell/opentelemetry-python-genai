@@ -98,6 +98,10 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._ttfc_seconds: float | None = None
         self._stream_last_chunk_at: float | None = None
 
+    def _create_context(self, context: Context) -> Context:
+        """Hook for subclasses to populate additional context values before attach."""
+        return context
+
     def _start(
         self, attributes: dict[str, AttributeValue] | None = None
     ) -> None:
@@ -111,7 +115,8 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             kind=self._span_kind,
             attributes=attributes,
         )
-        self._span_context = set_span_in_context(self.span)
+        ctx = set_span_in_context(self.span)
+        self._span_context = self._create_context(ctx)
         self._monotonic_start_s = timeit.default_timer()
         self._context_token = attach(self._span_context)
 
