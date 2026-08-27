@@ -157,7 +157,7 @@ def extract_converse_request(
 
     # tool definitions
     tool_config = kwargs.get("toolConfig")
-    if capture_content and _is_dict(tool_config):
+    if _is_dict(tool_config):
         tools = tool_config.get("tools")
         if _is_list(tools):
             tool_defs: list[ToolDefinition] = []

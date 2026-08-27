@@ -267,9 +267,7 @@ def test_converse_tool_call_no_content(
     assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
         "tool_calls",
     )
-    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS not in (
-        span.attributes or {}
-    )
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS in (span.attributes or {})
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in (span.attributes or {})
     assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in (
         span.attributes or {}
@@ -321,7 +319,7 @@ def test_extract_converse_request_no_content(tracer_provider) -> None:
     )
     assert not invocation.input_messages
     assert not invocation.system_instruction
-    assert not invocation.tool_definitions
+    assert invocation.tool_definitions
     assert invocation.temperature == 0.5
 
 
