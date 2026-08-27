@@ -31,12 +31,7 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         *,
         capture_content: bool = True,
     ) -> None:
-        try:
-            super().__init__(stream, invocation=invocation)
-        except TypeError:
-            super().__init__(stream)
-            if hasattr(invocation, "_request_stream"):
-                invocation._request_stream = True
+        super().__init__(stream, invocation=invocation)
         self._self_invocation = invocation
         self._self_model_id = model_id
         self._self_capture_content = capture_content

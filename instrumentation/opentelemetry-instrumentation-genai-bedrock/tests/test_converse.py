@@ -209,6 +209,74 @@ def test_converse_tool_call_with_content(
 
 
 @pytest.mark.vcr
+def test_converse_tool_call_no_content(
+    bedrock_client,
+    instrument_no_content,
+    span_exporter,
+) -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "text": (
+                        "What is the weather in Seattle and San Francisco"
+                        " today?"
+                    )
+                }
+            ],
+        }
+    ]
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": "get_current_weather",
+                    "description": (
+                        "Get the current weather in a given location."
+                    ),
+                    "inputSchema": {
+                        "json": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "The name of the city",
+                                }
+                            },
+                            "required": ["location"],
+                        }
+                    },
+                }
+            }
+        ]
+    }
+
+    response = bedrock_client.converse(
+        messages=messages,
+        modelId="amazon.nova-micro-v1:0",
+        toolConfig=tool_config,
+    )
+
+    assert response
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.name == "chat amazon.nova-micro-v1:0"
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_calls",
+    )
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS not in (
+        span.attributes or {}
+    )
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in (span.attributes or {})
+    assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in (
+        span.attributes or {}
+    )
+
+
+@pytest.mark.vcr
 def test_converse_with_invalid_model(
     bedrock_client,
     instrument_with_content,
@@ -244,12 +312,16 @@ def test_extract_converse_request_no_content(tracer_provider) -> None:
             "messages": [{"role": "user", "content": [{"text": "hello"}]}],
             "system": [{"text": "system instruction"}],
             "inferenceConfig": {"temperature": 0.5},
+            "toolConfig": {
+                "tools": [{"toolSpec": {"name": "get_weather"}}],
+            },
         },
         invocation,
         capture_content=False,
     )
     assert not invocation.input_messages
     assert not invocation.system_instruction
+    assert not invocation.tool_definitions
     assert invocation.temperature == 0.5
 
 
