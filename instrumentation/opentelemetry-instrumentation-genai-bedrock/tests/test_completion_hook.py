@@ -36,7 +36,12 @@ def test_custom_hook_is_called(
     try:
         with vcr.use_cassette("test_converse_with_content.yaml"):
             bedrock_client.converse(
-                messages=[{"role": "user", "content": [{"text": "Say this is a test"}]}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [{"text": "Say this is a test"}],
+                    }
+                ],
                 modelId="amazon.titan-text-lite-v1",
             )
     finally:
@@ -85,7 +90,12 @@ def test_default_hook_loaded_from_env(
     try:
         with vcr.use_cassette("test_converse_with_content.yaml"):
             bedrock_client.converse(
-                messages=[{"role": "user", "content": [{"text": "Say this is a test"}]}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [{"text": "Say this is a test"}],
+                    }
+                ],
                 modelId="amazon.titan-text-lite-v1",
             )
     finally:

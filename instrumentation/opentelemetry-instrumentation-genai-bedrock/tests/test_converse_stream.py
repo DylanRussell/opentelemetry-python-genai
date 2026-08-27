@@ -18,7 +18,9 @@ from opentelemetry.semconv._incubating.attributes import (
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
-from opentelemetry.semconv.attributes import server_attributes as ServerAttributes
+from opentelemetry.semconv.attributes import (
+    server_attributes as ServerAttributes,
+)
 from opentelemetry.trace import StatusCode
 from opentelemetry.util.genai.handler import TelemetryHandler
 
@@ -72,9 +74,9 @@ def test_converse_stream_with_content(
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES] == (
         "|",
     )
-    assert span.attributes[
-        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
-    ] == ("length",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "length",
+    )
     assert (
         span.attributes[ServerAttributes.SERVER_ADDRESS]
         == "bedrock-runtime.us-east-1.amazonaws.com"
@@ -110,15 +112,10 @@ def test_converse_stream_no_content(
     span = spans[0]
 
     assert span.name == "chat amazon.titan-text-lite-v1"
-    assert (
-        GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
-    )
-    assert (
-        GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
-    )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
-        == ("length",)
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
+    assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "length",
     )
 
 
@@ -180,9 +177,9 @@ def test_converse_stream_with_content_tool_call(
     span = spans[0]
 
     assert span.name == "chat amazon.nova-micro-v1:0"
-    assert span.attributes[
-        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
-    ] == ("tool_calls",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_calls",
+    )
 
 
 @pytest.mark.vcr
@@ -235,12 +232,9 @@ def test_converse_stream_with_invalid_model(
 
     assert span.name == "chat does-not-exist"
     assert span.status.status_code == StatusCode.ERROR
-    assert (
-        span.attributes[ErrorAttributes.ERROR_TYPE]
-        in (
-            "ValidationException",
-            "botocore.errorfactory.ValidationException",
-        )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] in (
+        "ValidationException",
+        "botocore.errorfactory.ValidationException",
     )
 
 
@@ -279,12 +273,9 @@ def test_converse_stream_handles_event_stream_error(
     span = spans[0]
 
     assert span.status.status_code == StatusCode.ERROR
-    assert (
-        span.attributes[ErrorAttributes.ERROR_TYPE]
-        in (
-            "EventStreamError",
-            "botocore.exceptions.EventStreamError",
-        )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] in (
+        "EventStreamError",
+        "botocore.exceptions.EventStreamError",
     )
 
 
@@ -317,10 +308,7 @@ def test_converse_stream_caller_side_error(
     span = spans[0]
 
     assert span.status.status_code == StatusCode.ERROR
-    assert (
-        span.attributes[ErrorAttributes.ERROR_TYPE]
-        == "RuntimeError"
-    )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "RuntimeError"
 
 
 def test_stream_wrapper_no_content(tracer_provider) -> None:

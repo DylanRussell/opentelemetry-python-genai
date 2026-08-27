@@ -28,6 +28,7 @@ def _is_dict(val: object) -> TypeGuard[dict[str, Any]]:
 def _is_list(val: object) -> TypeGuard[list[Any]]:
     return isinstance(val, list)
 
+
 _FINISH_REASON_MAP: dict[str, str] = {
     "end_turn": "stop",
     "stop_sequence": "stop",

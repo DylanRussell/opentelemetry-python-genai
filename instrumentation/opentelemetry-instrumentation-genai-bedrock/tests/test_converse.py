@@ -8,7 +8,6 @@ import json
 import pytest
 from botocore.exceptions import ClientError
 
-
 from opentelemetry.instrumentation.genai.bedrock.extractors import (
     extract_converse_request,
     extract_converse_response,
@@ -19,7 +18,9 @@ from opentelemetry.semconv._incubating.attributes import (
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
-from opentelemetry.semconv.attributes import server_attributes as ServerAttributes
+from opentelemetry.semconv.attributes import (
+    server_attributes as ServerAttributes,
+)
 from opentelemetry.trace import StatusCode
 from opentelemetry.util.genai.handler import TelemetryHandler
 
@@ -71,9 +72,9 @@ def test_converse_with_content(
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES] == (
         "|",
     )
-    assert span.attributes[
-        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
-    ] == ("length",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "length",
+    )
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 8
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 10
     assert (
@@ -124,19 +125,14 @@ def test_converse_no_content(
     span = spans[0]
 
     assert span.name == "chat amazon.titan-text-lite-v1"
-    assert (
-        GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
-    )
-    assert (
-        GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
-    )
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
+    assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
     assert (
         span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
         == "amazon.titan-text-lite-v1"
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
-        == ("length",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "length",
     )
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 8
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 10
@@ -198,9 +194,9 @@ def test_converse_tool_call_with_content(
     span = spans[0]
 
     assert span.name == "chat amazon.nova-micro-v1:0"
-    assert span.attributes[
-        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
-    ] == ("tool_calls",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_calls",
+    )
 
     output_msgs = json.loads(
         span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
@@ -234,12 +230,9 @@ def test_converse_with_invalid_model(
 
     assert span.name == "chat does-not-exist"
     assert span.status.status_code == StatusCode.ERROR
-    assert (
-        span.attributes[ErrorAttributes.ERROR_TYPE]
-        in (
-            "ValidationException",
-            "botocore.errorfactory.ValidationException",
-        )
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] in (
+        "ValidationException",
+        "botocore.errorfactory.ValidationException",
     )
 
 
@@ -315,13 +308,8 @@ def test_extract_converse_request_top_k_and_seed(tracer_provider) -> None:
     invocation3 = handler.inference(provider="aws.bedrock")
     extract_converse_request(
         {
-            "additionalModelRequestFields": {
-                "inferenceConfig": {"topK": 20}
-            },
+            "additionalModelRequestFields": {"inferenceConfig": {"topK": 20}},
         },
         invocation3,
     )
     assert invocation3.top_k == 20.0
-
-
-

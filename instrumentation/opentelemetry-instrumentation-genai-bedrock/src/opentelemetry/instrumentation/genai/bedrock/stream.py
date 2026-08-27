@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from botocore.eventstream import EventStream
+
 from opentelemetry.util.genai.invocation import InferenceInvocation
 from opentelemetry.util.genai.stream import SyncStreamWrapper
 from opentelemetry.util.genai.types import (
@@ -14,8 +16,6 @@ from opentelemetry.util.genai.types import (
     Text,
     ToolCallRequest,
 )
-
-from botocore.eventstream import EventStream
 
 from .extractors import map_finish_reason
 
