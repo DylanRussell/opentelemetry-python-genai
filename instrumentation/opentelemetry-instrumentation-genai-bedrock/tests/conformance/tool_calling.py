@@ -88,7 +88,9 @@ class ToolCallingScenario(Scenario):
                         }
                     ]
                 }
-                client = boto3.client("bedrock-runtime", region_name="us-east-1")
+                client = boto3.client(
+                    "bedrock-runtime", region_name="us-east-1"
+                )
                 client.converse(
                     messages=messages,
                     modelId="amazon.nova-micro-v1:0",

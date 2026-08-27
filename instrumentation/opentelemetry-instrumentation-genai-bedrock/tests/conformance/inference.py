@@ -49,7 +49,9 @@ class InferenceScenario(Scenario):
             content_capture="SPAN_ONLY",
         ):
             with vcr.use_cassette("test_converse_with_content.yaml"):
-                client = boto3.client("bedrock-runtime", region_name="us-east-1")
+                client = boto3.client(
+                    "bedrock-runtime", region_name="us-east-1"
+                )
                 client.converse(
                     modelId="amazon.titan-text-lite-v1",
                     messages=[
