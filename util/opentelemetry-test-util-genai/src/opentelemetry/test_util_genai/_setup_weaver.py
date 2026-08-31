@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import tarfile
 import tempfile
@@ -95,6 +96,36 @@ def _download_and_extract(url: str, target: Path, label: str) -> None:
         shutil.move(str(entries[0]), str(target))
 
 
+def _localize_manifest_dependencies(
+    genai_root: Path, cache_root: Path
+) -> None:
+    """Download git dependencies as tarballs and rewrite registry_path to local dirs.
+
+    Avoids Weaver cloning dependencies over git/HTTPS at runtime, which can
+    hit network throttling or exceed WeaverLiveCheck startup timeouts in CI.
+    """
+    manifest = genai_root / "model" / "manifest.yaml"
+    text = manifest.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r"registry_path:\s*https://github\.com/open-telemetry/([^/]+)\.git@([^\s\[]+)(?:\[([^\]]+)\])?"
+    )
+
+    def _replace(match: re.Match[str]) -> str:
+        repo_name = match.group(1)
+        tag = match.group(2)
+        subpath = match.group(3) or ""
+        target = cache_root / f"{repo_name}-{tag}"
+        if not target.is_dir():
+            url = f"https://github.com/open-telemetry/{repo_name}/archive/refs/tags/{tag}.tar.gz"
+            _download_and_extract(url, target, label=f"{repo_name}-{tag}")
+        local_path = (target / subpath).resolve().as_posix()
+        return f"registry_path: {local_path}"
+
+    new_text, count = pattern.subn(_replace, text)
+    if count > 0:
+        manifest.write_text(new_text, encoding="utf-8")
+
+
 def _provision_genai_root() -> Path:
     """Fetch the pinned genai registry and return its root."""
     pins = _load_version_pins(_workspace_root() / "versions.env")
@@ -119,6 +150,7 @@ def _provision_genai_root() -> Path:
     _download_and_extract(
         genai_archive_url, genai_target, label="genai-semconv"
     )
+    _localize_manifest_dependencies(genai_target, cache_root)
     stamp.touch()
     return genai_target
 
