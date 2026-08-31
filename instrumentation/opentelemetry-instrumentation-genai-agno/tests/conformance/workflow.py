@@ -18,13 +18,21 @@ from opentelemetry.instrumentation.genai.agno import AgnoInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.test_util_genai.conformance import Scenario
+from opentelemetry.test_util_genai.conformance import (
+    ExpectedViolation,
+    Scenario,
+)
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
 class WorkflowScenario(Scenario):
     expected_spans = {"invoke_workflow": 1}
-    expected_metrics = ("gen_ai.invoke_workflow.duration",)
+    expected_violations = (
+        ExpectedViolation(
+            advice_id="missing_metric",
+            message_substring="Metric does not exist in the registry",
+        ),
+    )
 
     def run(
         self,

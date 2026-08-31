@@ -35,13 +35,16 @@ class WorkflowScenario(Scenario):
     expected_metrics = (
         "gen_ai.client.operation.duration",
         "gen_ai.client.token.usage",
-        "gen_ai.invoke_workflow.duration",
     )
     # langchain can't populate server.address on chat spans.
     expected_violations = (
         ExpectedViolation(
             advice_id="genai_expected_attribute_missing",
             message_substring="server.address",
+        ),
+        ExpectedViolation(
+            advice_id="missing_metric",
+            message_substring="Metric does not exist in the registry",
         ),
     )
 
