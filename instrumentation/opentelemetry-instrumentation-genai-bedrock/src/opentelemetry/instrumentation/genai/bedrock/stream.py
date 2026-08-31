@@ -13,11 +13,12 @@ from opentelemetry.util.genai.stream import SyncStreamWrapper
 from opentelemetry.util.genai.types import (
     MessagePart,
     OutputMessage,
+    Reasoning,
     Text,
     ToolCallRequest,
 )
 
-from .extractors import map_finish_reason
+from .extractors import _is_dict, map_finish_reason
 
 
 class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
@@ -40,6 +41,7 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         self._self_cache_read_input_tokens: int | None = None
         self._self_cache_creation_input_tokens: int | None = None
         self._self_text_blocks: dict[int, str] = {}
+        self._self_reasoning_blocks: dict[int, str] = {}
         self._self_tool_blocks: dict[int, dict[str, Any]] = {}
         self._self_all_block_indices: list[int] = []
 
@@ -71,6 +73,13 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
                 self._self_text_blocks[idx] = (
                     self._self_text_blocks.get(idx, "") + delta["text"]
                 )
+            elif "reasoningContent" in delta:
+                rc_delta = delta["reasoningContent"]
+                if _is_dict(rc_delta) and "text" in rc_delta:
+                    self._self_reasoning_blocks[idx] = (
+                        self._self_reasoning_blocks.get(idx, "")
+                        + rc_delta["text"]
+                    )
             elif "toolUse" in delta:
                 tool_delta = delta["toolUse"]
                 input_str = tool_delta.get("input", "")
@@ -113,6 +122,10 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
             for idx in sorted(self._self_all_block_indices):
                 if idx in self._self_text_blocks:
                     parts.append(Text(content=self._self_text_blocks[idx]))
+                elif idx in self._self_reasoning_blocks:
+                    parts.append(
+                        Reasoning(content=self._self_reasoning_blocks[idx])
+                    )
                 elif idx in self._self_tool_blocks:
                     tool_info = self._self_tool_blocks[idx]
                     input_chunks = tool_info["input_chunks"]

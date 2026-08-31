@@ -9,6 +9,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from opentelemetry.instrumentation.genai.bedrock.extractors import (
+    extract_content_block,
     extract_converse_request,
     extract_converse_response,
 )
@@ -381,3 +382,114 @@ def test_extract_converse_request_top_k_and_seed(tracer_provider) -> None:
         invocation3,
     )
     assert invocation3.top_k == 20.0
+
+
+def test_extract_content_block_reasoning() -> None:
+    part = extract_content_block(
+        {
+            "reasoningContent": {
+                "reasoningText": {"text": "Thinking step by step..."}
+            }
+        }
+    )
+    assert part is not None
+    assert part.type == "reasoning"
+    assert getattr(part, "content") == "Thinking step by step..."
+
+    # Direct text in reasoningContent
+    part2 = extract_content_block(
+        {"reasoningContent": {"text": "Direct reasoning"}}
+    )
+    assert part2 is not None
+    assert part2.type == "reasoning"
+    assert getattr(part2, "content") == "Direct reasoning"
+
+    # Redacted reasoningContent
+    part3 = extract_content_block(
+        {"reasoningContent": {"redactedContent": b"redacted_bytes"}}
+    )
+    assert part3 is not None
+    assert part3.type == "reasoning"
+    assert getattr(part3, "content") == ""
+
+
+def test_extract_content_block_multimedia_and_document() -> None:
+    doc_part = extract_content_block(
+        {
+            "document": {
+                "format": "pdf",
+                "name": "sample.pdf",
+                "source": {"bytes": b"pdf_data"},
+            }
+        }
+    )
+    assert doc_part is not None
+    assert doc_part.type == "blob"
+    assert getattr(doc_part, "modality") == "document"
+    assert getattr(doc_part, "mime_type") == "application/pdf"
+    assert getattr(doc_part, "content") == b"pdf_data"
+
+    video_part = extract_content_block(
+        {
+            "video": {
+                "format": "mp4",
+                "source": {"bytes": b"mp4_data"},
+            }
+        }
+    )
+    assert video_part is not None
+    assert video_part.type == "blob"
+    assert getattr(video_part, "modality") == "video"
+    assert getattr(video_part, "mime_type") == "video/mp4"
+
+    audio_part = extract_content_block(
+        {
+            "audio": {
+                "format": "mp3",
+                "source": {"bytes": b"mp3_data"},
+            }
+        }
+    )
+    assert audio_part is not None
+    assert audio_part.type == "blob"
+    assert getattr(audio_part, "modality") == "audio"
+    assert getattr(audio_part, "mime_type") == "audio/mp3"
+
+    guard_part = extract_content_block(
+        {"guardContent": {"text": {"text": "Blocked by guardrail"}}}
+    )
+    assert guard_part is not None
+    assert guard_part.type == "text"
+    assert getattr(guard_part, "content") == "Blocked by guardrail"
+
+
+def test_extract_converse_response_reasoning(tracer_provider) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(provider="aws.bedrock")
+    extract_converse_response(
+        {
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "reasoningContent": {
+                                "reasoningText": {"text": "Let me think"}
+                            }
+                        },
+                        {"text": "The answer is 42."},
+                    ],
+                }
+            },
+            "stopReason": "end_turn",
+        },
+        invocation,
+        capture_content=True,
+    )
+    assert len(invocation.output_messages) == 1
+    out_msg = invocation.output_messages[0]
+    assert len(out_msg.parts) == 2
+    assert out_msg.parts[0].type == "reasoning"
+    assert getattr(out_msg.parts[0], "content") == "Let me think"
+    assert out_msg.parts[1].type == "text"
+    assert getattr(out_msg.parts[1], "content") == "The answer is 42."

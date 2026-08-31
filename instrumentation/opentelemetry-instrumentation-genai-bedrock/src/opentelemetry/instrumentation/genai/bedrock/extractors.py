@@ -14,6 +14,7 @@ from opentelemetry.util.genai.types import (
     InputMessage,
     MessagePart,
     OutputMessage,
+    Reasoning,
     Text,
     ToolCallRequest,
     ToolCallResponse,
@@ -36,6 +37,18 @@ _FINISH_REASON_MAP: dict[str, str] = {
     "max_tokens": "length",
     "content_filtered": "content_filter",
     "guardrail_intervened": "content_filter",
+}
+
+_DOC_MIME_TYPES: dict[str, str] = {
+    "pdf": "application/pdf",
+    "csv": "text/csv",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "html": "text/html",
+    "txt": "text/plain",
+    "md": "text/markdown",
 }
 
 
@@ -65,6 +78,17 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
     if "text" in block:
         return Text(content=block["text"])
 
+    reasoning = block.get("reasoningContent")
+    if _is_dict(reasoning):
+        reasoning_text = reasoning.get("reasoningText")
+        if _is_dict(reasoning_text) and "text" in reasoning_text:
+            return Reasoning(content=reasoning_text["text"])
+        if "text" in reasoning and isinstance(reasoning["text"], str):
+            return Reasoning(content=reasoning["text"])
+        redacted = reasoning.get("redactedContent")
+        if isinstance(redacted, (bytes, str)):
+            return Reasoning(content="")
+
     image = block.get("image")
     if _is_dict(image):
         fmt = image.get("format", "jpeg")
@@ -74,6 +98,40 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             content=content_bytes,
             mime_type=f"image/{fmt}",
             modality="image",
+        )
+
+    document = block.get("document")
+    if _is_dict(document):
+        fmt = document.get("format", "pdf")
+        source = document.get("source")
+        content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
+        mime_type = _DOC_MIME_TYPES.get(fmt, f"application/{fmt}")
+        return Blob(
+            content=content_bytes,
+            mime_type=mime_type,
+            modality="document",
+        )
+
+    video = block.get("video")
+    if _is_dict(video):
+        fmt = video.get("format", "mp4")
+        source = video.get("source")
+        content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
+        return Blob(
+            content=content_bytes,
+            mime_type=f"video/{fmt}",
+            modality="video",
+        )
+
+    audio = block.get("audio")
+    if _is_dict(audio):
+        fmt = audio.get("format", "mp3")
+        source = audio.get("source")
+        content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
+        return Blob(
+            content=content_bytes,
+            mime_type=f"audio/{fmt}",
+            modality="audio",
         )
 
     tool_use = block.get("toolUse")
@@ -90,6 +148,12 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             id=tool_result.get("toolUseId"),
             response=tool_result.get("content"),
         )
+
+    guard_content = block.get("guardContent")
+    if _is_dict(guard_content):
+        text_block = guard_content.get("text")
+        if _is_dict(text_block) and "text" in text_block:
+            return Text(content=text_block["text"])
 
     return None
 

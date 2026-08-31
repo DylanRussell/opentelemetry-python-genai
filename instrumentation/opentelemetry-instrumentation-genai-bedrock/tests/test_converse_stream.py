@@ -411,3 +411,55 @@ def test_stream_wrapper_no_content(tracer_provider) -> None:
     assert invocation.output_tokens == 5
     assert invocation.cache_read_input_tokens == 4
     assert invocation.cache_creation_input_tokens == 8
+
+
+def test_stream_wrapper_with_reasoning(tracer_provider) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(provider="aws.bedrock")
+    wrapper = BedrockConverseStreamWrapper(
+        stream=mock.MagicMock(),
+        invocation=invocation,
+        capture_content=True,
+    )
+    wrapper._process_chunk(
+        {
+            "contentBlockStart": {
+                "contentBlockIndex": 0,
+                "start": {},
+            },
+            "contentBlockDelta": {
+                "contentBlockIndex": 0,
+                "delta": {"reasoningContent": {"text": "Step 1: thinking..."}},
+            },
+        }
+    )
+    wrapper._process_chunk(
+        {
+            "contentBlockDelta": {
+                "contentBlockIndex": 0,
+                "delta": {"reasoningContent": {"text": " Step 2: concluded."}},
+            }
+        }
+    )
+    wrapper._process_chunk(
+        {
+            "contentBlockStart": {"contentBlockIndex": 1, "start": {}},
+            "contentBlockDelta": {
+                "contentBlockIndex": 1,
+                "delta": {"text": "Here is the result."},
+            },
+            "messageStop": {"stopReason": "end_turn"},
+        }
+    )
+    wrapper._on_stream_end()
+    assert len(invocation.output_messages) == 1
+    out_msg = invocation.output_messages[0]
+    assert len(out_msg.parts) == 2
+    assert out_msg.parts[0].type == "reasoning"
+    assert (
+        getattr(out_msg.parts[0], "content")
+        == "Step 1: thinking... Step 2: concluded."
+    )
+    assert out_msg.parts[1].type == "text"
+    assert getattr(out_msg.parts[1], "content") == "Here is the result."
+    assert invocation.finish_reasons == ["stop"]
