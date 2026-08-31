@@ -27,13 +27,11 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         self,
         stream: EventStream,
         invocation: InferenceInvocation,
-        model_id: str | None = None,
         *,
         capture_content: bool = True,
     ) -> None:
         super().__init__(stream, invocation=invocation)
         self._self_invocation = invocation
-        self._self_model_id = model_id
         self._self_capture_content = capture_content
         self._self_role = "assistant"
         self._self_stop_reason: str | None = None
@@ -143,7 +141,6 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
                         finish_reason=finish_reason or "stop",
                     )
                 ]
-        self._self_invocation.response_model_name = self._self_model_id
         self._self_invocation.input_tokens = self._self_input_tokens
         self._self_invocation.output_tokens = self._self_output_tokens
         self._self_invocation.cache_read_input_tokens = (

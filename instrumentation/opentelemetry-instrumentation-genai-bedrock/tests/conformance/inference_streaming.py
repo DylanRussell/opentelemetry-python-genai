@@ -34,6 +34,10 @@ class InferenceStreamingScenario(Scenario):
             advice_id="genai_expected_attribute_missing",
             message_substring="gen_ai.response.id",
         ),
+        ExpectedViolation(
+            advice_id="genai_expected_attribute_missing",
+            message_substring="gen_ai.response.model",
+        ),
     )
 
     def validate(self, report: LiveCheckReport) -> None:

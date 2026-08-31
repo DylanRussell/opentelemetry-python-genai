@@ -62,10 +62,8 @@ def test_converse_with_content(
         span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
         == "amazon.titan-text-lite-v1"
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_MODEL]
-        == "amazon.titan-text-lite-v1"
-    )
+    assert GenAIAttributes.GEN_AI_RESPONSE_MODEL not in span.attributes
+    assert GenAIAttributes.GEN_AI_RESPONSE_ID not in span.attributes
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS] == 10
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TEMPERATURE] == 0.8
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_P] == 1.0

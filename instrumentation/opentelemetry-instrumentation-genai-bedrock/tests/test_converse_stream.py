@@ -64,10 +64,8 @@ def test_converse_stream_with_content(
         span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
         == "amazon.titan-text-lite-v1"
     )
-    assert (
-        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_MODEL]
-        == "amazon.titan-text-lite-v1"
-    )
+    assert GenAIAttributes.GEN_AI_RESPONSE_MODEL not in span.attributes
+    assert GenAIAttributes.GEN_AI_RESPONSE_ID not in span.attributes
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS] == 10
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TEMPERATURE] == 0.8
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_TOP_P] == 1.0
@@ -385,7 +383,6 @@ def test_stream_wrapper_no_content(tracer_provider) -> None:
     wrapper = BedrockConverseStreamWrapper(
         stream=mock.MagicMock(),
         invocation=invocation,
-        model_id="test-model",
         capture_content=False,
     )
     wrapper._process_chunk(
@@ -409,7 +406,7 @@ def test_stream_wrapper_no_content(tracer_provider) -> None:
     wrapper._on_stream_end()
     assert not invocation.output_messages
     assert invocation.finish_reasons == ["stop"]
-    assert invocation.response_model_name == "test-model"
+    assert invocation.response_model_name is None
     assert invocation.input_tokens == 10
     assert invocation.output_tokens == 5
     assert invocation.cache_read_input_tokens == 4

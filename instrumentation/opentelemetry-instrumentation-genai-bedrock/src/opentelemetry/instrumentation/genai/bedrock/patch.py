@@ -68,7 +68,6 @@ def _handle_converse(
             response["stream"] = BedrockConverseStreamWrapper(
                 response["stream"],
                 invocation=invocation,
-                model_id=model_id,
                 capture_content=capture_content,
             )
             return response
@@ -76,7 +75,6 @@ def _handle_converse(
         extract_converse_response(
             response,
             invocation,
-            model_id=model_id,
             capture_content=capture_content,
         )
 

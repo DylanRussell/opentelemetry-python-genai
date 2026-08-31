@@ -194,12 +194,9 @@ def extract_converse_request(
 def extract_converse_response(
     response: dict[str, Any],
     invocation: InferenceInvocation,
-    model_id: str | None = None,
     *,
     capture_content: bool = True,
 ) -> None:
-    invocation.response_model_name = model_id
-
     stop_reason = response.get("stopReason")
     finish_reason = map_finish_reason(stop_reason)
     if finish_reason:
