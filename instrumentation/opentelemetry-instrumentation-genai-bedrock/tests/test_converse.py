@@ -396,21 +396,13 @@ def test_extract_content_block_reasoning() -> None:
     assert part.type == "reasoning"
     assert getattr(part, "content") == "Thinking step by step..."
 
-    # Direct text in reasoningContent
+    # Redacted reasoningContent
     part2 = extract_content_block(
-        {"reasoningContent": {"text": "Direct reasoning"}}
+        {"reasoningContent": {"redactedContent": b"redacted_bytes"}}
     )
     assert part2 is not None
     assert part2.type == "reasoning"
-    assert getattr(part2, "content") == "Direct reasoning"
-
-    # Redacted reasoningContent
-    part3 = extract_content_block(
-        {"reasoningContent": {"redactedContent": b"redacted_bytes"}}
-    )
-    assert part3 is not None
-    assert part3.type == "reasoning"
-    assert getattr(part3, "content") == ""
+    assert getattr(part2, "content") == ""
 
 
 def test_extract_content_block_document() -> None:

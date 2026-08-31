@@ -83,10 +83,7 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
         reasoning_text = reasoning.get("reasoningText")
         if _is_dict(reasoning_text) and "text" in reasoning_text:
             return Reasoning(content=reasoning_text["text"])
-        if "text" in reasoning and isinstance(reasoning["text"], str):
-            return Reasoning(content=reasoning["text"])
-        redacted = reasoning.get("redactedContent")
-        if isinstance(redacted, (bytes, str)):
+        if "redactedContent" in reasoning:
             return Reasoning(content="")
 
     image = block.get("image")
