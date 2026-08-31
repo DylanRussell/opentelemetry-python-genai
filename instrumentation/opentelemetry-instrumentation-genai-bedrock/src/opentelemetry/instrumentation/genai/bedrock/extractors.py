@@ -112,28 +112,6 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             modality="document",
         )
 
-    video = block.get("video")
-    if _is_dict(video):
-        fmt = video.get("format", "mp4")
-        source = video.get("source")
-        content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
-        return Blob(
-            content=content_bytes,
-            mime_type=f"video/{fmt}",
-            modality="video",
-        )
-
-    audio = block.get("audio")
-    if _is_dict(audio):
-        fmt = audio.get("format", "mp3")
-        source = audio.get("source")
-        content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
-        return Blob(
-            content=content_bytes,
-            mime_type=f"audio/{fmt}",
-            modality="audio",
-        )
-
     tool_use = block.get("toolUse")
     if _is_dict(tool_use):
         return ToolCallRequest(

@@ -413,7 +413,7 @@ def test_extract_content_block_reasoning() -> None:
     assert getattr(part3, "content") == ""
 
 
-def test_extract_content_block_multimedia_and_document() -> None:
+def test_extract_content_block_document_and_guard() -> None:
     doc_part = extract_content_block(
         {
             "document": {
@@ -428,32 +428,6 @@ def test_extract_content_block_multimedia_and_document() -> None:
     assert getattr(doc_part, "modality") == "document"
     assert getattr(doc_part, "mime_type") == "application/pdf"
     assert getattr(doc_part, "content") == b"pdf_data"
-
-    video_part = extract_content_block(
-        {
-            "video": {
-                "format": "mp4",
-                "source": {"bytes": b"mp4_data"},
-            }
-        }
-    )
-    assert video_part is not None
-    assert video_part.type == "blob"
-    assert getattr(video_part, "modality") == "video"
-    assert getattr(video_part, "mime_type") == "video/mp4"
-
-    audio_part = extract_content_block(
-        {
-            "audio": {
-                "format": "mp3",
-                "source": {"bytes": b"mp3_data"},
-            }
-        }
-    )
-    assert audio_part is not None
-    assert audio_part.type == "blob"
-    assert getattr(audio_part, "modality") == "audio"
-    assert getattr(audio_part, "mime_type") == "audio/mp3"
 
     guard_part = extract_content_block(
         {"guardContent": {"text": {"text": "Blocked by guardrail"}}}
