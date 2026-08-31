@@ -127,12 +127,6 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             response=tool_result.get("content"),
         )
 
-    guard_content = block.get("guardContent")
-    if _is_dict(guard_content):
-        text_block = guard_content.get("text")
-        if _is_dict(text_block) and "text" in text_block:
-            return Text(content=text_block["text"])
-
     return None
 
 

@@ -413,7 +413,7 @@ def test_extract_content_block_reasoning() -> None:
     assert getattr(part3, "content") == ""
 
 
-def test_extract_content_block_document_and_guard() -> None:
+def test_extract_content_block_document() -> None:
     doc_part = extract_content_block(
         {
             "document": {
@@ -428,13 +428,6 @@ def test_extract_content_block_document_and_guard() -> None:
     assert getattr(doc_part, "modality") == "document"
     assert getattr(doc_part, "mime_type") == "application/pdf"
     assert getattr(doc_part, "content") == b"pdf_data"
-
-    guard_part = extract_content_block(
-        {"guardContent": {"text": {"text": "Blocked by guardrail"}}}
-    )
-    assert guard_part is not None
-    assert guard_part.type == "text"
-    assert getattr(guard_part, "content") == "Blocked by guardrail"
 
 
 def test_extract_converse_response_reasoning(tracer_provider) -> None:
