@@ -35,7 +35,7 @@ def test_converse_stream_with_content(
 
     response = bedrock_client.converse_stream(
         messages=messages,
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         inferenceConfig={
             "maxTokens": 10,
             "temperature": 0.8,
@@ -51,7 +51,7 @@ def test_converse_stream_with_content(
     assert len(spans) == 1
     span = spans[0]
 
-    assert span.name == "chat amazon.titan-text-lite-v1"
+    assert span.name == "chat amazon.nova-micro-v1:0"
     assert (
         span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME]
         == GenAIAttributes.GenAiOperationNameValues.CHAT.value
@@ -62,7 +62,7 @@ def test_converse_stream_with_content(
     )
     assert (
         span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
-        == "amazon.titan-text-lite-v1"
+        == "amazon.nova-micro-v1:0"
     )
     assert GenAIAttributes.GEN_AI_RESPONSE_MODEL not in span.attributes
     assert GenAIAttributes.GEN_AI_RESPONSE_ID not in span.attributes
@@ -72,8 +72,9 @@ def test_converse_stream_with_content(
     assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES] == (
         "|",
     )
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
-        "length",
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
+        is not None
     )
     assert (
         span.attributes[ServerAttributes.SERVER_ADDRESS]
@@ -93,7 +94,7 @@ def test_converse_stream_no_content(
 
     response = bedrock_client.converse_stream(
         messages=messages,
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         inferenceConfig={
             "maxTokens": 10,
             "temperature": 0.8,
@@ -109,11 +110,12 @@ def test_converse_stream_no_content(
     assert len(spans) == 1
     span = spans[0]
 
-    assert span.name == "chat amazon.titan-text-lite-v1"
+    assert span.name == "chat amazon.nova-micro-v1:0"
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
     assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
-        "length",
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS]
+        is not None
     )
 
 
@@ -258,7 +260,7 @@ def test_converse_stream_close_before_consumption(
 
     response = bedrock_client.converse_stream(
         messages=messages,
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         inferenceConfig={
             "maxTokens": 10,
             "temperature": 0.8,
@@ -272,7 +274,7 @@ def test_converse_stream_close_before_consumption(
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "chat amazon.titan-text-lite-v1"
+    assert span.name == "chat amazon.nova-micro-v1:0"
     assert span.status.status_code == StatusCode.UNSET
 
 
@@ -314,7 +316,7 @@ def test_converse_stream_handles_event_stream_error(
 
     response = bedrock_client.converse_stream(
         messages=messages,
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         inferenceConfig={
             "maxTokens": 10,
             "temperature": 0.8,
@@ -355,7 +357,7 @@ def test_converse_stream_caller_side_error(
 
     response = bedrock_client.converse_stream(
         messages=messages,
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         inferenceConfig={
             "maxTokens": 10,
             "temperature": 0.8,

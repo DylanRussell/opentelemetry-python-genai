@@ -17,18 +17,22 @@ interactions:
       Content-Length:
       - '77'
       Content-Type:
-      - application/json
+      - !!binary |
+        YXBwbGljYXRpb24vanNvbg==
       User-Agent:
-      - Boto3/1.35.56 md/Botocore#1.35.56 ua/2.0 os/macos#24.0.0 md/arch#arm64 lang/python#3.13.1
-        md/pyimpl#CPython cfg/retry-mode#legacy Botocore/1.35.56
+      - !!binary |
+        Qm90bzMvMS40My44MCBtZC9Cb3RvY29yZSMxLjQzLjgwIHVhLzIuMSBvcy9saW51eCM3LjEuNi0x
+        cm9kZXRlMS1hbWQ2NCBtZC9hcmNoI3g4Nl82NCBsYW5nL3B5dGhvbiMzLjEyLjkgbWQvcHlpbXBs
+        I0NQeXRob24gbS9iLFosZyxEIGNmZy9yZXRyeS1tb2RlI2xlZ2FjeSBCb3RvY29yZS8xLjQzLjgw
       X-Amz-Date:
-      - 20250206T051232Z
-      X-Amzn-Trace-Id:
-      - Root=1-d44c213c-792360fb9074bfd2f5334bad;Parent=973420d2413e6885;Sampled=1
+      - !!binary |
+        MjAyNjA4MzFUMTgyMzA5Wg==
       amz-sdk-invocation-id:
-      - 0e8c8731-2812-4dbf-add2-b75b6ad599df
+      - !!binary |
+        OWYyYzdiMGYtNWU3Yy00MzEwLWIwYTktYmY3ZDA5YzE0ZTU2
       amz-sdk-request:
-      - attempt=1
+      - !!binary |
+        YXR0ZW1wdD0x
       authorization:
       - Bearer test_aws_authorization
     method: POST
@@ -42,15 +46,14 @@ interactions:
     headers:
       Connection:
       - keep-alive
+      Content-Length:
+      - '55'
       Content-Type:
       - application/json
       Date:
-      - Thu, 06 Feb 2025 05:12:33 GMT
-      Set-Cookie: test_set_cookie
+      - Mon, 31 Aug 2026 18:23:09 GMT
       x-amzn-ErrorType:
       - ValidationException:http://internal.amazon.com/coral/com.amazon.bedrock/
-      x-amzn-RequestId:
-      - 7fdbc480-6d28-4d1c-abbc-bd7f17c7dfec
     status:
       code: 400
       message: Bad Request

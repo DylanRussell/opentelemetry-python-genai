@@ -41,7 +41,15 @@ def environment() -> None:
 def bedrock_client():
     """Create and return a Bedrock runtime client."""
     session = boto3.session.Session()
-    return session.client("bedrock-runtime", region_name="us-east-1")
+    kwargs = {
+        "region_name": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+    }
+    endpoint_url = os.getenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME") or os.getenv(
+        "AWS_ENDPOINT_URL"
+    )
+    if endpoint_url:
+        kwargs["endpoint_url"] = endpoint_url
+    return session.client("bedrock-runtime", **kwargs)
 
 
 @pytest.fixture(scope="module")
@@ -51,10 +59,16 @@ def vcr_config():
         "filter_headers": [
             ("authorization", "Bearer test_aws_authorization"),
             ("x-amz-security-token", "test_aws_token"),
+            ("x-api-key", "test_anthropic_api_key"),
         ],
         "decode_compressed_response": True,
         "before_record_response": scrub_response_headers(
-            ["set-cookie", "x-amzn-requestid"]
+            [
+                "set-cookie",
+                "x-amzn-requestid",
+                "anthropic-organization-id",
+                "anthropic-workspace-id",
+            ]
         ),
     }
 

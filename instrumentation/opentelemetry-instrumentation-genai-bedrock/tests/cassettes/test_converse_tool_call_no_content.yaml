@@ -41,20 +41,22 @@ interactions:
       Content-Length:
       - '409'
       Content-Type:
-      - application/json
+      - !!binary |
+        YXBwbGljYXRpb24vanNvbg==
       User-Agent:
-      - Boto3/1.35.56 md/Botocore#1.35.56 ua/2.0 os/linux#6.1.0-1034-oem md/arch#x86_64
-        lang/python#3.10.12 md/pyimpl#CPython cfg/retry-mode#legacy Botocore/1.35.56
+      - !!binary |
+        Qm90bzMvMS40My44MCBtZC9Cb3RvY29yZSMxLjQzLjgwIHVhLzIuMSBvcy9saW51eCM3LjEuNi0x
+        cm9kZXRlMS1hbWQ2NCBtZC9hcmNoI3g4Nl82NCBsYW5nL3B5dGhvbiMzLjEyLjkgbWQvcHlpbXBs
+        I0NQeXRob24gbS9iLFosZyxEIGNmZy9yZXRyeS1tb2RlI2xlZ2FjeSBCb3RvY29yZS8xLjQzLjgw
       X-Amz-Date:
-      - 20250225T135923Z
-      X-Amz-Security-Token:
-      - test_aws_security_token
-      X-Amzn-Trace-Id:
-      - Root=1-80a19e08-5565b002b1f618668e779b90;Parent=a970189e766f47c0;Sampled=1
+      - !!binary |
+        MjAyNjA4MzFUMTgyMzA4Wg==
       amz-sdk-invocation-id:
-      - 532f5b6d-0307-4859-b0b2-d1fc492f43e0
+      - !!binary |
+        NGY3MDY2N2YtYWViYS00NGQ5LWExM2MtMWZkOThhZTdhMDVi
       amz-sdk-request:
-      - attempt=1
+      - !!binary |
+        YXR0ZW1wdD0x
       authorization:
       - Bearer test_aws_authorization
     method: POST
@@ -64,13 +66,13 @@ interactions:
       string: |-
         {
           "metrics": {
-            "latencyMs": 563
+            "latencyMs": 500
           },
           "output": {
             "message": {
               "content": [
                 {
-                  "text": "<thinking>The User wants to know the current weather in two different cities: Seattle and San Francisco. To provide this information, I will use the available tool to get the current weather in each of these locations.</thinking>\n"
+                  "text": "<thinking> The User has asked for the current weather in two locations: Seattle and San Francisco. To provide this information, I will use the \"get_current_weather\" tool for each location. I will start by calling the tool for Seattle and then for San Francisco.</thinking>\n"
                 },
                 {
                   "toolUse": {
@@ -78,7 +80,7 @@ interactions:
                       "location": "Seattle"
                     },
                     "name": "get_current_weather",
-                    "toolUseId": "tooluse_AOOBCtPEQ7SHozPsXCqgNg"
+                    "toolUseId": "tooluse_3KMEc44E5xeIcjbbCzRM1I"
                   }
                 },
                 {
@@ -87,7 +89,7 @@ interactions:
                       "location": "San Francisco"
                     },
                     "name": "get_current_weather",
-                    "toolUseId": "tooluse_biMWVYVLSR-qN88TpGnkUA"
+                    "toolUseId": "tooluse_4X5BlBaeBdcWHWpTAxPkBs"
                   }
                 }
               ],
@@ -96,173 +98,21 @@ interactions:
           },
           "stopReason": "tool_use",
           "usage": {
-            "inputTokens": 415,
-            "outputTokens": 180,
-            "totalTokens": 595
+            "inputTokens": 416,
+            "outputTokens": 87,
+            "serverToolUsage": {},
+            "totalTokens": 503
           }
         }
     headers:
       Connection:
       - keep-alive
-      Content-Type:
-      - application/json
-      Date:
-      - Tue, 25 Feb 2025 13:59:24 GMT
-      Set-Cookie: test_set_cookie
-      x-amzn-RequestId:
-      - c2e62244-dcdd-4453-9125-7f9c5c31e51d
-    status:
-      code: 200
-      message: OK
-- request:
-    body: |-
-      {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "text": "What is the weather in Seattle and San Francisco today?"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "text": "<thinking>The User wants to know the current weather in two different cities: Seattle and San Francisco. To provide this information, I will use the available tool to get the current weather in each of these locations.</thinking>\n"
-              },
-              {
-                "toolUse": {
-                  "toolUseId": "tooluse_AOOBCtPEQ7SHozPsXCqgNg",
-                  "name": "get_current_weather",
-                  "input": {
-                    "location": "Seattle"
-                  }
-                }
-              },
-              {
-                "toolUse": {
-                  "toolUseId": "tooluse_biMWVYVLSR-qN88TpGnkUA",
-                  "name": "get_current_weather",
-                  "input": {
-                    "location": "San Francisco"
-                  }
-                }
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "toolResult": {
-                  "content": [
-                    {
-                      "json": {
-                        "weather": "50 degrees and raining"
-                      }
-                    }
-                  ],
-                  "toolUseId": "tooluse_AOOBCtPEQ7SHozPsXCqgNg"
-                }
-              },
-              {
-                "toolResult": {
-                  "content": [
-                    {
-                      "json": {
-                        "weather": "70 degrees and sunny"
-                      }
-                    }
-                  ],
-                  "toolUseId": "tooluse_biMWVYVLSR-qN88TpGnkUA"
-                }
-              }
-            ]
-          }
-        ],
-        "toolConfig": {
-          "tools": [
-            {
-              "toolSpec": {
-                "name": "get_current_weather",
-                "description": "Get the current weather in a given location.",
-                "inputSchema": {
-                  "json": {
-                    "type": "object",
-                    "properties": {
-                      "location": {
-                        "type": "string",
-                        "description": "The name of the city"
-                      }
-                    },
-                    "required": [
-                      "location"
-                    ]
-                  }
-                }
-              }
-            }
-          ]
-        }
-      }
-    headers:
       Content-Length:
-      - '1233'
-      Content-Type:
-      - application/json
-      User-Agent:
-      - Boto3/1.35.56 md/Botocore#1.35.56 ua/2.0 os/linux#6.1.0-1034-oem md/arch#x86_64
-        lang/python#3.10.12 md/pyimpl#CPython cfg/retry-mode#legacy Botocore/1.35.56
-      X-Amz-Date:
-      - 20250225T135924Z
-      X-Amz-Security-Token:
-      - test_aws_security_token
-      X-Amzn-Trace-Id:
-      - Root=1-9908c30c-7111bc104cfa9ca0e12cdcd7;Parent=04fe5ed3554021ef;Sampled=1
-      amz-sdk-invocation-id:
-      - bf45067c-2700-4770-bcd3-ae0dcfc72dfa
-      amz-sdk-request:
-      - attempt=1
-      authorization:
-      - Bearer test_aws_authorization
-    method: POST
-    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.nova-micro-v1%3A0/converse
-  response:
-    body:
-      string: |-
-        {
-          "metrics": {
-            "latencyMs": 642
-          },
-          "output": {
-            "message": {
-              "content": [
-                {
-                  "text": "<thinking>I have obtained the current weather information for both Seattle and San Francisco using the provided tool. Now, I will present this information to the User.</thinking>\n\nThe current weather is as follows:\n- In Seattle: It is 50 degrees and raining.\n- In San Francisco: It is 70 degrees and sunny.\n\nIf you need any more information, feel free to ask!"
-                }
-              ],
-              "role": "assistant"
-            }
-          },
-          "stopReason": "end_turn",
-          "usage": {
-            "inputTokens": 553,
-            "outputTokens": 80,
-            "totalTokens": 633
-          }
-        }
-    headers:
-      Connection:
-      - keep-alive
+      - '724'
       Content-Type:
       - application/json
       Date:
-      - Tue, 25 Feb 2025 13:59:25 GMT
-      Set-Cookie: test_set_cookie
-      x-amzn-RequestId:
-      - 03795cb8-e59d-4e27-8031-b988d40ebe0b
+      - Mon, 31 Aug 2026 18:23:09 GMT
     status:
       code: 200
       message: OK

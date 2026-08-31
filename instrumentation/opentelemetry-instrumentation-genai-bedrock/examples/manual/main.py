@@ -37,7 +37,7 @@ BedrockInstrumentor().instrument()
 def main():
     client = boto3.client("bedrock-runtime", region_name="us-east-1")
     response = client.converse(
-        modelId="amazon.titan-text-lite-v1",
+        modelId="amazon.nova-micro-v1:0",
         messages=[
             {
                 "role": "user",

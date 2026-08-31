@@ -42,7 +42,7 @@ def test_custom_hook_is_called(
                         "content": [{"text": "Say this is a test"}],
                     }
                 ],
-                modelId="amazon.titan-text-lite-v1",
+                modelId="amazon.nova-micro-v1:0",
             )
     finally:
         instrumentor.uninstrument()
@@ -96,7 +96,7 @@ def test_default_hook_loaded_from_env(
                         "content": [{"text": "Say this is a test"}],
                     }
                 ],
-                modelId="amazon.titan-text-lite-v1",
+                modelId="amazon.nova-micro-v1:0",
             )
     finally:
         instrumentor.uninstrument()
