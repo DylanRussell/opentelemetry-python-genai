@@ -32,7 +32,7 @@ from opentelemetry.util.genai.invocation import (
 from opentelemetry.util.genai.types import (
     InputMessage,
     OutputMessage,
-    Text,
+    TextPart,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,7 +200,9 @@ def _set_invocation_input(
         if input_val is not None:
             content_str = _extract_input_content(input_val)
             invocation.input_messages = [
-                InputMessage(role="user", parts=[Text(content=content_str)])
+                InputMessage(
+                    role="user", parts=[TextPart(content=content_str)]
+                )
             ]
 
 
@@ -220,7 +222,7 @@ def _set_invocation_output(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=output_str)],
+                parts=[TextPart(content=output_str)],
                 finish_reason=_extract_finish_reason(result),
             )
         ]
