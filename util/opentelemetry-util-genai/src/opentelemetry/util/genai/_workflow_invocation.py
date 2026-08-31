@@ -55,6 +55,7 @@ class WorkflowInvocation(GenAIInvocation):
         self._name: str | None = name
         self.input_messages: list[InputMessage] = []
         self.output_messages: list[OutputMessage] = []
+        self.conversation_id: str | None = None
         self._start(self._get_start_attributes())
 
     def _get_start_attributes(self) -> dict[str, AttributeValue]:
@@ -98,6 +99,8 @@ class WorkflowInvocation(GenAIInvocation):
 
     def _apply_finish(self, error: Error | None = None) -> None:
         attributes: dict[str, AttributeValue] = self._get_messages_for_span()
+        if self.conversation_id is not None:
+            attributes[GenAI.GEN_AI_CONVERSATION_ID] = self.conversation_id
         if error is not None:
             self._apply_error_attributes(error)
         attributes.update(self.attributes)

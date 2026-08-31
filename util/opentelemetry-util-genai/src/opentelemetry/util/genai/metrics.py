@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import timeit
+from typing import TYPE_CHECKING
 
 from opentelemetry.context import Context
 from opentelemetry.metrics import Histogram, Meter
@@ -22,6 +23,9 @@ from opentelemetry.util.genai.instruments import (
 from opentelemetry.util.types import Attributes
 
 from ._invocation import GenAIInvocation
+
+if TYPE_CHECKING:
+    from ._workflow_invocation import WorkflowInvocation
 
 
 class InvocationMetricsRecorder:
@@ -62,7 +66,7 @@ class InvocationMetricsRecorder:
                 context=invocation._span_context,
             )
 
-    def record_workflow(self, invocation: GenAIInvocation) -> None:
+    def record_workflow(self, invocation: WorkflowInvocation) -> None:
         """Record duration metric for a workflow invocation."""
         attributes = invocation._get_metric_attributes()
         duration_seconds = max(

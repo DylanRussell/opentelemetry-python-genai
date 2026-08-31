@@ -116,11 +116,11 @@ with the migration flow below.
 - **OTel GenAI spans**: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai> — authoritative attribute names, spans, logs, and metrics definitions.
 - **OpenInference → OTel attribute mapping** (Arize-maintained): <https://github.com/Arize-ai/openinference/blob/e9a8746daeb184c9aabc68ca29c05909ddcccf1e/spec/genai/README.md>. Use as a quick lookup for what an OpenInference attribute *roughly* corresponds to in OTel; when the mapping disagrees with the official semconv, **the official semconv wins**.
 - **Message JSON schemas**:
-  - input messages: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/gen-ai-input-messages.json>
-  - output messages: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/gen-ai-output-messages.json>
-  - system instructions: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/gen-ai-system-instructions.json>
-  - tool definitions: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/gen-ai-tool-definitions.json>
-  - retrieval documents: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/gen-ai-retrieval-documents.json>
+  - input messages: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/model/gen-ai/gen-ai-input-messages.json>
+  - output messages: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/model/gen-ai/gen-ai-output-messages.json>
+  - system instructions: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/model/gen-ai/gen-ai-system-instructions.json>
+  - tool definitions: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/model/gen-ai/gen-ai-tool-definitions.json>
+  - retrieval documents: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/model/gen-ai/gen-ai-retrieval-documents.json>
 
 - **Code for above models**: <https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai/non-normative/models.py>.
 
@@ -248,14 +248,15 @@ OpenInference **only** what you actually reuse:
 mkdir -p instrumentation/<target>/src/opentelemetry/instrumentation/genai/<lib>
 mkdir -p instrumentation/<target>/tests/conformance instrumentation/<target>/tests/cassettes
 cp <source-path>/LICENSE instrumentation/<target>/LICENSE
+cp instrumentation/opentelemetry-instrumentation-genai-anthropic/CHANGELOG.md instrumentation/<target>/CHANGELOG.md
 ```
 
-Do **not** carry over `examples/`, OpenInference's `README.md`, or its
-`CHANGELOG.md` (per-package changelogs are towncrier-generated at release
-time).
+Do **not** carry over `examples/`, OpenInference's `README.md`, or OpenInference's
+`CHANGELOG.md` (copy the boilerplate `CHANGELOG.md` from an existing package instead —
+per-package changelogs are towncrier-generated at release time).
 
 (If you do `cp -R` instead, clean it up afterwards:
-`rm -rf .pytest_cache .tox .venv venv .vscode .DS_Store .claude .ruff_cache CHANGELOG.md`
+`rm -rf .pytest_cache .tox .venv venv .vscode .DS_Store .claude .ruff_cache CHANGELOG.md && cp instrumentation/opentelemetry-instrumentation-genai-anthropic/CHANGELOG.md instrumentation/<target>/CHANGELOG.md`
 and `find . -name __pycache__ -type d -exec rm -rf {} +`.)
 
 ### 2. Rename the Python module

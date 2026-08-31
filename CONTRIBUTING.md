@@ -24,11 +24,13 @@ project.
 │   └── opentelemetry-instrumentation-genai-<name>/  # one package per GenAI library
 │       ├── src/opentelemetry/instrumentation/genai/<name>/
 │       ├── tests/
+│       ├── CHANGELOG.md
 │       └── pyproject.toml
 └── util/
     └── opentelemetry-util-genai/              # shared GenAI utilities
         ├── src/opentelemetry/util/genai/
         ├── tests/
+        ├── CHANGELOG.md
         └── pyproject.toml
 ```
 
@@ -134,12 +136,12 @@ This repo ships skills (under `.github/skills/`) that automate the heavy,
 repeatable contribution flows. Trigger them deliberately when
 you start one of these tasks:
 
-- **`migrate-from-openinference`** — migrate an `openinference-instrumentation-*`
+- [**`migrate-from-openinference`**](.github/skills/migrate-from-openinference/SKILL.md) — migrate an `openinference-instrumentation-*`
   package into this repo as an OTel GenAI package, or augment an existing
   package with the coverage OpenInference adds on top.
-- **`review-migration`** — review a ported or augmented package against its
+- [**`review-migration`**](.github/skills/review-migration/SKILL.md) — review a ported or augmented package against its
   upstream implementation and write `MIGRATION_REPORT.md`.
-- **`write-conformance-tests`** — author conformance scenarios and the
+- [**`write-conformance-tests`**](.github/skills/write-conformance-tests/SKILL.md) — author conformance scenarios and the
   `test_conformance.py` runner for an instrumentation package.
 
 Please contribute back anything you learn while using the skills that could help improve them!
@@ -199,6 +201,31 @@ retiring ours.
 The absence of compatible native instrumentation is just one factor. Whether we
 add an instrumentation here also depends on things like the library's popularity
 and whether it's actively maintained.
+
+## Which operations an instrumentation should emit
+
+An instrumentation emits telemetry only for the operations the library itself
+performs. Two principles:
+
+- **Don't re-emit another library's telemetry.** If the library delegates an
+  operation to another instrumentable library (for example a framework that
+  calls `openai`, `anthropic`, or `google-genai` under the hood), instrumentation
+  for that operation belongs to the underlying library, and the two correlate
+  through standard context propagation.
+- **Emit an operation only when the library has that concept.** Emit inference or
+  embeddings only when the library is itself the model-call boundary, an
+  `invoke_agent` span only when it models agents, an `invoke_workflow` span only
+  when it models workflows or graphs, `execute_tool` only when it runs the tool
+  itself, and so on. Calling the provider's REST API directly (with no separate
+  instrumentable client library in between) makes the library the model-call
+  boundary, so it is a valid reason to emit inference.
+
+Agent-framework instrumentation SHOULD NOT emit inference spans by default; the
+underlying LLM library owns them. The exception is a framework that issues the
+model call in a way no other instrumentable library can observe — it calls the
+REST API directly, embeds a vendored model library, or similar. In that case the
+framework is the only place the inference call is visible, so it SHOULD emit the
+span.
 
 ## Keep PRs small
 

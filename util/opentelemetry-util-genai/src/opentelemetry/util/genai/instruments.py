@@ -49,13 +49,8 @@ def create_duration_histogram(meter: Meter) -> Histogram:
 
 
 def create_workflow_duration_histogram(meter: Meter) -> Histogram:
-    name = getattr(
-        gen_ai_metrics,
-        "GEN_AI_INVOKE_WORKFLOW_DURATION",
-        "gen_ai.invoke_workflow.duration",
-    )
     return meter.create_histogram(
-        name=name,
+        name="gen_ai.invoke_workflow.duration",
         description="Measures the duration of a workflow execution.",
         unit="s",
         explicit_bucket_boundaries_advisory=_GEN_AI_CLIENT_OPERATION_DURATION_BUCKETS,

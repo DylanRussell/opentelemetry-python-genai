@@ -26,7 +26,7 @@ from opentelemetry.util.genai.types import (
     Error,
     InputMessage,
     OutputMessage,
-    Text,
+    TextPart,
 )
 
 
@@ -139,6 +139,16 @@ class TelemetryHandlerWorkflowTest(_WorkflowTestBase):
         invocation.stop()
         spans = self._get_finished_spans()
         self.assertEqual(len(spans), 1)
+
+    def test_stop_workflow_sets_conversation_id(self) -> None:
+        invocation = self.handler.workflow(name="wf")
+        invocation.conversation_id = "wf-conv-99"
+        invocation.stop()
+
+        spans = self._get_finished_spans()
+        self.assertEqual(
+            spans[0].attributes[GenAI.GEN_AI_CONVERSATION_ID], "wf-conv-99"
+        )
 
     # ------------------------------------------------------------------
     # fail_workflow
@@ -274,9 +284,11 @@ class TelemetryHandlerWorkflowSamplingTest(_WorkflowTestBase):
         self.assertEqual(spans[0].status.status_code, StatusCode.UNSET)
 
     def test_workflow_context_manager_with_messages(self) -> None:
-        inp = InputMessage(role="user", parts=[Text(content="hello")])
+        inp = InputMessage(role="user", parts=[TextPart(content="hello")])
         out = OutputMessage(
-            role="assistant", parts=[Text(content="hi")], finish_reason="stop"
+            role="assistant",
+            parts=[TextPart(content="hi")],
+            finish_reason="stop",
         )
         with self.handler.workflow("msg_wf") as inv:
             inv.input_messages = [inp]

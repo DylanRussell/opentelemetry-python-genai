@@ -16,9 +16,14 @@ from typing import (
     runtime_checkable,
 )
 
-import httpx
+try:
+    import httpx as _http_lib
+except ImportError:
+    import httpx2 as _http_lib
 from openai import AsyncStream, Stream
 from wrapt import ObjectProxy
+
+from .utils import get_served_model
 
 if TYPE_CHECKING:
     from opentelemetry.util.genai.types import GenAIInvocation
@@ -49,7 +54,7 @@ class RawResponseLike(ParsableResponse, Protocol):
     finalize the span when the caller never calls ``parse()``.
     """
 
-    http_response: httpx.Response
+    http_response: _http_lib.Response
 
 
 class RawResponseStreamProxy(ObjectProxy):
@@ -182,6 +187,10 @@ def wrap_stream_result(
     stream is wrapped directly.
     """
     if isinstance(result, RawResponseLike):
+        served_model = get_served_model(getattr(result, "headers", None))
+        if served_model:
+            if hasattr(invocation, "response_model_name"):
+                setattr(invocation, "response_model_name", served_model)
         return RawResponseStreamProxy(
             result,
             lambda stream: wrapper_cls(stream, invocation, capture_content),
