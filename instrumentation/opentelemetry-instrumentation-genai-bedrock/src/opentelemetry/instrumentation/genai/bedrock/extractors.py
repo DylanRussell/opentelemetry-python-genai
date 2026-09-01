@@ -10,6 +10,7 @@ from opentelemetry.util.genai.invocation import InferenceInvocation
 from opentelemetry.util.genai.types import (
     BlobPart,
     FunctionToolDefinition,
+    GenericPart,
     GenericToolDefinition,
     InputMessage,
     MessagePart,
@@ -124,6 +125,19 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             response=tool_result.get("content"),
         )
 
+    for key in (
+        "video",
+        "audio",
+        "guardContent",
+        "cachePoint",
+        "citationsContent",
+        "searchResult",
+        "toolAddition",
+        "toolRemoval",
+    ):
+        if key in block:
+            return GenericPart(type=key, value=None)
+
     return None
 
 
@@ -165,9 +179,12 @@ def extract_converse_request(
     if capture_content and _is_list(raw_system):
         system_parts: list[MessagePart] = []
         for item in raw_system:
-            if _is_dict(item) and "text" in item:
-                system_parts.append(TextPart(content=item["text"]))
-        invocation.system_instruction = system_parts
+            if _is_dict(item):
+                part = extract_content_block(item)
+                if part is not None:
+                    system_parts.append(part)
+        if system_parts:
+            invocation.system_instruction = system_parts
 
     # input messages
     raw_messages = kwargs.get("messages")

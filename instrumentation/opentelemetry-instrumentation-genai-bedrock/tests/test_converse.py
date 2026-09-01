@@ -450,3 +450,19 @@ def test_extract_converse_response_reasoning(tracer_provider) -> None:
     assert getattr(out_msg.parts[0], "content") == "Let me think"
     assert out_msg.parts[1].type == "text"
     assert getattr(out_msg.parts[1], "content") == "The answer is 42."
+
+
+def test_extract_content_block_generic_parts() -> None:
+    for key in (
+        "video",
+        "audio",
+        "guardContent",
+        "cachePoint",
+        "citationsContent",
+        "searchResult",
+        "toolAddition",
+        "toolRemoval",
+    ):
+        part = extract_content_block({key: {"foo": "bar"}})
+        assert part is not None
+        assert part.type == key
