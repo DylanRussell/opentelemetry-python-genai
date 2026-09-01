@@ -53,6 +53,7 @@ class WorkflowInvocation(GenAIInvocation):
             span_kind=SpanKind.INTERNAL,
         )
         self._name: str | None = name
+        self.conversation_id: str | None = None
         self.input_messages: list[InputMessage] = []
         self.output_messages: list[OutputMessage] = []
         self.conversation_id: str | None = None
@@ -103,6 +104,8 @@ class WorkflowInvocation(GenAIInvocation):
             attributes[GenAI.GEN_AI_CONVERSATION_ID] = self.conversation_id
         if error is not None:
             self._apply_error_attributes(error)
+        if self.conversation_id is not None:
+            attributes[GenAI.GEN_AI_CONVERSATION_ID] = self.conversation_id
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
         self._call_completion_hook(
