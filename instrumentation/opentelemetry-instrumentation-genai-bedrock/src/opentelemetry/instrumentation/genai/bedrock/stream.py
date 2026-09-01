@@ -13,9 +13,9 @@ from opentelemetry.util.genai.stream import SyncStreamWrapper
 from opentelemetry.util.genai.types import (
     MessagePart,
     OutputMessage,
-    Reasoning,
-    Text,
-    ToolCallRequest,
+    ReasoningPart,
+    TextPart,
+    ToolCallRequestPart,
 )
 
 from .extractors import _is_dict, map_finish_reason
@@ -121,10 +121,10 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
             parts: list[MessagePart] = []
             for idx in sorted(self._self_all_block_indices):
                 if idx in self._self_text_blocks:
-                    parts.append(Text(content=self._self_text_blocks[idx]))
+                    parts.append(TextPart(content=self._self_text_blocks[idx]))
                 elif idx in self._self_reasoning_blocks:
                     parts.append(
-                        Reasoning(content=self._self_reasoning_blocks[idx])
+                        ReasoningPart(content=self._self_reasoning_blocks[idx])
                     )
                 elif idx in self._self_tool_blocks:
                     tool_info = self._self_tool_blocks[idx]
@@ -139,7 +139,7 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
                     else:
                         args = {}
                     parts.append(
-                        ToolCallRequest(
+                        ToolCallRequestPart(
                             id=tool_info["toolUseId"],
                             name=tool_info["name"],
                             arguments=args,

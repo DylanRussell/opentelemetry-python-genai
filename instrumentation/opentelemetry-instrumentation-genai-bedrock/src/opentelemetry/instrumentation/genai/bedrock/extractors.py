@@ -8,16 +8,16 @@ from urllib.parse import urlparse
 
 from opentelemetry.util.genai.invocation import InferenceInvocation
 from opentelemetry.util.genai.types import (
-    Blob,
+    BlobPart,
     FunctionToolDefinition,
     GenericToolDefinition,
     InputMessage,
     MessagePart,
     OutputMessage,
-    Reasoning,
-    Text,
-    ToolCallRequest,
-    ToolCallResponse,
+    ReasoningPart,
+    TextPart,
+    ToolCallRequestPart,
+    ToolCallResponsePart,
     ToolDefinition,
 )
 
@@ -76,22 +76,22 @@ def extract_server_address_and_port(
 def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
     """Map a single Bedrock content block to an OpenTelemetry MessagePart."""
     if "text" in block:
-        return Text(content=block["text"])
+        return TextPart(content=block["text"])
 
     reasoning = block.get("reasoningContent")
     if _is_dict(reasoning):
         reasoning_text = reasoning.get("reasoningText")
         if _is_dict(reasoning_text) and "text" in reasoning_text:
-            return Reasoning(content=reasoning_text["text"])
+            return ReasoningPart(content=reasoning_text["text"])
         if "redactedContent" in reasoning:
-            return Reasoning(content="")
+            return ReasoningPart(content="")
 
     image = block.get("image")
     if _is_dict(image):
         fmt = image.get("format", "jpeg")
         source = image.get("source")
         content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
-        return Blob(
+        return BlobPart(
             content=content_bytes,
             mime_type=f"image/{fmt}",
             modality="image",
@@ -103,7 +103,7 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
         source = document.get("source")
         content_bytes = source.get("bytes", b"") if _is_dict(source) else b""
         mime_type = _DOC_MIME_TYPES.get(fmt, f"application/{fmt}")
-        return Blob(
+        return BlobPart(
             content=content_bytes,
             mime_type=mime_type,
             modality="document",
@@ -111,7 +111,7 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
 
     tool_use = block.get("toolUse")
     if _is_dict(tool_use):
-        return ToolCallRequest(
+        return ToolCallRequestPart(
             id=tool_use.get("toolUseId"),
             name=tool_use.get("name", ""),
             arguments=tool_use.get("input"),
@@ -119,7 +119,7 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
 
     tool_result = block.get("toolResult")
     if _is_dict(tool_result):
-        return ToolCallResponse(
+        return ToolCallResponsePart(
             id=tool_result.get("toolUseId"),
             response=tool_result.get("content"),
         )
@@ -166,7 +166,7 @@ def extract_converse_request(
         system_parts: list[MessagePart] = []
         for item in raw_system:
             if _is_dict(item) and "text" in item:
-                system_parts.append(Text(content=item["text"]))
+                system_parts.append(TextPart(content=item["text"]))
         invocation.system_instruction = system_parts
 
     # input messages
