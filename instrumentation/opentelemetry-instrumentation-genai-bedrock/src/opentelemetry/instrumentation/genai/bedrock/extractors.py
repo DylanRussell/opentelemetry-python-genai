@@ -456,12 +456,12 @@ def extract_invoke_model_request(
     raw_system = body.get("system")
     if raw_system:
         if isinstance(raw_system, str):
-            invocation.system_instruction = [Text(content=raw_system)]
+            invocation.system_instruction = [TextPart(content=raw_system)]
         elif _is_list(raw_system):
             system_parts: list[MessagePart] = []
             for item in raw_system:
                 if isinstance(item, str):
-                    system_parts.append(Text(content=item))
+                    system_parts.append(TextPart(content=item))
                 elif _is_dict(item):
                     part = extract_content_block(item)
                     if part is not None:
@@ -479,11 +479,11 @@ def extract_invoke_model_request(
             content = msg.get("content")
             parts: list[MessagePart] = []
             if isinstance(content, str):
-                parts.append(Text(content=content))
+                parts.append(TextPart(content=content))
             elif _is_list(content):
                 for block in content:
                     if isinstance(block, str):
-                        parts.append(Text(content=block))
+                        parts.append(TextPart(content=block))
                     elif _is_dict(block):
                         part = extract_content_block(block)
                         if part is not None:
@@ -495,21 +495,21 @@ def extract_invoke_model_request(
         invocation.input_messages = [
             InputMessage(
                 role="user",
-                parts=[Text(content=body["prompt"])],
+                parts=[TextPart(content=body["prompt"])],
             )
         ]
     elif "inputText" in body and isinstance(body["inputText"], str):
         invocation.input_messages = [
             InputMessage(
                 role="user",
-                parts=[Text(content=body["inputText"])],
+                parts=[TextPart(content=body["inputText"])],
             )
         ]
     elif "message" in body and isinstance(body["message"], str):
         invocation.input_messages = [
             InputMessage(
                 role="user",
-                parts=[Text(content=body["message"])],
+                parts=[TextPart(content=body["message"])],
             )
         ]
 
@@ -626,7 +626,7 @@ def extract_invoke_model_response(
         parts: list[MessagePart] = []
         for block in body["content"]:
             if isinstance(block, str):
-                parts.append(Text(content=block))
+                parts.append(TextPart(content=block))
             elif _is_dict(block):
                 part = extract_content_block(block)
                 if part is not None:
@@ -667,7 +667,7 @@ def extract_invoke_model_response(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=body["completion"])],
+                parts=[TextPart(content=body["completion"])],
                 finish_reason=finish_reason or "stop",
             )
         ]
@@ -681,7 +681,7 @@ def extract_invoke_model_response(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=str(results[0]["outputText"]))],
+                parts=[TextPart(content=str(results[0]["outputText"]))],
                 finish_reason=finish_reason or "stop",
             )
         ]
@@ -690,7 +690,7 @@ def extract_invoke_model_response(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=body["generation"])],
+                parts=[TextPart(content=body["generation"])],
                 finish_reason=finish_reason or "stop",
             )
         ]
@@ -705,7 +705,7 @@ def extract_invoke_model_response(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=str(body["outputs"][0]["text"]))],
+                parts=[TextPart(content=str(body["outputs"][0]["text"]))],
                 finish_reason=finish_reason or "stop",
             )
         ]
@@ -720,7 +720,7 @@ def extract_invoke_model_response(
         invocation.output_messages = [
             OutputMessage(
                 role="assistant",
-                parts=[Text(content=str(body["generations"][0]["text"]))],
+                parts=[TextPart(content=str(body["generations"][0]["text"]))],
                 finish_reason=finish_reason or "stop",
             )
         ]
@@ -736,7 +736,7 @@ def extract_invoke_model_response(
             invocation.output_messages = [
                 OutputMessage(
                     role="assistant",
-                    parts=[Text(content=str(data["text"]))],
+                    parts=[TextPart(content=str(data["text"]))],
                     finish_reason=finish_reason or "stop",
                 )
             ]
