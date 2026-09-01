@@ -34,7 +34,7 @@ def _is_list(val: object) -> TypeGuard[list[Any]]:
 _FINISH_REASON_MAP: dict[str, str] = {
     "end_turn": "stop",
     "stop_sequence": "stop",
-    "tool_use": "tool_calls",
+    "tool_use": "tool_call",
     "max_tokens": "length",
     "content_filtered": "content_filter",
     "guardrail_intervened": "content_filter",
