@@ -476,3 +476,57 @@ def test_extract_content_block_generic_parts() -> None:
         part = extract_content_block({key: {"foo": "bar"}})
         assert part is not None
         assert part.type == key
+
+
+def test_extract_content_block_anthropic_blocks() -> None:
+    # Anthropic tool_use block
+    tool_use_part = extract_content_block(
+        {
+            "type": "tool_use",
+            "id": "toolu_123",
+            "name": "get_weather",
+            "input": {"city": "Paris"},
+        }
+    )
+    assert tool_use_part is not None
+    assert tool_use_part.type == "tool_call"
+    assert getattr(tool_use_part, "id") == "toolu_123"
+    assert getattr(tool_use_part, "name") == "get_weather"
+    assert getattr(tool_use_part, "arguments") == {"city": "Paris"}
+
+    # Anthropic tool_result block
+    tool_result_part = extract_content_block(
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_123",
+            "content": "20 degrees",
+        }
+    )
+    assert tool_result_part is not None
+    assert tool_result_part.type == "tool_call_response"
+    assert getattr(tool_result_part, "id") == "toolu_123"
+    assert getattr(tool_result_part, "response") == "20 degrees"
+
+    # Anthropic thinking block
+    thinking_part = extract_content_block(
+        {"type": "thinking", "thinking": "Thinking about the weather"}
+    )
+    assert thinking_part is not None
+    assert thinking_part.type == "reasoning"
+    assert getattr(thinking_part, "content") == "Thinking about the weather"
+
+    # Anthropic base64 image block
+    image_part = extract_content_block(
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "QUJD",
+            },
+        }
+    )
+    assert image_part is not None
+    assert image_part.type == "blob"
+    assert getattr(image_part, "mime_type") == "image/png"
+    assert getattr(image_part, "content") == b"ABC"

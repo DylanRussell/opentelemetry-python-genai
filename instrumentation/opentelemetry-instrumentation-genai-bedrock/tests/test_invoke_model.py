@@ -448,3 +448,108 @@ def test_extract_invoke_model_request_zero_values(tracer_provider) -> None:
     assert invocation.top_k == 0.0
     assert invocation.max_tokens == 0
     assert invocation.seed == 0
+
+
+def test_invoke_model_anthropic_tool_call_and_result(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 100,
+        "tools": [
+            {
+                "name": "get_weather",
+                "description": "Get weather for a city",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_prev",
+                        "content": "72 degrees and sunny",
+                    }
+                ],
+            }
+        ],
+    }
+    response_body = {
+        "id": "msg_tool_resp",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+            {
+                "type": "tool_use",
+                "id": "toolu_next",
+                "name": "get_weather",
+                "input": {"city": "Seattle"},
+            }
+        ],
+        "model": "claude-3-sonnet-20240229",
+        "stop_reason": "tool_use",
+        "usage": {
+            "input_tokens": 25,
+            "output_tokens": 15,
+        },
+    }
+    raw_response_bytes = json.dumps(response_body).encode("utf-8")
+
+    stubber.add_response(
+        "invoke_model",
+        service_response={
+            "contentType": "application/json",
+            "body": StreamingBody(
+                io.BytesIO(raw_response_bytes), len(raw_response_bytes)
+            ),
+        },
+        expected_params={
+            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "body": json.dumps(request_body),
+        },
+    )
+
+    with stubber:
+        response = bedrock_client.invoke_model(
+            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+            body=json.dumps(request_body),
+        )
+
+    assert response["body"].read() == raw_response_bytes
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_call",
+    )
+
+    input_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_msgs) == 1
+    assert input_msgs[0]["role"] == "user"
+    assert input_msgs[0]["parts"][0]["type"] == "tool_call_response"
+    assert input_msgs[0]["parts"][0]["id"] == "toolu_prev"
+    assert input_msgs[0]["parts"][0]["response"] == "72 degrees and sunny"
+
+    output_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert len(output_msgs) == 1
+    assert output_msgs[0]["role"] == "assistant"
+    assert output_msgs[0]["finish_reason"] == "tool_call"
+    assert output_msgs[0]["parts"][0]["type"] == "tool_call"
+    assert output_msgs[0]["parts"][0]["id"] == "toolu_next"
+    assert output_msgs[0]["parts"][0]["name"] == "get_weather"
+    assert output_msgs[0]["parts"][0]["arguments"] == {"city": "Seattle"}

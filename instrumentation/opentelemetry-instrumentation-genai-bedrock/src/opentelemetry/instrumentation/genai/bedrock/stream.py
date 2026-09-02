@@ -198,6 +198,10 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         self._self_cache_creation_input_tokens: int | None = None
         self._self_accumulated_text: list[str] = []
         self._self_accumulated_reasoning: list[str] = []
+        self._self_text_blocks: dict[int, str] = {}
+        self._self_reasoning_blocks: dict[int, str] = {}
+        self._self_tool_blocks: dict[int, dict[str, Any]] = {}
+        self._self_all_block_indices: list[int] = []
 
     def _process_chunk(self, chunk: dict[str, Any]) -> None:
         raw_bytes = (
@@ -258,16 +262,58 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
                                 usage.get("cacheWriteInputTokens"),
                             )
                         )
+        elif msg_type == "content_block_start":
+            if self._self_capture_content:
+                idx = chunk_data.get("index", 0)
+                if idx not in self._self_all_block_indices:
+                    self._self_all_block_indices.append(idx)
+                cb = chunk_data.get("content_block", {})
+                if _is_dict(cb):
+                    cb_type = cb.get("type")
+                    if cb_type == "tool_use":
+                        self._self_tool_blocks[idx] = {
+                            "id": cb.get("id"),
+                            "name": cb.get("name", ""),
+                            "input_chunks": [],
+                        }
+                    elif cb_type == "text" and "text" in cb:
+                        self._self_text_blocks[idx] = cb["text"]
+                    elif cb_type in ("thinking", "redacted_thinking"):
+                        thinking = cb.get("thinking") or cb.get("data") or ""
+                        self._self_reasoning_blocks[idx] = thinking
         elif msg_type == "content_block_delta":
             delta = chunk_data.get("delta", {})
-            if _is_dict(delta):
+            if _is_dict(delta) and self._self_capture_content:
+                idx = chunk_data.get("index", 0)
+                if idx not in self._self_all_block_indices:
+                    self._self_all_block_indices.append(idx)
                 delta_type = delta.get("type")
                 if delta_type == "text_delta" and "text" in delta:
-                    self._self_accumulated_text.append(delta["text"])
+                    self._self_text_blocks[idx] = (
+                        self._self_text_blocks.get(idx, "") + delta["text"]
+                    )
                 elif delta_type == "thinking_delta" and "thinking" in delta:
-                    self._self_accumulated_reasoning.append(delta["thinking"])
+                    self._self_reasoning_blocks[idx] = (
+                        self._self_reasoning_blocks.get(idx, "")
+                        + delta["thinking"]
+                    )
+                elif (
+                    delta_type == "input_json_delta"
+                    and "partial_json" in delta
+                ):
+                    if idx not in self._self_tool_blocks:
+                        self._self_tool_blocks[idx] = {
+                            "id": None,
+                            "name": "",
+                            "input_chunks": [],
+                        }
+                    self._self_tool_blocks[idx]["input_chunks"].append(
+                        delta["partial_json"]
+                    )
                 elif "text" in delta:
-                    self._self_accumulated_text.append(delta["text"])
+                    self._self_text_blocks[idx] = (
+                        self._self_text_blocks.get(idx, "") + delta["text"]
+                    )
         elif msg_type == "message_delta":
             delta = chunk_data.get("delta", {})
             if _is_dict(delta) and "stop_reason" in delta:
@@ -280,19 +326,22 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         if "completion" in chunk_data and isinstance(
             chunk_data["completion"], str
         ):
-            self._self_accumulated_text.append(chunk_data["completion"])
+            if self._self_capture_content:
+                self._self_accumulated_text.append(chunk_data["completion"])
             if "stop_reason" in chunk_data:
                 self._self_stop_reason = chunk_data["stop_reason"]
         elif "outputText" in chunk_data and isinstance(
             chunk_data["outputText"], str
         ):
-            self._self_accumulated_text.append(chunk_data["outputText"])
+            if self._self_capture_content:
+                self._self_accumulated_text.append(chunk_data["outputText"])
             if "completionReason" in chunk_data:
                 self._self_stop_reason = chunk_data["completionReason"]
         elif "generation" in chunk_data and isinstance(
             chunk_data["generation"], str
         ):
-            self._self_accumulated_text.append(chunk_data["generation"])
+            if self._self_capture_content:
+                self._self_accumulated_text.append(chunk_data["generation"])
             if "stop_reason" in chunk_data:
                 self._self_stop_reason = chunk_data["stop_reason"]
         elif (
@@ -302,7 +351,11 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         ):
             out = chunk_data["outputs"][0]
             if _is_dict(out):
-                if "text" in out and isinstance(out["text"], str):
+                if (
+                    self._self_capture_content
+                    and "text" in out
+                    and isinstance(out["text"], str)
+                ):
                     self._self_accumulated_text.append(out["text"])
                 if "stop_reason" in out and isinstance(
                     out["stop_reason"], str
@@ -313,7 +366,8 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
             and isinstance(chunk_data["text"], str)
             and msg_type is None
         ):
-            self._self_accumulated_text.append(chunk_data["text"])
+            if self._self_capture_content:
+                self._self_accumulated_text.append(chunk_data["text"])
             if chunk_data.get("is_finished"):
                 self._self_stop_reason = "COMPLETE"
 
@@ -337,16 +391,47 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
 
         if self._self_capture_content:
             parts: list[MessagePart] = []
-            if self._self_accumulated_reasoning:
-                parts.append(
-                    ReasoningPart(
-                        content="".join(self._self_accumulated_reasoning)
+            if self._self_all_block_indices:
+                for idx in sorted(self._self_all_block_indices):
+                    if idx in self._self_reasoning_blocks:
+                        parts.append(
+                            ReasoningPart(
+                                content=self._self_reasoning_blocks[idx]
+                            )
+                        )
+                    if idx in self._self_text_blocks:
+                        parts.append(
+                            TextPart(content=self._self_text_blocks[idx])
+                        )
+                    if idx in self._self_tool_blocks:
+                        tool_info = self._self_tool_blocks[idx]
+                        raw_input = "".join(tool_info["input_chunks"])
+                        args: object
+                        if raw_input:
+                            try:
+                                args = json.loads(raw_input)
+                            except Exception:
+                                args = raw_input
+                        else:
+                            args = {}
+                        parts.append(
+                            ToolCallRequestPart(
+                                id=tool_info.get("id"),
+                                name=tool_info.get("name", ""),
+                                arguments=args,
+                            )
+                        )
+            else:
+                if self._self_accumulated_reasoning:
+                    parts.append(
+                        ReasoningPart(
+                            content="".join(self._self_accumulated_reasoning)
+                        )
                     )
-                )
-            if self._self_accumulated_text:
-                parts.append(
-                    TextPart(content="".join(self._self_accumulated_text))
-                )
+                if self._self_accumulated_text:
+                    parts.append(
+                        TextPart(content="".join(self._self_accumulated_text))
+                    )
 
             if parts or finish_reason:
                 self._self_invocation.output_messages = [

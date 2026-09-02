@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+from botocore.stub import Stubber
 
 from opentelemetry.instrumentation.genai.bedrock.patch import (
     _handle_invoke_model,
@@ -21,6 +22,9 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
+)
+from opentelemetry.semconv.attributes import (
+    server_attributes as ServerAttributes,
 )
 from opentelemetry.trace import StatusCode
 from opentelemetry.util.genai.handler import TelemetryHandler
@@ -466,3 +470,312 @@ def test_stream_wrapper_anthropic_with_cache_tokens(
     assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
         "stop",
     )
+
+
+def test_stream_wrapper_anthropic_tool_calls(
+    tracer_provider,
+    span_exporter,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "SPAN_AND_EVENT"
+    )
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(
+        provider="aws.bedrock",
+        request_model="anthropic.claude-3-sonnet-20240229-v1:0",
+        operation_name="chat",
+    )
+    events = [
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "message_start",
+                        "message": {
+                            "role": "assistant",
+                            "usage": {"input_tokens": 30},
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "tool_use",
+                            "id": "toolu_01T1xnvuzHG2DhStub123",
+                            "name": "get_stock_price",
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": '{"ticker":',
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": ' "AAPL"}',
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "message_delta",
+                        "delta": {"stop_reason": "tool_use"},
+                        "usage": {"output_tokens": 25},
+                    }
+                ).encode("utf-8")
+            }
+        },
+    ]
+
+    wrapper = BedrockInvokeModelStreamWrapper(
+        stream=events,  # type: ignore[arg-type]
+        invocation=invocation,
+        capture_content=True,
+    )
+    list(wrapper)
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_call",
+    )
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 30
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 25
+
+    output_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert len(output_msgs) == 1
+    parts = output_msgs[0]["parts"]
+    assert len(parts) == 1
+    assert parts[0]["type"] == "tool_call"
+    assert parts[0]["id"] == "toolu_01T1xnvuzHG2DhStub123"
+    assert parts[0]["name"] == "get_stock_price"
+    assert parts[0]["arguments"] == {"ticker": "AAPL"}
+
+
+def test_stream_wrapper_anthropic_tool_calls_no_content(
+    tracer_provider,
+    span_exporter,
+) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(
+        provider="aws.bedrock",
+        request_model="anthropic.claude-3-sonnet-20240229-v1:0",
+        operation_name="chat",
+    )
+    events = [
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "tool_use",
+                            "id": "toolu_01T1xnvuzHG2DhStub123",
+                            "name": "get_stock_price",
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": '{"ticker": "AAPL"}',
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "message_delta",
+                        "delta": {"stop_reason": "tool_use"},
+                    }
+                ).encode("utf-8")
+            }
+        },
+    ]
+
+    wrapper = BedrockInvokeModelStreamWrapper(
+        stream=events,  # type: ignore[arg-type]
+        invocation=invocation,
+        capture_content=False,
+    )
+    list(wrapper)
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "tool_call",
+    )
+    assert GenAIAttributes.GEN_AI_OUTPUT_MESSAGES not in span.attributes
+    assert not wrapper._self_tool_blocks
+    assert not wrapper._self_text_blocks
+
+
+def test_invoke_model_with_response_stream_end_to_end_stubber(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    stubber._validate_response = lambda *a, **kw: None
+
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 100,
+        "messages": [{"role": "user", "content": "Hello!"}],
+    }
+    events = [
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "message_start",
+                        "message": {
+                            "role": "assistant",
+                            "usage": {
+                                "input_tokens": 12,
+                                "cache_read_input_tokens": 8,
+                            },
+                        },
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {"type": "text_delta", "text": "Hello "},
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {"type": "text_delta", "text": "world!"},
+                    }
+                ).encode("utf-8")
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "type": "message_delta",
+                        "delta": {"stop_reason": "end_turn"},
+                        "usage": {"output_tokens": 6},
+                    }
+                ).encode("utf-8")
+            }
+        },
+    ]
+
+    stubber.add_response(
+        "invoke_model_with_response_stream",
+        service_response={
+            "contentType": "application/json",
+            "body": events,
+        },
+        expected_params={
+            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "body": json.dumps(request_body),
+        },
+    )
+
+    with stubber:
+        response = bedrock_client.invoke_model_with_response_stream(
+            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+            body=json.dumps(request_body),
+        )
+
+        assert isinstance(response["body"], BedrockInvokeModelStreamWrapper)
+        stream_events = list(response["body"])
+        assert len(stream_events) == 4
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.name == "chat anthropic.claude-3-sonnet-20240229-v1:0"
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME]
+        == GenAIAttributes.GenAiOperationNameValues.CHAT.value
+    )
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_PROVIDER_NAME]
+        == GenAIAttributes.GenAiProviderNameValues.AWS_BEDROCK.value
+    )
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
+        == "anthropic.claude-3-sonnet-20240229-v1:0"
+    )
+    assert (
+        span.attributes[ServerAttributes.SERVER_ADDRESS]
+        == "bedrock-runtime.us-east-1.amazonaws.com"
+    )
+    assert span.attributes[ServerAttributes.SERVER_PORT] == 443
+    assert span.attributes[GenAIAttributes.GEN_AI_REQUEST_STREAM] is True
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 12
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 6
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]
+        == 8
+    )
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
+
+    output_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert len(output_msgs) == 1
+    assert output_msgs[0]["parts"][0]["content"] == "Hello world!"

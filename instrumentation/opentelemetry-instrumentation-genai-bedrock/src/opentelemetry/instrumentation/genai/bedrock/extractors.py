@@ -23,6 +23,7 @@ from opentelemetry.util.genai.types import (
     ToolCallResponsePart,
     ToolDefinition,
 )
+from opentelemetry.util.genai.utils import decode_base64
 
 
 def _is_dict(val: object) -> TypeGuard[dict[str, Any]]:
@@ -111,10 +112,16 @@ def extract_server_address_and_port(
 
 
 def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
-    """Map a single Bedrock content block to an OpenTelemetry MessagePart."""
-    if "text" in block:
+    """Map a single Bedrock or Anthropic content block to an OpenTelemetry MessagePart."""
+    block_type = block.get("type")
+
+    # 1. Text block (Converse or Anthropic)
+    if block_type == "text" and "text" in block:
+        return TextPart(content=block["text"])
+    if "text" in block and block_type is None:
         return TextPart(content=block["text"])
 
+    # 2. Reasoning / thinking block
     reasoning = block.get("reasoningContent")
     if _is_dict(reasoning):
         reasoning_text = reasoning.get("reasoningText")
@@ -122,7 +129,11 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             return ReasoningPart(content=reasoning_text["text"])
         if "redactedContent" in reasoning:
             return ReasoningPart(content="")
+    if block_type in ("thinking", "redacted_thinking"):
+        content = block.get("thinking") or block.get("data") or ""
+        return ReasoningPart(content=str(content))
 
+    # 3. Image block
     image = block.get("image")
     if _is_dict(image):
         fmt = image.get("format", "jpeg")
@@ -133,7 +144,26 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             mime_type=f"image/{fmt}",
             modality="image",
         )
+    if block_type == "image":
+        source = block.get("source")
+        if _is_dict(source):
+            if source.get("type") == "base64":
+                media_type = source.get("media_type", "image/jpeg")
+                decoded = decode_base64(source.get("data", ""))
+                if decoded is not None:
+                    return BlobPart(
+                        content=decoded,
+                        mime_type=media_type,
+                        modality="image",
+                    )
+            elif "bytes" in source:
+                return BlobPart(
+                    content=source.get("bytes", b""),
+                    mime_type=source.get("media_type", "image/jpeg"),
+                    modality="image",
+                )
 
+    # 4. Document block
     document = block.get("document")
     if _is_dict(document):
         fmt = document.get("format", "pdf")
@@ -145,7 +175,26 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             mime_type=mime_type,
             modality="document",
         )
+    if block_type == "document":
+        source = block.get("source")
+        if _is_dict(source):
+            if source.get("type") == "base64":
+                media_type = source.get("media_type", "application/pdf")
+                decoded = decode_base64(source.get("data", ""))
+                if decoded is not None:
+                    return BlobPart(
+                        content=decoded,
+                        mime_type=media_type,
+                        modality="document",
+                    )
+            elif "bytes" in source:
+                return BlobPart(
+                    content=source.get("bytes", b""),
+                    mime_type=source.get("media_type", "application/pdf"),
+                    modality="document",
+                )
 
+    # 5. Tool use (Converse toolUse or Anthropic tool_use)
     tool_use = block.get("toolUse")
     if _is_dict(tool_use):
         return ToolCallRequestPart(
@@ -153,14 +202,27 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
             name=tool_use.get("name", ""),
             arguments=tool_use.get("input"),
         )
+    if block_type == "tool_use":
+        return ToolCallRequestPart(
+            id=block.get("id"),
+            name=str(block.get("name", "")),
+            arguments=block.get("input"),
+        )
 
+    # 6. Tool result (Converse toolResult or Anthropic tool_result)
     tool_result = block.get("toolResult")
     if _is_dict(tool_result):
         return ToolCallResponsePart(
             id=tool_result.get("toolUseId"),
             response=tool_result.get("content"),
         )
+    if block_type == "tool_result":
+        return ToolCallResponsePart(
+            id=block.get("tool_use_id"),
+            response=block.get("content"),
+        )
 
+    # 7. Other Generic block types
     for key in (
         "video",
         "audio",
