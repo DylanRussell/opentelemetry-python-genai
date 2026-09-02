@@ -7,6 +7,7 @@ import json
 from typing import Any, TypeGuard
 from urllib.parse import urlparse
 
+from opentelemetry.semconv._incubating.attributes import aws_attributes
 from opentelemetry.util.genai.invocation import InferenceInvocation
 from opentelemetry.util.genai.types import (
     BlobPart,
@@ -271,6 +272,33 @@ def extract_converse_request(
         if "seed" in add_fields:
             invocation.seed = add_fields.get("seed")
 
+    # Guardrail identifier
+    guardrail_config = kwargs.get("guardrailConfig")
+    if _is_dict(guardrail_config):
+        guardrail_id = guardrail_config.get("guardrailIdentifier")
+        if guardrail_id:
+            invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = (
+                str(guardrail_id)
+            )
+
+    # Output format
+    output_config = kwargs.get("outputConfig")
+    if _is_dict(output_config):
+        text_format = output_config.get("textFormat")
+        if text_format:
+            text_format_str = str(text_format).lower()
+            if text_format_str in ("json", "text"):
+                invocation.output_type = text_format_str
+
+    # Prompt variables (opt-in under content capture)
+    prompt_variables = kwargs.get("promptVariables")
+    if capture_content and _is_dict(prompt_variables):
+        for var_name, var_val in prompt_variables.items():
+            if _is_dict(var_val) and "text" in var_val:
+                invocation.attributes[f"gen_ai.prompt.variable.{var_name}"] = (
+                    str(var_val["text"])
+                )
+
     # system instruction
     raw_system = kwargs.get("system")
     if capture_content and _is_list(raw_system):
@@ -400,6 +428,14 @@ def extract_invoke_model_request(
     capture_content: bool = True,
 ) -> None:
     """Populate request attributes from InvokeModel api_params onto the invocation."""
+    guardrail_id = api_params.get("guardrailIdentifier")
+    if not guardrail_id and _is_dict(api_params.get("guardrailConfig")):
+        guardrail_id = api_params["guardrailConfig"].get("guardrailIdentifier")
+    if guardrail_id:
+        invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = str(
+            guardrail_id
+        )
+
     body = _parse_body(api_params.get("body"))
     if not _is_dict(body):
         return

@@ -14,6 +14,9 @@ from opentelemetry.instrumentation.genai.bedrock.extractors import (
     extract_converse_response,
 )
 from opentelemetry.semconv._incubating.attributes import (
+    aws_attributes as AwsAttributes,
+)
+from opentelemetry.semconv._incubating.attributes import (
     error_attributes as ErrorAttributes,
 )
 from opentelemetry.semconv._incubating.attributes import (
@@ -530,3 +533,66 @@ def test_extract_content_block_anthropic_blocks() -> None:
     assert image_part.type == "blob"
     assert getattr(image_part, "mime_type") == "image/png"
     assert getattr(image_part, "content") == b"ABC"
+
+
+def test_extract_converse_request_guardrail_and_prompt_variables(
+    tracer_provider,
+) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(provider="aws.bedrock")
+
+    extract_converse_request(
+        {
+            "guardrailConfig": {
+                "guardrailIdentifier": "sgi5gkybzqak",
+                "guardrailVersion": "1",
+            },
+            "outputConfig": {"textFormat": "json"},
+            "promptVariables": {
+                "user_name": {"text": "Alice"},
+                "language": {"text": "French"},
+            },
+        },
+        invocation,
+        capture_content=True,
+    )
+
+    assert (
+        invocation.attributes.get(AwsAttributes.AWS_BEDROCK_GUARDRAIL_ID)
+        == "sgi5gkybzqak"
+    )
+    assert invocation.output_type == "json"
+    assert (
+        invocation.attributes.get("gen_ai.prompt.variable.user_name")
+        == "Alice"
+    )
+    assert (
+        invocation.attributes.get("gen_ai.prompt.variable.language")
+        == "French"
+    )
+
+
+def test_extract_converse_request_prompt_variables_no_content(
+    tracer_provider,
+) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(provider="aws.bedrock")
+
+    extract_converse_request(
+        {
+            "guardrailConfig": {
+                "guardrailIdentifier": "sgi5gkybzqak",
+            },
+            "promptVariables": {
+                "user_name": {"text": "Alice"},
+            },
+        },
+        invocation,
+        capture_content=False,
+    )
+
+    assert (
+        invocation.attributes.get(AwsAttributes.AWS_BEDROCK_GUARDRAIL_ID)
+        == "sgi5gkybzqak"
+    )
+    assert "gen_ai.prompt.variable.user_name" not in invocation.attributes

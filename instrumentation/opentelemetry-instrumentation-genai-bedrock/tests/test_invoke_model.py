@@ -18,6 +18,9 @@ from opentelemetry.instrumentation.genai.bedrock.extractors import (
     extract_invoke_model_response,
 )
 from opentelemetry.semconv._incubating.attributes import (
+    aws_attributes as AwsAttributes,
+)
+from opentelemetry.semconv._incubating.attributes import (
     error_attributes as ErrorAttributes,
 )
 from opentelemetry.semconv._incubating.attributes import (
@@ -553,3 +556,61 @@ def test_invoke_model_anthropic_tool_call_and_result(
     assert output_msgs[0]["parts"][0]["id"] == "toolu_next"
     assert output_msgs[0]["parts"][0]["name"] == "get_weather"
     assert output_msgs[0]["parts"][0]["arguments"] == {"city": "Seattle"}
+
+
+def test_extract_invoke_model_request_guardrail(tracer_provider) -> None:
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    invocation = handler.inference(provider="aws.bedrock")
+
+    extract_invoke_model_request(
+        {
+            "guardrailIdentifier": "sgi5gkybzqak",
+            "body": json.dumps({"prompt": "Hello"}),
+        },
+        invocation,
+    )
+
+    assert (
+        invocation.attributes.get(AwsAttributes.AWS_BEDROCK_GUARDRAIL_ID)
+        == "sgi5gkybzqak"
+    )
+
+
+def test_invoke_model_with_guardrail_stubber(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    request_body = {"prompt": "Hello"}
+    response_body = {"completion": "Hi!"}
+    raw_response_bytes = json.dumps(response_body).encode("utf-8")
+
+    stubber.add_response(
+        "invoke_model",
+        service_response={
+            "contentType": "application/json",
+            "body": StreamingBody(
+                io.BytesIO(raw_response_bytes), len(raw_response_bytes)
+            ),
+        },
+        expected_params={
+            "modelId": "anthropic.claude-v2",
+            "body": json.dumps(request_body),
+            "guardrailIdentifier": "sgi5gkybzqak",
+        },
+    )
+
+    with stubber:
+        bedrock_client.invoke_model(
+            modelId="anthropic.claude-v2",
+            body=json.dumps(request_body),
+            guardrailIdentifier="sgi5gkybzqak",
+        )
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert (
+        spans[0].attributes.get(AwsAttributes.AWS_BEDROCK_GUARDRAIL_ID)
+        == "sgi5gkybzqak"
+    )
