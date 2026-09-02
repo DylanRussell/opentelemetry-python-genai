@@ -225,3 +225,33 @@ def test_tool_content_capture_disabled(
     assert GenAI.GEN_AI_TOOL_CALL_ARGUMENTS not in attrs
     assert GenAI.GEN_AI_TOOL_CALL_RESULT not in attrs
     assert attrs.get(GenAI.GEN_AI_TOOL_NAME) == "add"
+
+
+def test_tool_kwargs_not_mutated_by_caller(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    def greet(msg: str) -> str:
+        return f"Hello, {msg}"
+
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+        content_capture="SPAN_ONLY",
+    ):
+        tool = dspy.Tool(greet, name="greet")
+        kwargs = {"msg": "world"}
+        tool(**kwargs)
+        kwargs["msg"] = "mutated"
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    attrs = spans[0].attributes or {}
+    args_raw = attrs.get(GenAI.GEN_AI_TOOL_CALL_ARGUMENTS)
+    assert args_raw is not None
+    args_dict = json.loads(str(args_raw))
+    assert args_dict.get("msg") == "world"

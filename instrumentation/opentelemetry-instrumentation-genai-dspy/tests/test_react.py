@@ -168,9 +168,7 @@ async def test_react_async_execution(
         react = dspy.ReAct("question -> answer", tools=[tool])
         async_predict = MockAsyncPredict()
         react.react = async_predict
-        react.react.acall = async_predict.acall
         react.extract = MockExtract()
-        react.extract.acall = react.extract.acall
 
         res = await react.aforward(question="What is 3 * 5?")
         assert res.answer == "15"
