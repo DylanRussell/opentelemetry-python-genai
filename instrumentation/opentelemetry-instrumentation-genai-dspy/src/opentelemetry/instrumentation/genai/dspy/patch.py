@@ -135,9 +135,9 @@ def _extract_tool_arguments(
             pass
 
     if args and kwargs:
-        return {"args": list(args), "kwargs": kwargs}
+        return {"args": list(args), "kwargs": dict(kwargs)}
     if kwargs:
-        return kwargs
+        return dict(kwargs)
     if args:
         return list(args)
     return None
@@ -245,9 +245,8 @@ def _react_forward(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        combined_kwargs = dict(kwargs)
         invocation = _start_agent_invocation(
-            handler, instance, combined_kwargs, agent_name
+            handler, instance, dict(kwargs), agent_name
         )
         with invocation:
             result = wrapped(*args, **kwargs)
@@ -267,9 +266,8 @@ def _react_aforward(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        combined_kwargs = dict(kwargs)
         invocation = _start_agent_invocation(
-            handler, instance, combined_kwargs, agent_name
+            handler, instance, dict(kwargs), agent_name
         )
         with invocation:
             result = await wrapped(*args, **kwargs)
