@@ -8,9 +8,15 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
+from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
-from wrapt import BoundFunctionWrapper, FunctionWrapper, wrap_object
+from wrapt import (
+    BoundFunctionWrapper,
+    FunctionWrapper,
+    apply_patch,
+    resolve_path,
+)
 
 from opentelemetry.instrumentation.genai.dspy.utils import (
     extract_input_content,
@@ -44,9 +50,40 @@ _REACT_V2_CLASS = "ReActV2"
 class _CopyableBoundFunctionWrapper(BoundFunctionWrapper[Any, Any]):
     """BoundFunctionWrapper that supports copy and deepcopy."""
 
-    def __copy__(self) -> Any:
-        wrapped: Any = self.__wrapped__
-        return copy(wrapped)
+    def __init__(
+        self,
+        wrapped: Any,
+        instance: Any = None,
+        wrapper: Any = None,
+        enabled: Any = None,
+        binding: str = "callable",
+        parent: Any = None,
+        owner: Any = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        init_args: tuple[Any, ...] = (
+            wrapped,
+            instance,
+            wrapper,
+            enabled,
+            binding,
+            parent,
+            owner,
+            *args,
+        )
+        super().__init__(*init_args, **kwargs)
+
+    def __copy__(self) -> _CopyableBoundFunctionWrapper:
+        return _CopyableBoundFunctionWrapper(
+            self.__wrapped__,
+            self._self_instance,
+            self._self_wrapper,
+            self._self_enabled,
+            self._self_binding,
+            self._self_parent,
+            self._self_owner,
+        )
 
     def __deepcopy__(self, memo: dict[Any, Any]) -> Any:
         if self._self_instance is not None:
@@ -54,7 +91,24 @@ class _CopyableBoundFunctionWrapper(BoundFunctionWrapper[Any, Any]):
             attr_name: str | None = getattr(self, "__name__", None)
             if attr_name and hasattr(copied_instance, attr_name):
                 return getattr(copied_instance, attr_name)
-        return copy(self)
+            return _CopyableBoundFunctionWrapper(
+                deepcopy(self.__wrapped__, memo),
+                copied_instance,
+                self._self_wrapper,
+                self._self_enabled,
+                self._self_binding,
+                self._self_parent,
+                self._self_owner,
+            )
+        return _CopyableBoundFunctionWrapper(
+            deepcopy(self.__wrapped__, memo),
+            None,
+            self._self_wrapper,
+            self._self_enabled,
+            self._self_binding,
+            self._self_parent,
+            self._self_owner,
+        )
 
 
 class _CopyableFunctionWrapper(FunctionWrapper[Any, Any]):
@@ -86,7 +140,17 @@ def _wrap_function(
     name: str,
     wrapper: Callable[..., Any],
 ) -> None:
-    wrap_object(target, name, _CopyableFunctionWrapper, (wrapper,))
+    """Wrap a target attribute with _CopyableFunctionWrapper.
+
+    Resolves target if given as a module name string, traverses dotted attribute
+    paths to find the owning object, and applies the wrapper.
+    """
+    if isinstance(target, str):
+        target = import_module(target)
+
+    parent, attribute, original = resolve_path(target, name)
+    wrapped = _CopyableFunctionWrapper(original, wrapper)
+    apply_patch(parent, attribute, wrapped)
 
 
 def patch_dspy(handler: TelemetryHandler) -> None:

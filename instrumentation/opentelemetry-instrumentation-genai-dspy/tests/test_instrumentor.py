@@ -3,6 +3,9 @@
 
 """Tests for the DSPy instrumentor lifecycle."""
 
+import copy
+from importlib import import_module
+
 import dspy
 import pytest
 
@@ -44,10 +47,6 @@ def test_copy_and_deepcopy_wrapped_callables(
     instrument_dspy: DSPyInstrumentor,
     span_exporter,
 ) -> None:
-    import copy
-
-    import dspy
-
     tool = dspy.Tool(
         func=lambda x: f"result:{x}", name="test_tool", desc="A test tool"
     )
@@ -79,9 +78,8 @@ def test_copy_and_deepcopy_wrapped_callables(
     assert forward_deepcopy is not None
 
     try:
-        import dspy.predict.react_v2
-
-        react_v2_cls = getattr(dspy.predict.react_v2, "ReActV2", None)
+        react_v2_mod = import_module("dspy.predict.react_v2")
+        react_v2_cls = getattr(react_v2_mod, "ReActV2", None)
         if react_v2_cls is not None:
             react_v2 = react_v2_cls("question -> answer", tools=[tool])
             assert copy.copy(react_v2) is not None
@@ -101,28 +99,23 @@ async def test_copy_and_deepcopy_async_tool(
     instrument_dspy: DSPyInstrumentor,
     span_exporter,
 ) -> None:
-    import copy
-
-    import dspy
-
     async def async_fn(x: str) -> str:
         return f"async:{x}"
 
     tool = dspy.Tool(
         func=async_fn, name="async_test_tool", desc="An async test tool"
     )
-    if hasattr(tool, "acall"):
-        tool_copy = copy.copy(tool)
-        tool_deepcopy = copy.deepcopy(tool)
-        acall_copy = copy.copy(tool.acall)
-        acall_deepcopy = copy.deepcopy(tool.acall)
+    tool_copy = copy.copy(tool)
+    tool_deepcopy = copy.deepcopy(tool)
+    acall_copy = copy.copy(tool.acall)
+    acall_deepcopy = copy.deepcopy(tool.acall)
 
-        assert await tool_copy.acall(x="foo") == "async:foo"
-        assert await tool_deepcopy.acall(x="bar") == "async:bar"
-        assert await acall_copy(x="baz") == "async:baz"
-        assert await acall_deepcopy(x="qux") == "async:qux"
+    assert await tool_copy.acall(x="foo") == "async:foo"
+    assert await tool_deepcopy.acall(x="bar") == "async:bar"
+    assert await acall_copy(x="baz") == "async:baz"
+    assert await acall_deepcopy(x="qux") == "async:qux"
 
-        spans = span_exporter.get_finished_spans()
-        assert len(spans) == 4
-        for span in spans:
-            assert span.name == "execute_tool async_test_tool"
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 4
+    for span in spans:
+        assert span.name == "execute_tool async_test_tool"
