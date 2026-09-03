@@ -47,7 +47,15 @@ _REACT_V2_MODULE = "dspy.predict.react_v2"
 _REACT_V2_CLASS = "ReActV2"
 
 
-class _CopyableBoundFunctionWrapper(BoundFunctionWrapper[Any, Any]):
+if TYPE_CHECKING:
+    _BoundFunctionWrapper = BoundFunctionWrapper[Any, Any]
+    _FunctionWrapper = FunctionWrapper[Any, Any]
+else:
+    _BoundFunctionWrapper = BoundFunctionWrapper
+    _FunctionWrapper = FunctionWrapper
+
+
+class _CopyableBoundFunctionWrapper(_BoundFunctionWrapper):
     """BoundFunctionWrapper that supports copy and deepcopy."""
 
     def __init__(
@@ -111,7 +119,7 @@ class _CopyableBoundFunctionWrapper(BoundFunctionWrapper[Any, Any]):
         )
 
 
-class _CopyableFunctionWrapper(FunctionWrapper[Any, Any]):
+class _CopyableFunctionWrapper(_FunctionWrapper):
     """FunctionWrapper that supports copy and deepcopy."""
 
     __bound_function_wrapper__ = _CopyableBoundFunctionWrapper
