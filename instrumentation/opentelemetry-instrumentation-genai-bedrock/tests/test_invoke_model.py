@@ -614,3 +614,142 @@ def test_invoke_model_with_guardrail_stubber(
         spans[0].attributes.get(AwsAttributes.AWS_BEDROCK_GUARDRAIL_ID)
         == "sgi5gkybzqak"
     )
+
+
+def test_invoke_model_mistral(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    request_body = {
+        "prompt": "<s>[INST] What is the capital of France? [/INST]",
+        "max_tokens": 100,
+        "temperature": 0.7,
+        "top_p": 0.9,
+    }
+    response_body = {
+        "outputs": [
+            {
+                "text": "The capital of France is Paris.",
+                "stop_reason": "stop",
+            }
+        ]
+    }
+    raw_response_bytes = json.dumps(response_body).encode("utf-8")
+
+    stubber.add_response(
+        "invoke_model",
+        service_response={
+            "contentType": "application/json",
+            "body": StreamingBody(
+                io.BytesIO(raw_response_bytes), len(raw_response_bytes)
+            ),
+            "ResponseMetadata": {
+                "HTTPHeaders": {
+                    "x-amzn-bedrock-input-token-count": "15",
+                    "x-amzn-bedrock-output-token-count": "7",
+                }
+            },
+        },
+        expected_params={
+            "modelId": "mistral.mistral-7b-instruct-v0:2",
+            "body": json.dumps(request_body),
+        },
+    )
+
+    with stubber:
+        response = bedrock_client.invoke_model(
+            modelId="mistral.mistral-7b-instruct-v0:2",
+            body=json.dumps(request_body),
+        )
+        assert response["body"].read() == raw_response_bytes
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.name == "chat mistral.mistral-7b-instruct-v0:2"
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 7
+    output_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert (
+        output_msgs[0]["parts"][0]["content"]
+        == "The capital of France is Paris."
+    )
+
+
+def test_invoke_model_cohere(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    request_body = {
+        "prompt": "Write a haiku",
+        "max_tokens": 50,
+        "temperature": 0.3,
+        "p": 0.75,
+        "k": 10,
+        "stop_sequences": ["--"],
+    }
+    response_body = {
+        "id": "cohere-req-123",
+        "generations": [
+            {
+                "id": "gen-1",
+                "text": "Spring brings blossoms pink",
+                "finish_reason": "COMPLETE",
+            }
+        ],
+    }
+    raw_response_bytes = json.dumps(response_body).encode("utf-8")
+
+    stubber.add_response(
+        "invoke_model",
+        service_response={
+            "contentType": "application/json",
+            "body": StreamingBody(
+                io.BytesIO(raw_response_bytes), len(raw_response_bytes)
+            ),
+            "ResponseMetadata": {
+                "HTTPHeaders": {
+                    "x-amzn-bedrock-input-token-count": "5",
+                    "x-amzn-bedrock-output-token-count": "6",
+                }
+            },
+        },
+        expected_params={
+            "modelId": "cohere.command-text-v14",
+            "body": json.dumps(request_body),
+        },
+    )
+
+    with stubber:
+        response = bedrock_client.invoke_model(
+            modelId="cohere.command-text-v14",
+            body=json.dumps(request_body),
+        )
+        assert response["body"].read() == raw_response_bytes
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.name == "chat cohere.command-text-v14"
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 5
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 6
+    output_msgs = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES]
+    )
+    assert (
+        output_msgs[0]["parts"][0]["content"] == "Spring brings blossoms pink"
+    )

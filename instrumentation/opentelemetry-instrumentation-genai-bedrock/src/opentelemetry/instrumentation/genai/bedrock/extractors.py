@@ -240,6 +240,22 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
     return None
 
 
+def _extract_parts(content: Any) -> list[MessagePart]:
+    if isinstance(content, str):
+        return [TextPart(content=content)]
+    if not _is_list(content):
+        return []
+    parts: list[MessagePart] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(TextPart(content=item))
+        elif _is_dict(item):
+            part = extract_content_block(item)
+            if part is not None:
+                parts.append(part)
+    return parts
+
+
 def _extract_guardrail_id(
     params: dict[str, Any], invocation: InferenceInvocation
 ) -> None:
@@ -307,13 +323,8 @@ def extract_converse_request(
 
     # system instruction
     raw_system = kwargs.get("system")
-    if capture_content and _is_list(raw_system):
-        system_parts: list[MessagePart] = []
-        for item in raw_system:
-            if _is_dict(item):
-                part = extract_content_block(item)
-                if part is not None:
-                    system_parts.append(part)
+    if capture_content and raw_system:
+        system_parts = _extract_parts(raw_system)
         if system_parts:
             invocation.system_instruction = system_parts
 
@@ -325,14 +336,7 @@ def extract_converse_request(
             if not _is_dict(msg):
                 continue
             role = msg.get("role", Role.USER.value)
-            parts: list[MessagePart] = []
-            content = msg.get("content")
-            if _is_list(content):
-                for block in content:
-                    if _is_dict(block):
-                        part = extract_content_block(block)
-                        if part is not None:
-                            parts.append(part)
+            parts = _extract_parts(msg.get("content"))
             input_messages.append(InputMessage(role=role, parts=parts))
         invocation.input_messages = input_messages
 
@@ -388,14 +392,7 @@ def extract_converse_response(
         msg = output.get("message")
         if _is_dict(msg):
             role = msg.get("role", Role.ASSISTANT.value)
-            parts: list[MessagePart] = []
-            content = msg.get("content")
-            if _is_list(content):
-                for block in content:
-                    if _is_dict(block):
-                        part = extract_content_block(block)
-                        if part is not None:
-                            parts.append(part)
+            parts = _extract_parts(msg.get("content"))
             invocation.output_messages = [
                 OutputMessage(
                     role=role,
@@ -536,19 +533,9 @@ def extract_invoke_model_request(
     # System instruction (e.g. Anthropic / Nova)
     raw_system = body.get("system")
     if raw_system:
-        if isinstance(raw_system, str):
-            invocation.system_instruction = [TextPart(content=raw_system)]
-        elif _is_list(raw_system):
-            system_parts: list[MessagePart] = []
-            for item in raw_system:
-                if isinstance(item, str):
-                    system_parts.append(TextPart(content=item))
-                elif _is_dict(item):
-                    part = extract_content_block(item)
-                    if part is not None:
-                        system_parts.append(part)
-            if system_parts:
-                invocation.system_instruction = system_parts
+        system_parts = _extract_parts(raw_system)
+        if system_parts:
+            invocation.system_instruction = system_parts
 
     # Input messages / prompt
     if "messages" in body and _is_list(body["messages"]):
@@ -557,18 +544,7 @@ def extract_invoke_model_request(
             if not _is_dict(msg):
                 continue
             role = msg.get("role", "user")
-            content = msg.get("content")
-            parts: list[MessagePart] = []
-            if isinstance(content, str):
-                parts.append(TextPart(content=content))
-            elif _is_list(content):
-                for block in content:
-                    if isinstance(block, str):
-                        parts.append(TextPart(content=block))
-                    elif _is_dict(block):
-                        part = extract_content_block(block)
-                        if part is not None:
-                            parts.append(part)
+            parts = _extract_parts(msg.get("content"))
             input_messages.append(InputMessage(role=role, parts=parts))
         if input_messages:
             invocation.input_messages = input_messages
@@ -712,14 +688,7 @@ def extract_invoke_model_response(
 
     # Anthropic Messages format
     if "content" in body and _is_list(body["content"]):
-        parts: list[MessagePart] = []
-        for block in body["content"]:
-            if isinstance(block, str):
-                parts.append(TextPart(content=block))
-            elif _is_dict(block):
-                part = extract_content_block(block)
-                if part is not None:
-                    parts.append(part)
+        parts = _extract_parts(body["content"])
         role = body.get("role", "assistant")
         invocation.output_messages = [
             OutputMessage(
@@ -736,14 +705,7 @@ def extract_invoke_model_response(
     ):
         msg = body["output"]["message"]
         role = msg.get("role", "assistant")
-        content = msg.get("content")
-        nova_parts: list[MessagePart] = []
-        if _is_list(content):
-            for block in content:
-                if _is_dict(block):
-                    part = extract_content_block(block)
-                    if part is not None:
-                        nova_parts.append(part)
+        nova_parts = _extract_parts(msg.get("content"))
         invocation.output_messages = [
             OutputMessage(
                 role=role,
