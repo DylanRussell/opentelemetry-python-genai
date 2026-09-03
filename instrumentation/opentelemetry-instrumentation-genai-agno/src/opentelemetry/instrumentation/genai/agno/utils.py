@@ -37,12 +37,12 @@ class _DictDump(Protocol):
 
 
 def _json_default(obj: object) -> object:
-    if isinstance(obj, _ModelDump):
+    if isinstance(obj, _ModelDump) and not isinstance(obj, type):
         try:
             return obj.model_dump()
         except Exception:
             pass
-    if isinstance(obj, _DictDump):
+    if isinstance(obj, _DictDump) and not isinstance(obj, type):
         try:
             return obj.dict()
         except Exception:
@@ -61,24 +61,24 @@ def format_content(val: object) -> str:
         return ""
     if isinstance(val, str):
         return val
-    if isinstance(val, _ModelDumpJson):
+    if isinstance(val, _ModelDumpJson) and not isinstance(val, type):
         try:
             return str(val.model_dump_json())
         except Exception:
             pass
-    if isinstance(val, _JsonDump):
+    if isinstance(val, _JsonDump) and not isinstance(val, type):
         try:
             return str(val.json())
         except Exception:
             pass
-    if isinstance(val, _ModelDump):
+    if isinstance(val, _ModelDump) and not isinstance(val, type):
         try:
             return json.dumps(
                 val.model_dump(), ensure_ascii=False, default=_json_default
             )
         except Exception:
             pass
-    if isinstance(val, _DictDump):
+    if isinstance(val, _DictDump) and not isinstance(val, type):
         try:
             return json.dumps(
                 val.dict(), ensure_ascii=False, default=_json_default

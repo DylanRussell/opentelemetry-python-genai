@@ -567,6 +567,7 @@ def test_format_content_structured_types() -> None:
     assert json.loads(format_content([MockV1Model("v1_list")])) == [
         {"key": "v1_list"}
     ]
+    assert format_content(MockV1Model) == str(MockV1Model)
 
 
 def test_set_invocation_output_pydantic_structured_content(
