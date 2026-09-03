@@ -31,10 +31,20 @@ class _ModelDump(Protocol):
     def model_dump(self) -> Any: ...
 
 
+@runtime_checkable
+class _DictDump(Protocol):
+    def dict(self) -> Any: ...
+
+
 def _json_default(obj: object) -> object:
     if isinstance(obj, _ModelDump):
         try:
             return obj.model_dump()
+        except Exception:
+            pass
+    if isinstance(obj, _DictDump):
+        try:
+            return obj.dict()
         except Exception:
             pass
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
@@ -59,6 +69,20 @@ def format_content(val: object) -> str:
     if isinstance(val, _JsonDump):
         try:
             return str(val.json())
+        except Exception:
+            pass
+    if isinstance(val, _ModelDump):
+        try:
+            return json.dumps(
+                val.model_dump(), ensure_ascii=False, default=_json_default
+            )
+        except Exception:
+            pass
+    if isinstance(val, _DictDump):
+        try:
+            return json.dumps(
+                val.dict(), ensure_ascii=False, default=_json_default
+            )
         except Exception:
             pass
     if dataclasses.is_dataclass(val) and not isinstance(val, type):

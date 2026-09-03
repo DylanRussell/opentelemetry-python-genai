@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -551,6 +552,21 @@ def test_format_content_structured_types() -> None:
     assert json.loads(
         format_content({"nested": MyModel(name="sub", count=1)})
     ) == {"nested": {"name": "sub", "count": 1}}
+
+    class MockV1Model:
+        def __init__(self, key: str) -> None:
+            self.key = key
+
+        def dict(self) -> dict[str, Any]:
+            return {"key": self.key}
+
+    assert json.loads(format_content(MockV1Model("v1"))) == {"key": "v1"}
+    assert json.loads(
+        format_content({"nested_v1": MockV1Model("v1_nested")})
+    ) == {"nested_v1": {"key": "v1_nested"}}
+    assert json.loads(format_content([MockV1Model("v1_list")])) == [
+        {"key": "v1_list"}
+    ]
 
 
 def test_set_invocation_output_pydantic_structured_content(
