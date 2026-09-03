@@ -11,6 +11,7 @@ from copy import copy, deepcopy
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
+import dspy
 from wrapt import (
     BoundFunctionWrapper,
     FunctionWrapper,
@@ -165,7 +166,6 @@ def _wrap_function(
 
 def patch_dspy(handler: TelemetryHandler) -> None:
     """Apply patches to DSPy Tool, ReAct, and Retrieve classes."""
-    import dspy
     import dspy.predict.react
 
     tool_module = dspy.Tool.__module__
@@ -232,7 +232,6 @@ def patch_dspy(handler: TelemetryHandler) -> None:
 
 def unpatch_dspy() -> None:
     """Remove patches from DSPy classes."""
-    import dspy
     import dspy.predict.react
 
     unwrap(dspy.Tool, "__call__")
@@ -455,8 +454,6 @@ def _start_retrieval_invocation(
 ) -> RetrievalInvocation:
     rm: Any = getattr(instance, "rm", None)
     if rm is None:
-        import dspy
-
         rm = getattr(dspy.settings, "rm", None)
 
     data_source_id: str | None = (
