@@ -29,6 +29,39 @@ from .extractors import (
 )
 
 
+def _build_stream_parts(
+    all_indices: list[int],
+    text_blocks: dict[int, str],
+    reasoning_blocks: dict[int, str],
+    tool_blocks: dict[int, dict[str, Any]],
+) -> list[MessagePart]:
+    parts: list[MessagePart] = []
+    for idx in sorted(all_indices):
+        if idx in reasoning_blocks:
+            parts.append(ReasoningPart(content=reasoning_blocks[idx]))
+        if idx in text_blocks:
+            parts.append(TextPart(content=text_blocks[idx]))
+        if idx in tool_blocks:
+            tool_info = tool_blocks[idx]
+            raw_input = "".join(tool_info.get("input_chunks", []))
+            args: object
+            if raw_input:
+                try:
+                    args = json.loads(raw_input)
+                except Exception:
+                    args = raw_input
+            else:
+                args = {}
+            parts.append(
+                ToolCallRequestPart(
+                    id=tool_info.get("id") or tool_info.get("toolUseId"),
+                    name=tool_info.get("name", ""),
+                    arguments=args,
+                )
+            )
+    return parts
+
+
 class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
     """Wrapper for Bedrock converse_stream EventStream."""
 
@@ -126,33 +159,12 @@ class BedrockConverseStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
             self._self_invocation.finish_reasons = [finish_reason]
 
         if self._self_capture_content:
-            parts: list[MessagePart] = []
-            for idx in sorted(self._self_all_block_indices):
-                if idx in self._self_text_blocks:
-                    parts.append(TextPart(content=self._self_text_blocks[idx]))
-                elif idx in self._self_reasoning_blocks:
-                    parts.append(
-                        ReasoningPart(content=self._self_reasoning_blocks[idx])
-                    )
-                elif idx in self._self_tool_blocks:
-                    tool_info = self._self_tool_blocks[idx]
-                    input_chunks = tool_info["input_chunks"]
-                    raw_input = "".join(input_chunks)
-                    args: object
-                    if raw_input:
-                        try:
-                            args = json.loads(raw_input)
-                        except Exception:
-                            args = raw_input
-                    else:
-                        args = {}
-                    parts.append(
-                        ToolCallRequestPart(
-                            id=tool_info["toolUseId"],
-                            name=tool_info["name"],
-                            arguments=args,
-                        )
-                    )
+            parts = _build_stream_parts(
+                self._self_all_block_indices,
+                self._self_text_blocks,
+                self._self_reasoning_blocks,
+                self._self_tool_blocks,
+            )
 
             if parts or finish_reason:
                 self._self_invocation.output_messages = [
@@ -391,40 +403,16 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         if self._self_capture_content:
             parts: list[MessagePart] = []
             if self._self_all_block_indices:
-                for idx in sorted(self._self_all_block_indices):
-                    if idx in self._self_reasoning_blocks:
-                        parts.append(
-                            ReasoningPart(
-                                content=self._self_reasoning_blocks[idx]
-                            )
-                        )
-                    if idx in self._self_text_blocks:
-                        parts.append(
-                            TextPart(content=self._self_text_blocks[idx])
-                        )
-                    if idx in self._self_tool_blocks:
-                        tool_info = self._self_tool_blocks[idx]
-                        raw_input = "".join(tool_info["input_chunks"])
-                        args: object
-                        if raw_input:
-                            try:
-                                args = json.loads(raw_input)
-                            except Exception:
-                                args = raw_input
-                        else:
-                            args = {}
-                        parts.append(
-                            ToolCallRequestPart(
-                                id=tool_info.get("id"),
-                                name=tool_info.get("name", ""),
-                                arguments=args,
-                            )
-                        )
-            else:
-                if self._self_accumulated_text:
-                    parts.append(
-                        TextPart(content="".join(self._self_accumulated_text))
-                    )
+                parts = _build_stream_parts(
+                    self._self_all_block_indices,
+                    self._self_text_blocks,
+                    self._self_reasoning_blocks,
+                    self._self_tool_blocks,
+                )
+            elif self._self_accumulated_text:
+                parts.append(
+                    TextPart(content="".join(self._self_accumulated_text))
+                )
 
             if parts or finish_reason:
                 self._self_invocation.output_messages = [

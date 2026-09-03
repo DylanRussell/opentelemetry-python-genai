@@ -240,6 +240,18 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
     return None
 
 
+def _extract_guardrail_id(
+    params: dict[str, Any], invocation: InferenceInvocation
+) -> None:
+    guardrail_id = params.get("guardrailIdentifier")
+    if not guardrail_id and _is_dict(params.get("guardrailConfig")):
+        guardrail_id = params["guardrailConfig"].get("guardrailIdentifier")
+    if guardrail_id:
+        invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = str(
+            guardrail_id
+        )
+
+
 def extract_converse_request(
     kwargs: dict[str, Any],
     invocation: InferenceInvocation,
@@ -273,13 +285,7 @@ def extract_converse_request(
             invocation.seed = add_fields.get("seed")
 
     # Guardrail identifier
-    guardrail_config = kwargs.get("guardrailConfig")
-    if _is_dict(guardrail_config):
-        guardrail_id = guardrail_config.get("guardrailIdentifier")
-        if guardrail_id:
-            invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = (
-                str(guardrail_id)
-            )
+    _extract_guardrail_id(kwargs, invocation)
 
     # Output format
     output_config = kwargs.get("outputConfig")
@@ -428,13 +434,7 @@ def extract_invoke_model_request(
     capture_content: bool = True,
 ) -> None:
     """Populate request attributes from InvokeModel api_params onto the invocation."""
-    guardrail_id = api_params.get("guardrailIdentifier")
-    if not guardrail_id and _is_dict(api_params.get("guardrailConfig")):
-        guardrail_id = api_params["guardrailConfig"].get("guardrailIdentifier")
-    if guardrail_id:
-        invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = str(
-            guardrail_id
-        )
+    _extract_guardrail_id(api_params, invocation)
 
     body = _parse_body(api_params.get("body"))
     if not _is_dict(body):
