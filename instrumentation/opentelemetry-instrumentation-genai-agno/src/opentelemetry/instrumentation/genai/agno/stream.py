@@ -15,7 +15,10 @@ from opentelemetry.util.genai.invocation import (
     AgentInvocation,
     WorkflowInvocation,
 )
-from opentelemetry.util.genai.stream import AsyncStreamWrapper, SyncStreamWrapper
+from opentelemetry.util.genai.stream import (
+    AsyncStreamWrapper,
+    SyncStreamWrapper,
+)
 from opentelemetry.util.genai.types import (
     OutputMessage,
     TextPart,
@@ -62,15 +65,11 @@ class _AgentStreamMixin:
 
         event_name = str(getattr(chunk, "event", ""))
         chunk_type = type(chunk).__name__
-        is_completed = (
-            "completed" in event_name.lower()
-            or chunk_type
-            in (
-                "RunOutput",
-                "TeamRunOutput",
-                "RunCompletedEvent",
-                "TeamRunCompletedEvent",
-            )
+        is_completed = "completed" in event_name.lower() or chunk_type in (
+            "RunOutput",
+            "TeamRunOutput",
+            "RunCompletedEvent",
+            "TeamRunCompletedEvent",
         )
         is_error = (
             "error" in event_name.lower() or "error" in chunk_type.lower()
@@ -166,9 +165,9 @@ class _WorkflowStreamMixin:
 
         event_name = str(getattr(chunk, "event", ""))
         chunk_type = type(chunk).__name__
-        is_completed = (
-            "completed" in event_name.lower()
-            or chunk_type in ("WorkflowRunOutput", "WorkflowCompletedEvent")
+        is_completed = "completed" in event_name.lower() or chunk_type in (
+            "WorkflowRunOutput",
+            "WorkflowCompletedEvent",
         )
         is_error = (
             "error" in event_name.lower() or "error" in chunk_type.lower()

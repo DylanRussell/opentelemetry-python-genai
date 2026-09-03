@@ -44,9 +44,7 @@ def test_agent_run_stream_spans(
     span_exporter,
 ) -> None:
     """Test that Agent.run with stream=True emits an invoke_agent span."""
-    agent = Agent(
-        name="test-stream-agent", model=MockModel(id="mock-model")
-    )
+    agent = Agent(name="test-stream-agent", model=MockModel(id="mock-model"))
 
     def fake_stream(*args, **kwargs):
         yield ModelResponse(content="chunk 1 ")
@@ -490,9 +488,7 @@ def test_workflow_run_stream_error_mid_iteration(
     workflow = Workflow(name="test-stream-wf-error", steps=[])
 
     with (
-        patch.object(
-            Workflow, "_execute_stream", side_effect=failing_stream
-        ),
+        patch.object(Workflow, "_execute_stream", side_effect=failing_stream),
         pytest.raises(ConnectionError, match="wf step connection dropped"),
     ):
         list(workflow.run("test input", stream=True))
@@ -604,7 +600,9 @@ def test_workflow_arun_stream_error_mid_iteration(
             patch.object(
                 Workflow, "_aexecute_stream", side_effect=failing_astream
             ),
-            pytest.raises(ConnectionError, match="async wf connection dropped"),
+            pytest.raises(
+                ConnectionError, match="async wf connection dropped"
+            ),
         ):
             stream = workflow.arun("test input", stream=True)
             if inspect.isawaitable(stream):
@@ -629,6 +627,7 @@ def test_agent_run_stream_structured_pydantic_output(
     """Test that Agent.run with stream=True serializes Pydantic model chunk content as JSON."""
     import json
     from dataclasses import dataclass
+
     from pydantic import BaseModel
 
     class MovieOutput(BaseModel):
@@ -667,4 +666,3 @@ def test_agent_run_stream_structured_pydantic_output(
         "title": "Inception",
         "year": 2010,
     }
-
