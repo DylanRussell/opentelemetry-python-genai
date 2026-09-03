@@ -197,7 +197,6 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
         self._self_cache_read_input_tokens: int | None = None
         self._self_cache_creation_input_tokens: int | None = None
         self._self_accumulated_text: list[str] = []
-        self._self_accumulated_reasoning: list[str] = []
         self._self_text_blocks: dict[int, str] = {}
         self._self_reasoning_blocks: dict[int, str] = {}
         self._self_tool_blocks: dict[int, dict[str, Any]] = {}
@@ -422,12 +421,6 @@ class BedrockInvokeModelStreamWrapper(SyncStreamWrapper[dict[str, Any]]):
                             )
                         )
             else:
-                if self._self_accumulated_reasoning:
-                    parts.append(
-                        ReasoningPart(
-                            content="".join(self._self_accumulated_reasoning)
-                        )
-                    )
                 if self._self_accumulated_text:
                     parts.append(
                         TextPart(content="".join(self._self_accumulated_text))
