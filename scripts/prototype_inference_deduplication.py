@@ -17,43 +17,56 @@ OpenTelemetry context:
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Add google-genai test utilities for mocking responses without real network calls
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(
     0,
-    str(REPO_ROOT / "instrumentation" / "opentelemetry-instrumentation-google-genai"),
+    str(
+        REPO_ROOT
+        / "instrumentation"
+        / "opentelemetry-instrumentation-google-genai"
+    ),
 )
 
-import google.genai  # noqa: E402
-from google.genai.models import Models  # noqa: E402
-from tests.generate_content.util import convert_to_response, create_response  # noqa: E402
+import google.genai
+from google.genai.models import Models
+from tests.generate_content.util import (
+    convert_to_response,
+    create_response,
+)
 
-from opentelemetry.instrumentation.google_genai import GoogleGenAiSdkInstrumentor  # noqa: E402
-from opentelemetry.sdk._logs import LoggerProvider  # noqa: E402
-from opentelemetry.sdk._logs.export import (  # noqa: E402
+from opentelemetry.instrumentation.google_genai import (
+    GoogleGenAiSdkInstrumentor,
+)
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
     SimpleLogRecordProcessor,
 )
-from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E402
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
-from opentelemetry.semconv.attributes import server_attributes  # noqa: E402
-from opentelemetry.util.genai import (  # noqa: E402
+from opentelemetry.semconv.attributes import server_attributes
+from opentelemetry.util.genai import (
     get_current_inference_event,
     get_current_inference_span,
 )
-from opentelemetry.util.genai.handler import TelemetryHandler  # noqa: E402
+from opentelemetry.util.genai.handler import TelemetryHandler
 
 
 def main() -> None:
-    print("===================================================================")
+    print(
+        "==================================================================="
+    )
     print("PROTOTYPING INFERENCE SPAN & EVENT DEDUPLICATION (PR #475)")
-    print("===================================================================\n")
+    print(
+        "===================================================================\n"
+    )
 
     # 1. Enable GenAI event emission
     os.environ["OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT"] = "true"
@@ -101,8 +114,12 @@ def main() -> None:
             active_event = get_current_inference_event()
             assert active_event is not None
             print(f"  -> Active inference span in context: {active_span}")
-            print(f"  -> Active inference event in context: {active_event.event_name}")
-            print(f"  -> Initial event attributes: {dict(active_event.attributes or {})}")
+            print(
+                f"  -> Active inference event in context: {active_event.event_name}"
+            )
+            print(
+                f"  -> Initial event attributes: {dict(active_event.attributes or {})}"
+            )
 
             print("\n[Step 2] Downstream Google GenAI client is invoked...")
             response = client.models.generate_content(
@@ -114,28 +131,46 @@ def main() -> None:
                 f"  -> Event attributes after Google GenAI execution: {dict(active_event.attributes or {})}"
             )
 
-        print("\n[Step 3] Upstream invocation ended. Checking exported telemetry...")
+        print(
+            "\n[Step 3] Upstream invocation ended. Checking exported telemetry..."
+        )
         finished_spans = span_exporter.get_finished_spans()
         finished_logs = log_exporter.get_finished_logs()
 
         print(f"\nFinished spans count: {len(finished_spans)}")
         for i, span in enumerate(finished_spans, 1):
             print(f"  Span #{i}: '{span.name}'")
-            print(f"    gen_ai.provider.name:               {span.attributes.get('gen_ai.provider.name')}")
-            print(f"    server.address:                     {span.attributes.get(server_attributes.SERVER_ADDRESS)}")
-            print(f"    google_genai.inference_suppressed:  {span.attributes.get('google_genai.inference_suppressed')}")
+            print(
+                f"    gen_ai.provider.name:               {span.attributes.get('gen_ai.provider.name')}"
+            )
+            print(
+                f"    server.address:                     {span.attributes.get(server_attributes.SERVER_ADDRESS)}"
+            )
+            print(
+                f"    google_genai.inference_suppressed:  {span.attributes.get('google_genai.inference_suppressed')}"
+            )
 
         print(f"\nFinished log events count: {len(finished_logs)}")
         for i, log in enumerate(finished_logs, 1):
             record = log.log_record
             print(f"  Event #{i}: '{record.event_name}'")
-            print(f"    gen_ai.provider.name:               {record.attributes.get('gen_ai.provider.name')}")
-            print(f"    server.address:                     {record.attributes.get(server_attributes.SERVER_ADDRESS)}")
-            print(f"    google_genai.inference_suppressed:  {record.attributes.get('google_genai.inference_suppressed')}")
+            print(
+                f"    gen_ai.provider.name:               {record.attributes.get('gen_ai.provider.name')}"
+            )
+            print(
+                f"    server.address:                     {record.attributes.get(server_attributes.SERVER_ADDRESS)}"
+            )
+            print(
+                f"    google_genai.inference_suppressed:  {record.attributes.get('google_genai.inference_suppressed')}"
+            )
 
         # 5. Assertions
-        assert len(finished_spans) == 1, f"Expected 1 span, got {len(finished_spans)}"
-        assert len(finished_logs) == 1, f"Expected 1 event, got {len(finished_logs)}"
+        assert len(finished_spans) == 1, (
+            f"Expected 1 span, got {len(finished_spans)}"
+        )
+        assert len(finished_logs) == 1, (
+            f"Expected 1 event, got {len(finished_logs)}"
+        )
 
         span = finished_spans[0]
         event = finished_logs[0].log_record
@@ -143,19 +178,39 @@ def main() -> None:
         assert span.attributes is not None
         assert event.attributes is not None
 
-        assert span.attributes.get(server_attributes.SERVER_ADDRESS) == "generativelanguage.googleapis.com"
-        assert event.attributes.get(server_attributes.SERVER_ADDRESS) == "generativelanguage.googleapis.com"
-        assert span.attributes.get("gen_ai.provider.name") == "upstream-agent-framework"
-        assert event.attributes.get("gen_ai.provider.name") == "upstream-agent-framework"
+        assert (
+            span.attributes.get(server_attributes.SERVER_ADDRESS)
+            == "generativelanguage.googleapis.com"
+        )
+        assert (
+            event.attributes.get(server_attributes.SERVER_ADDRESS)
+            == "generativelanguage.googleapis.com"
+        )
+        assert (
+            span.attributes.get("gen_ai.provider.name")
+            == "upstream-agent-framework"
+        )
+        assert (
+            event.attributes.get("gen_ai.provider.name")
+            == "upstream-agent-framework"
+        )
         assert span.attributes.get("google_genai.inference_suppressed") is True
-        assert event.attributes.get("google_genai.inference_suppressed") is True
+        assert (
+            event.attributes.get("google_genai.inference_suppressed") is True
+        )
 
-        print("\n===================================================================")
+        print(
+            "\n==================================================================="
+        )
         print("SUCCESS: Exactly 1 span and 1 event recorded!")
-        print("Both enriched with 'server.address = generativelanguage.googleapis.com'")
+        print(
+            "Both enriched with 'server.address = generativelanguage.googleapis.com'"
+        )
         print("Both enriched with 'google_genai.inference_suppressed = True'")
         print("Duplicate inference telemetry was successfully suppressed.")
-        print("===================================================================")
+        print(
+            "==================================================================="
+        )
 
     finally:
         Models.generate_content = original_generate_content

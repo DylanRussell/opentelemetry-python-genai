@@ -653,9 +653,9 @@ def _create_instrumented_generate_content_stream(
             )
             if invocation.already_started:
                 # Example attribute to show that setting/overwriting attributes on an existing invocation works.
-                invocation.attributes[
-                    "google_genai.inference_suppressed"
-                ] = True
+                invocation.attributes["google_genai.inference_suppressed"] = (
+                    True
+                )
                 invocation.stop()
                 return wrapped(
                     model=model,
@@ -833,9 +833,9 @@ def _create_instrumented_async_generate_content_stream(  # type: ignore
             )
             if invocation.already_started:
                 # Example attribute to show that setting/overwriting attributes on an existing invocation works.
-                invocation.attributes[
-                    "google_genai.inference_suppressed"
-                ] = True
+                invocation.attributes["google_genai.inference_suppressed"] = (
+                    True
+                )
                 invocation.stop()
                 return await wrapped(
                     model=model,

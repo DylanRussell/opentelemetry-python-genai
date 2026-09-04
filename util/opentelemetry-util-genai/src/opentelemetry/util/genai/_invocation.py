@@ -115,9 +115,8 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         """True if an invocation was already started in the current context."""
         return self._already_started
 
-    def _create_context(self, context: Context) -> Context:
-        """Hook for subclasses to populate additional context values before attach."""
-        return context
+    def _init_event_log_record(self, context: Context) -> None:
+        """Hook for subclasses to initialize an event LogRecord before context attach."""
 
     def _enrich_reused_span(self) -> None:
         """Hook for subclasses to enrich a reused span or event when already_started is True."""
@@ -167,16 +166,17 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         ctx = set_span_in_context(self.span)
         if self._context_span_key is not None:
             ctx = set_value(self._context_span_key, self.span, context=ctx)
-        self._span_context = self._create_context(ctx)
+        self._init_event_log_record(ctx)
         if (
             self._context_event_key is not None
             and self._event_log_record is not None
         ):
-            self._span_context = set_value(
+            ctx = set_value(
                 self._context_event_key,
                 self._event_log_record,
-                context=self._span_context,
+                context=ctx,
             )
+        self._span_context = ctx
         self._monotonic_start_s = timeit.default_timer()
         self._context_token = attach(self._span_context)
 

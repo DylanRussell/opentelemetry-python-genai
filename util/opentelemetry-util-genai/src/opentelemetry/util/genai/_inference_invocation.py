@@ -129,14 +129,13 @@ class InferenceInvocation(GenAIInvocation):
                 current_attrs.update(enrich_attrs)
                 self._event_log_record.attributes = current_attrs
 
-    def _create_context(self, context: Context) -> Context:
+    def _init_event_log_record(self, context: Context) -> None:
         if should_emit_event():
             self._event_log_record = LogRecord(
                 event_name="gen_ai.client.inference.operation.details",
                 attributes=dict(self._get_start_attributes()),
                 context=context,
             )
-        return context
 
     @property
     def response_model_name(self) -> str | None:

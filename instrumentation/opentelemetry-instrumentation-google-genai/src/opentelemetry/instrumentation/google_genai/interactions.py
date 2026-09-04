@@ -443,7 +443,7 @@ def _create_instrumented_interactions_create(
         )
         if invocation.already_started:
             # Example attribute to show that setting/overwriting attributes on an existing invocation works.
-            invocation.set_attribute("google_genai.inference_suppressed", True)
+            invocation.attributes["google_genai.inference_suppressed"] = True
             invocation.stop()
             return wrapped(*args, **kwargs)
 
@@ -489,7 +489,7 @@ def _create_instrumented_async_interactions_create(
         )
         if invocation.already_started:
             # Example attribute to show that setting/overwriting attributes on an existing invocation works.
-            invocation.set_attribute("google_genai.inference_suppressed", True)
+            invocation.attributes["google_genai.inference_suppressed"] = True
             invocation.stop()
             return await wrapped(*args, **kwargs)
 
