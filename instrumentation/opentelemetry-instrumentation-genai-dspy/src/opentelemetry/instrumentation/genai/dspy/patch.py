@@ -70,20 +70,21 @@ def patch_dspy(handler: TelemetryHandler) -> None:
         _react_aforward(handler, "dspy.ReAct"),
     )
 
-    wrap_function_wrapper(
-        _REACT_V2_MODULE,
-        f"{_REACT_V2_CLASS}.forward",
-        _react_forward(handler, "dspy.ReActV2"),
-    )
     react_v2_cls = getattr(
         sys.modules.get(_REACT_V2_MODULE), _REACT_V2_CLASS, None
     )
-    if react_v2_cls is not None and hasattr(react_v2_cls, "aforward"):
+    if react_v2_cls is not None:
         wrap_function_wrapper(
             _REACT_V2_MODULE,
-            f"{_REACT_V2_CLASS}.aforward",
-            _react_aforward(handler, "dspy.ReActV2"),
+            f"{_REACT_V2_CLASS}.forward",
+            _react_forward(handler, "dspy.ReActV2"),
         )
+        if hasattr(react_v2_cls, "aforward"):
+            wrap_function_wrapper(
+                _REACT_V2_MODULE,
+                f"{_REACT_V2_CLASS}.aforward",
+                _react_aforward(handler, "dspy.ReActV2"),
+            )
 
 
 def unpatch_dspy() -> None:
@@ -97,8 +98,12 @@ def unpatch_dspy() -> None:
     unwrap(dspy.predict.react.ReAct, "forward")
     unwrap(dspy.predict.react.ReAct, "aforward")
 
-    unwrap(f"{_REACT_V2_MODULE}.{_REACT_V2_CLASS}", "forward")
-    unwrap(f"{_REACT_V2_MODULE}.{_REACT_V2_CLASS}", "aforward")
+    react_v2_cls = getattr(
+        sys.modules.get(_REACT_V2_MODULE), _REACT_V2_CLASS, None
+    )
+    if react_v2_cls is not None:
+        unwrap(react_v2_cls, "forward")
+        unwrap(react_v2_cls, "aforward")
 
 
 def _extract_tool_arguments(

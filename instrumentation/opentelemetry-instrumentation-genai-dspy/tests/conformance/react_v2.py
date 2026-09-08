@@ -9,6 +9,7 @@ from typing import Any
 
 import dspy
 from dspy.adapters.types.tool import ToolCalls
+
 from opentelemetry.instrumentation.genai.dspy import DSPyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider

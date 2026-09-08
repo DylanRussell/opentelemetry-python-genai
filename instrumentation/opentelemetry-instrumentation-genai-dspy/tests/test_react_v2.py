@@ -182,3 +182,58 @@ def test_react_v2_error_handling(
     assert span.status.status_code == StatusCode.ERROR
     attrs = span.attributes or {}
     assert attrs.get(error_attributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_react_v2_missing_tolerated(
+    monkeypatch: pytest.MonkeyPatch,
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    import dspy.predict.react_v2
+
+    monkeypatch.delattr(dspy.predict.react_v2, "ReActV2", raising=False)
+
+    class MockSyncPredict:
+        def __init__(self) -> None:
+            self.count = 0
+
+        def __call__(self, **kwargs: object) -> object:
+            self.count += 1
+
+            class Pred:
+                next_thought = "Need to add 2 and 2"
+                next_tool_name = "add"
+                next_tool_args = {"x": 2, "y": 2}
+
+            class FinishPred:
+                next_thought = "Done calculation"
+                next_tool_name = "finish"
+                next_tool_args = {}
+
+            return Pred() if self.count == 1 else FinishPred()
+
+    class MockExtract:
+        def __call__(self, **kwargs: object) -> dict[str, str]:
+            return {"answer": "4"}
+
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+        content_capture="SPAN_ONLY",
+    ):
+        tool = dspy.Tool(add, name="add", desc="Add two numbers.")
+        react = dspy.ReAct("question -> answer", tools=[tool])
+        react.react = MockSyncPredict()
+        react.extract = MockExtract()
+
+        res = react(question="What is 2 + 2?")
+        assert res.answer == "4"
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+    assert any(s.name == "invoke_agent dspy.ReAct" for s in spans)
+    assert any(s.name == "execute_tool add" for s in spans)

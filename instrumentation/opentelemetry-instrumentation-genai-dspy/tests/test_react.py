@@ -262,3 +262,40 @@ def test_react_error_handling(
     assert span.status.status_code == StatusCode.ERROR
     attrs = span.attributes or {}
     assert attrs.get(error_attributes.ERROR_TYPE) == "RuntimeError"
+
+
+@pytest.mark.anyio
+async def test_react_async_error_handling(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+        content_capture="SPAN_ONLY",
+    ):
+        tool = dspy.Tool(
+            async_multiply, name="multiply", desc="Multiply numbers."
+        )
+        react = dspy.ReAct("question -> answer", tools=[tool])
+
+        class FailingAsyncPredict:
+            async def acall(self, **kwargs: object) -> object:
+                raise RuntimeError("Async predict model failure")
+
+        react.react = FailingAsyncPredict()
+
+        with pytest.raises(RuntimeError, match="Async predict model failure"):
+            await react.aforward(question="What is 3 * 5?")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_agent dspy.ReAct"
+    assert span.status.status_code == StatusCode.ERROR
+    attrs = span.attributes or {}
+    assert attrs.get(error_attributes.ERROR_TYPE) == "RuntimeError"
