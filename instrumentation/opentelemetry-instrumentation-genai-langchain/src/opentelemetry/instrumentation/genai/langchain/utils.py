@@ -101,6 +101,11 @@ def _normalize_role(message: BaseMessage) -> str | None:
     return None
 
 
+def _message_name(message: BaseMessage) -> str | None:
+    name = getattr(message, "name", None)
+    return str(name) if name is not None else None
+
+
 def _blob_from_base64(data: Any, mime_type: Any) -> MessagePart | None:
     if not isinstance(data, str):
         return None
@@ -356,43 +361,10 @@ def to_input_messages(
             InputMessage(
                 role=_normalize_role(message) or Role.USER.value,
                 parts=parts,
+                name=_message_name(message),
             )
         )
     return result
-
-
-def split_system_and_input_messages(
-    messages: Iterable[Any],
-) -> tuple[list[MessagePart], list[InputMessage]]:
-    """Split ``messages`` into ``system_instruction`` parts and ``InputMessage`` s.
-
-    Called only when content capture is enabled
-    (``TelemetryHandler.should_capture_content()``).
-    """
-    materialized = list(messages)
-    try:
-        normalized: Iterable[BaseMessage] = convert_to_messages(materialized)
-    except Exception:  # pylint: disable=broad-except
-        normalized = [m for m in materialized if isinstance(m, BaseMessage)]
-
-    system_parts: list[MessagePart] = []
-    input_messages: list[InputMessage] = []
-
-    for message in normalized:
-        if isinstance(message, SystemMessage):
-            system_parts.extend(_content_to_parts(message.content))
-        else:
-            parts = _message_parts(message)
-            if not parts and not _has_content(message):
-                continue
-            input_messages.append(
-                InputMessage(
-                    role=_normalize_role(message) or Role.USER.value,
-                    parts=parts,
-                )
-            )
-
-    return system_parts, input_messages
 
 
 def to_output_messages(
@@ -422,6 +394,7 @@ def to_output_messages(
                 role=_normalize_role(message) or Role.ASSISTANT.value,
                 parts=parts,
                 finish_reason=finish_reason,
+                name=_message_name(message),
             )
         )
     return result
