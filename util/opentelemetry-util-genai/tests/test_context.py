@@ -19,7 +19,10 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
-from opentelemetry.semconv.attributes import error_attributes, server_attributes
+from opentelemetry.semconv.attributes import (
+    error_attributes,
+    server_attributes,
+)
 from opentelemetry.test.test_base import TestBase
 from opentelemetry.util.genai import (
     INFERENCE_ATTRIBUTES_KEY,
@@ -52,7 +55,8 @@ class TestInferenceContext(TestBase):
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
-            INFERENCE_ATTRIBUTES_KEY, "opentelemetry.genai.inference_attributes"
+            INFERENCE_ATTRIBUTES_KEY,
+            "opentelemetry.genai.inference_attributes",
         )
 
     def test_get_inference_attributes_none_by_default(self) -> None:
@@ -187,22 +191,14 @@ class TestInferenceContext(TestBase):
                     attrs.get(server_attributes.SERVER_ADDRESS),
                     "api.openai.com",
                 )
-                self.assertEqual(
-                    attrs.get(server_attributes.SERVER_PORT), 443
-                )
+                self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 443)
                 self.assertEqual(
                     attrs.get("gen_ai.response.model"),
                     "gpt-4o-2024-08-06",
                 )
-                self.assertEqual(
-                    attrs.get("gen_ai.usage.input_tokens"), 15
-                )
-                self.assertEqual(
-                    attrs.get("gen_ai.usage.output_tokens"), 25
-                )
-                self.assertEqual(
-                    attrs.get("custom.downstream"), "enriched"
-                )
+                self.assertEqual(attrs.get("gen_ai.usage.input_tokens"), 15)
+                self.assertEqual(attrs.get("gen_ai.usage.output_tokens"), 25)
+                self.assertEqual(attrs.get("custom.downstream"), "enriched")
 
                 # After nested exit, span is NOT ended yet (still recording)
                 self.assertTrue(root_inv.span.is_recording())
@@ -319,7 +315,9 @@ class TestInferenceContext(TestBase):
         self.assertEqual(len(spans), 1)
 
     def test_llm_invocation_already_started(self) -> None:
-        from opentelemetry.util.genai._inference_invocation import LLMInvocation
+        from opentelemetry.util.genai._inference_invocation import (
+            LLMInvocation,
+        )
 
         inv = LLMInvocation(request_model="test")
         self.assertFalse(inv.already_started)
