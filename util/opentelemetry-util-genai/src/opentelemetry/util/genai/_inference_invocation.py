@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from opentelemetry._logs import Logger, LogRecord
+from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -17,6 +18,10 @@ from opentelemetry.util.genai._invocation import (
     get_content_attributes,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
+from opentelemetry.util.genai.context import (
+    get_inference_attributes,
+    set_inference_attributes,
+)
 from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
 from opentelemetry.util.genai.types import (
     ErrorTypeResolver,
@@ -105,6 +110,17 @@ class InferenceInvocation(GenAIInvocation):
         # Rebuilt once per streaming chunk, so cache it and invalidate via
         # _invalidate_metric_attributes whenever an input changes.
         self._cached_metric_attributes: dict[str, AttributeValue] | None = None
+
+        existing_attrs = get_inference_attributes()
+        if existing_attrs is not None:
+            self.already_started = True
+            self._context_attributes: dict[str, AttributeValue] = (
+                existing_attrs
+            )
+        else:
+            self.already_started = False
+            self._context_attributes = {}
+
         self._start(self._get_start_attributes())
 
     @property
@@ -193,6 +209,32 @@ class InferenceInvocation(GenAIInvocation):
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
 
+    def _create_span_context(self) -> Context:
+        ctx = super()._create_span_context()
+        return set_inference_attributes(self._context_attributes, context=ctx)
+
+    def _get_context_attributes(self) -> dict[str, AttributeValue]:
+        attrs = self._get_start_attributes()
+        attrs.update(self._get_attributes())
+        attrs.update(self.attributes)
+        # Message attributes are excluded because spans and events format
+        # content differently and evaluate capture rules independently.
+        return attrs
+
+    def publish_to_context(self) -> None:
+        """Publish the invocation's current attributes to the inference context.
+
+        Instrumentations call this on the request path when they have finished
+        setting request attributes on the invocation, certifying they are done
+        setting attributes and making them visible to downstream invocations.
+        """
+        self._context_attributes.update(self._get_context_attributes())
+
+    def _finish_already_started(self, error: Error | None = None) -> None:
+        if error is not None:
+            self._apply_error_attributes(error)
+        self._context_attributes.update(self._get_context_attributes())
+
     def _invalidate_metric_attributes(self) -> None:
         """Drop the cached metric attributes so the next read rebuilds them.
 
@@ -231,9 +273,11 @@ class InferenceInvocation(GenAIInvocation):
         if error is not None:
             self._apply_error_attributes(error)
         attributes = self._get_attributes()
+        attributes.update(self._context_attributes)
         attributes.update(self._get_message_attributes(for_span=True))
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
+        self._context_attributes.update(self._get_context_attributes())
         self._metrics_recorder.record(self)
         log_record = self._maybe_create_event()
         self._call_completion_hook(
@@ -257,6 +301,7 @@ class InferenceInvocation(GenAIInvocation):
 
         attributes = self._get_start_attributes()
         attributes.update(self._get_attributes())
+        attributes.update(self._context_attributes)
         attributes.update(self._get_message_attributes(for_span=False))
         attributes.update(self.attributes)
         return LogRecord(
@@ -376,3 +421,16 @@ class LLMInvocation:
             if self._inference_invocation is not None
             else INVALID_SPAN
         )
+
+    @property
+    def already_started(self) -> bool:
+        return (
+            self._inference_invocation.already_started
+            if self._inference_invocation is not None
+            else False
+        )
+
+    def publish_to_context(self) -> None:
+        if self._inference_invocation is not None:
+            self._sync_to_invocation()
+            self._inference_invocation.publish_to_context()
