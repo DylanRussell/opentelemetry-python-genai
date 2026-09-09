@@ -10,7 +10,10 @@ from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
-from opentelemetry.semconv.attributes import server_attributes
+from opentelemetry.semconv.attributes import (
+    error_attributes,
+    server_attributes,
+)
 from opentelemetry.trace import INVALID_SPAN, Span, SpanKind, Tracer
 from opentelemetry.util.genai._invocation import (
     Error,
@@ -36,6 +39,16 @@ from opentelemetry.util.genai.utils import (
     should_emit_event,
 )
 from opentelemetry.util.types import AttributeValue
+
+_METRIC_SEMCONV_KEYS = (
+    GenAI.GEN_AI_OPERATION_NAME,
+    GenAI.GEN_AI_PROVIDER_NAME,
+    GenAI.GEN_AI_REQUEST_MODEL,
+    GenAI.GEN_AI_RESPONSE_MODEL,
+    server_attributes.SERVER_ADDRESS,
+    server_attributes.SERVER_PORT,
+    error_attributes.ERROR_TYPE,
+)
 
 
 class InferenceInvocation(GenAIInvocation):
@@ -251,6 +264,9 @@ class InferenceInvocation(GenAIInvocation):
             if self._response_model_name is not None:
                 attrs[GenAI.GEN_AI_RESPONSE_MODEL] = self._response_model_name
             attrs.update(self.metric_attributes)
+            for key in _METRIC_SEMCONV_KEYS:
+                if key not in attrs and key in self._context_attributes:
+                    attrs[key] = self._context_attributes[key]
             self._cached_metric_attributes = attrs
         return self._cached_metric_attributes
 
@@ -261,12 +277,25 @@ class InferenceInvocation(GenAIInvocation):
 
     def _get_metric_token_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
-        if self.input_tokens is not None:
-            counts[GenAI.GenAiTokenTypeValues.INPUT.value] = self.input_tokens
-        if self.output_tokens is not None:
-            counts[GenAI.GenAiTokenTypeValues.OUTPUT.value] = (
-                self.output_tokens
+        input_tokens = self.input_tokens
+        if input_tokens is None:
+            ctx_input = self._context_attributes.get(
+                GenAI.GEN_AI_USAGE_INPUT_TOKENS
             )
+            if isinstance(ctx_input, int):
+                input_tokens = ctx_input
+        if input_tokens is not None:
+            counts[GenAI.GenAiTokenTypeValues.INPUT.value] = input_tokens
+
+        output_tokens = self.output_tokens
+        if output_tokens is None:
+            ctx_output = self._context_attributes.get(
+                GenAI.GEN_AI_USAGE_OUTPUT_TOKENS
+            )
+            if isinstance(ctx_output, int):
+                output_tokens = ctx_output
+        if output_tokens is not None:
+            counts[GenAI.GenAiTokenTypeValues.OUTPUT.value] = output_tokens
         return counts
 
     def _apply_finish(self, error: Error | None = None) -> None:
@@ -278,6 +307,7 @@ class InferenceInvocation(GenAIInvocation):
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
         self._context_attributes.update(self._get_context_attributes())
+        self._invalidate_metric_attributes()
         self._metrics_recorder.record(self)
         log_record = self._maybe_create_event()
         self._call_completion_hook(

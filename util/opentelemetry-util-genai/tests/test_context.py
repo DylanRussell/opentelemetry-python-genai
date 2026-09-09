@@ -267,6 +267,65 @@ class TestInferenceContext(TestBase):
             self.assertIn("gen_ai.client.operation.duration", metrics)
             duration_points = metrics["gen_ai.client.operation.duration"]
             self.assertEqual(len(duration_points), 1)
+            duration_point = duration_points[0]
+            self.assertEqual(
+                duration_point.attributes.get(
+                    server_attributes.SERVER_ADDRESS
+                ),
+                "api.openai.com",
+            )
+            self.assertEqual(
+                duration_point.attributes.get(server_attributes.SERVER_PORT),
+                443,
+            )
+            self.assertEqual(
+                duration_point.attributes.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                "gpt-4o-2024-08-06",
+            )
+            # High-cardinality attributes must NOT leak onto metrics
+            self.assertNotIn("custom.downstream", duration_point.attributes)
+            self.assertNotIn(
+                GenAI.GEN_AI_CONVERSATION_ID, duration_point.attributes
+            )
+
+            # Token usage metric should be enriched from context token counts
+            self.assertIn("gen_ai.client.token.usage", metrics)
+            token_points = metrics["gen_ai.client.token.usage"]
+            token_by_type = {
+                point.attributes[GenAI.GEN_AI_TOKEN_TYPE]: point
+                for point in token_points
+            }
+            self.assertEqual(len(token_by_type), 2)
+            self.assertAlmostEqual(
+                token_by_type[GenAI.GenAiTokenTypeValues.INPUT.value].sum,
+                15.0,
+                places=3,
+            )
+            self.assertAlmostEqual(
+                token_by_type[GenAI.GenAiTokenTypeValues.OUTPUT.value].sum,
+                25.0,
+                places=3,
+            )
+            input_token_point = token_by_type[
+                GenAI.GenAiTokenTypeValues.INPUT.value
+            ]
+            self.assertEqual(
+                input_token_point.attributes.get(
+                    server_attributes.SERVER_ADDRESS
+                ),
+                "api.openai.com",
+            )
+            self.assertEqual(
+                input_token_point.attributes.get(
+                    server_attributes.SERVER_PORT
+                ),
+                443,
+            )
+            self.assertEqual(
+                input_token_point.attributes.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                "gpt-4o-2024-08-06",
+            )
+            self.assertNotIn("custom.downstream", input_token_point.attributes)
 
     def test_nested_inference_invocation_does_not_end_span_on_fail(
         self,
@@ -334,3 +393,62 @@ class TestInferenceContext(TestBase):
             self.assertEqual(attrs.get("custom.llm"), "val")
             self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "nested")
             self.handler.stop_llm(nested_inv)
+
+    def test_metric_enrichment_precedence_and_error(self) -> None:
+        with self.handler.inference(
+            "proxy",
+            request_model="gpt-4o",
+            server_address="proxy.internal",
+            server_port=8080,
+        ) as root_inv:
+            root_inv.input_tokens = 10
+            with self.assertRaises(ValueError):
+                with self.handler.inference(
+                    "openai",
+                    request_model="gpt-4o",
+                    server_address="api.openai.com",
+                    server_port=443,
+                ) as inner_inv:
+                    inner_inv.input_tokens = 99
+                    inner_inv.output_tokens = 50
+                    inner_inv.response_model_name = "gpt-4o-2024-08-06"
+                    raise ValueError("network reset")
+
+        metrics = self._harvest_metrics()
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        point = duration_points[0]
+
+        # Root values take precedence over downstream context
+        self.assertEqual(
+            point.attributes.get(server_attributes.SERVER_ADDRESS),
+            "proxy.internal",
+        )
+        self.assertEqual(
+            point.attributes.get(server_attributes.SERVER_PORT), 8080
+        )
+        # Downstream fields not set on root are enriched from context
+        self.assertEqual(
+            point.attributes.get(GenAI.GEN_AI_RESPONSE_MODEL),
+            "gpt-4o-2024-08-06",
+        )
+        self.assertEqual(
+            point.attributes.get(error_attributes.ERROR_TYPE),
+            "ValueError",
+        )
+
+        # Tokens: root input_tokens (10) takes precedence, output_tokens (50) enriched from context
+        token_points = metrics["gen_ai.client.token.usage"]
+        token_by_type = {
+            p.attributes[GenAI.GEN_AI_TOKEN_TYPE]: p for p in token_points
+        }
+        self.assertAlmostEqual(
+            token_by_type[GenAI.GenAiTokenTypeValues.INPUT.value].sum,
+            10.0,
+            places=3,
+        )
+        self.assertAlmostEqual(
+            token_by_type[GenAI.GenAiTokenTypeValues.OUTPUT.value].sum,
+            50.0,
+            places=3,
+        )
