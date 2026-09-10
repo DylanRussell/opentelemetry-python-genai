@@ -23,6 +23,7 @@ from .chat_wrappers import AsyncChatStreamWrapper, ChatStreamWrapper
 from .utils import (
     _prepare_output_messages,
     create_chat_invocation,
+    get_property_value,
     get_server_address_and_port,
     get_value,
     is_streaming,
@@ -200,6 +201,13 @@ def _set_response_properties(
     if getattr(result, "usage", None):
         chat_invocation.input_tokens = result.usage.prompt_tokens
         chat_invocation.output_tokens = result.usage.completion_tokens
+        prompt_tokens_details = getattr(
+            result.usage, "prompt_tokens_details", None
+        )
+        if prompt_tokens_details is not None:
+            chat_invocation.cache_read_input_tokens = get_property_value(
+                prompt_tokens_details, "cached_tokens"
+            )
 
     if getattr(result, "system_fingerprint", None):
         chat_invocation.attributes.update(
