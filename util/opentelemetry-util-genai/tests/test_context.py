@@ -24,6 +24,7 @@ from opentelemetry.semconv.attributes import (
     server_attributes,
 )
 from opentelemetry.test.test_base import TestBase
+from opentelemetry.trace.status import StatusCode
 from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
     get_inference_attributes,
@@ -356,17 +357,44 @@ class TestInferenceContext(TestBase):
             self.assertTrue(root_inv.span.is_recording())
             self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
 
-            # Downstream error is captured in context attributes
+            # Downstream error was caught by caller, so it is NOT recorded on context
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            self.assertEqual(
-                attrs.get(error_attributes.ERROR_TYPE), "ValueError"
-            )
+            self.assertNotIn(error_attributes.ERROR_TYPE, attrs)
 
-        # After root finishes normally, 1 span is ended
+        # After root finishes normally, 1 span is ended without error attributes
         spans = self.span_exporter.get_finished_spans()
         self.assertEqual(len(spans), 1)
+        self.assertNotIn(error_attributes.ERROR_TYPE, spans[0].attributes)
+
+    def test_inner_error_caught_by_outer_does_not_fail_root(self) -> None:
+        with self.handler.inference("proxy", request_model="primary-model"):
+            try:
+                with self.handler.inference(
+                    "provider", request_model="primary-model"
+                ):
+                    raise RuntimeError("primary model failed")
+            except RuntimeError:
+                pass  # Model fallback / retry
+
+            with self.handler.inference(
+                "provider", request_model="fallback-model"
+            ) as fallback_inv:
+                fallback_inv.output_tokens = 20
+
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        root_span = spans[0]
+        self.assertNotIn(error_attributes.ERROR_TYPE, root_span.attributes)
+        self.assertNotEqual(root_span.status.status_code, StatusCode.ERROR)
+
+        metrics = self._harvest_metrics()
+        duration_points = metrics.get("gen_ai.client.operation.duration", [])
+        self.assertEqual(len(duration_points), 1)
+        self.assertNotIn(
+            error_attributes.ERROR_TYPE, duration_points[0].attributes
+        )
 
     def test_downstream_streaming_record_stream_chunk(self) -> None:
         with self.handler.inference(
@@ -403,14 +431,14 @@ class TestInferenceContext(TestBase):
             self.assertEqual(attrs.get("custom.llm"), "val")
 
     def test_metric_enrichment_precedence_and_error(self) -> None:
-        with self.handler.inference(
-            "proxy",
-            request_model="gpt-4o",
-            server_address="proxy.internal",
-            server_port=8080,
-        ) as root_inv:
-            root_inv.input_tokens = 10
-            with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError):
+            with self.handler.inference(
+                "proxy",
+                request_model="gpt-4o",
+                server_address="proxy.internal",
+                server_port=8080,
+            ) as root_inv:
+                root_inv.input_tokens = 10
                 with self.handler.inference(
                     "openai",
                     request_model="gpt-4o",

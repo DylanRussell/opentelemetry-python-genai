@@ -443,8 +443,8 @@ class InferenceInvocation(GenAIInvocation):
         return attrs
 
     def _finish_already_started(self, error: Error | None = None) -> None:
-        if error is not None:
-            self._apply_error_attributes(error)
+        # Error attributes are not recorded on inner finish to isolate errors;
+        # the outer invocation records them only if the error escapes unhandled.
         self._context_attributes.update(self._get_context_attributes())
 
     def _invalidate_metric_attributes(self) -> None:
