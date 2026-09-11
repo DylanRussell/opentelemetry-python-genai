@@ -15,16 +15,16 @@ from opentelemetry.semconv.attributes import (
     server_attributes,
 )
 from opentelemetry.trace import INVALID_SPAN, Span, SpanKind, Tracer
+from opentelemetry.util.genai._context import (
+    get_inference_attributes,
+    set_inference_attributes,
+)
 from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
     get_content_attributes,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
-from opentelemetry.util.genai.context import (
-    get_inference_attributes,
-    set_inference_attributes,
-)
 from opentelemetry.util.genai.metrics import InvocationMetricsRecorder
 from opentelemetry.util.genai.types import (
     ErrorTypeResolver,

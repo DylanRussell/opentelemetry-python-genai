@@ -24,7 +24,7 @@ from opentelemetry.semconv.attributes import (
     server_attributes,
 )
 from opentelemetry.test.test_base import TestBase
-from opentelemetry.util.genai import (
+from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
     get_inference_attributes,
     set_inference_attributes,
