@@ -103,13 +103,24 @@ class TestInferenceContext(TestBase):
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            # Attributes are not published to context until publish_to_context() is called
-            self.assertEqual(attrs, {})
-
-            invocation.publish_to_context()
+            # Start attributes are placed in context upon initialization
             self.assertEqual(attrs.get(GenAI.GEN_AI_PROVIDER_NAME), "openai")
             self.assertEqual(
                 attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "gpt-4o-mini"
+            )
+            self.assertEqual(attrs.get(GenAI.GEN_AI_OPERATION_NAME), "chat")
+
+            # Live updates when setting typed fields
+            invocation.input_tokens = 42
+            invocation.output_tokens = 84
+            invocation.temperature = 0.7
+            invocation.response_model_name = "gpt-4o-mini-2024-07-18"
+            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 42)
+            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS), 84)
+            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_TEMPERATURE), 0.7)
+            self.assertEqual(
+                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                "gpt-4o-mini-2024-07-18",
             )
 
         self.assertIsNone(get_inference_attributes())
@@ -168,7 +179,6 @@ class TestInferenceContext(TestBase):
                 "openai", request_model="gpt-4o"
             ) as root_inv:
                 self.assertFalse(root_inv.already_started)
-                root_inv.publish_to_context()
 
                 with handler.inference(
                     "openai",
@@ -177,7 +187,6 @@ class TestInferenceContext(TestBase):
                     server_port=443,
                 ) as nested_inv:
                     self.assertTrue(nested_inv.already_started)
-                    nested_inv.publish_to_context()
                     nested_inv.input_tokens = 15
                     nested_inv.output_tokens = 25
                     nested_inv.response_model_name = "gpt-4o-2024-08-06"
@@ -385,14 +394,13 @@ class TestInferenceContext(TestBase):
             nested_inv = LLMInvocation(request_model="nested")
             self.handler.start_llm(nested_inv)
             self.assertTrue(nested_inv.already_started)
-            nested_inv.attributes["custom.llm"] = "val"
-            nested_inv.publish_to_context()
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            self.assertEqual(attrs.get("custom.llm"), "val")
             self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "nested")
+            nested_inv.attributes["custom.llm"] = "val"
             self.handler.stop_llm(nested_inv)
+            self.assertEqual(attrs.get("custom.llm"), "val")
 
     def test_metric_enrichment_precedence_and_error(self) -> None:
         with self.handler.inference(
@@ -451,4 +459,106 @@ class TestInferenceContext(TestBase):
             token_by_type[GenAI.GenAiTokenTypeValues.OUTPUT.value].sum,
             50.0,
             places=3,
+        )
+
+        # Root values take precedence over downstream context on span as well
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        span_attrs = spans[0].attributes
+        self.assertEqual(
+            span_attrs.get(server_attributes.SERVER_ADDRESS), "proxy.internal"
+        )
+        self.assertEqual(span_attrs.get(server_attributes.SERVER_PORT), 8080)
+        self.assertEqual(span_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 10)
+        self.assertEqual(span_attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS), 50)
+        self.assertEqual(
+            span_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "gpt-4o-2024-08-06"
+        )
+        self.assertEqual(
+            span_attrs.get(error_attributes.ERROR_TYPE), "ValueError"
+        )
+
+    def test_root_precedence_over_nested_inference(self) -> None:
+        with self.handler.inference(
+            "proxy-provider",
+            request_model="proxy-model",
+            server_address="proxy.example.com",
+            server_port=8080,
+        ) as root:
+            root.temperature = 0.2
+            root.input_tokens = 10
+            root.attributes["custom.shared"] = "root-value"
+
+            with self.handler.inference(
+                "downstream-provider",
+                request_model="downstream-model",
+                server_address="api.example.com",
+                server_port=443,
+            ) as inner:
+                self.assertTrue(inner.already_started)
+                # Overwrite shared fields downstream
+                inner.temperature = 0.9
+                inner.input_tokens = 100
+                inner.output_tokens = 50
+                inner.response_id = "resp-123"
+                inner.attributes["custom.shared"] = "downstream-value"
+                inner.attributes["custom.downstream_only"] = "downstream-only"
+
+            # While still in root context, context reflects downstream writes
+            attrs = get_inference_attributes()
+            assert attrs is not None
+            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_TEMPERATURE), 0.9)
+            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 100)
+
+        # After root finish: Option 1 root precedence applies
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        root_span = spans[0]
+
+        # Root start attributes take precedence
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_PROVIDER_NAME),
+            "proxy-provider",
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_REQUEST_MODEL),
+            "proxy-model",
+        )
+        self.assertEqual(
+            root_span.attributes.get(server_attributes.SERVER_ADDRESS),
+            "proxy.example.com",
+        )
+        self.assertEqual(
+            root_span.attributes.get(server_attributes.SERVER_PORT),
+            8080,
+        )
+
+        # Root typed attributes take precedence
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_REQUEST_TEMPERATURE),
+            0.2,
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS),
+            10,
+        )
+
+        # Root custom attributes take precedence
+        self.assertEqual(
+            root_span.attributes.get("custom.shared"),
+            "root-value",
+        )
+
+        # Downstream fields not set on root are enriched onto root span
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS),
+            50,
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_RESPONSE_ID),
+            "resp-123",
+        )
+        self.assertEqual(
+            root_span.attributes.get("custom.downstream_only"),
+            "downstream-only",
         )
