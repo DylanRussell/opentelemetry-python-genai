@@ -7,10 +7,17 @@ from __future__ import annotations
 
 import inspect
 import sys
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable, Sequence
+from copy import copy, deepcopy
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, cast
 
-from wrapt import wrap_function_wrapper
+from wrapt import (
+    BoundFunctionWrapper,
+    FunctionWrapper,
+    apply_patch,
+    resolve_path,
+)
 
 from opentelemetry.instrumentation.genai.dspy.utils import (
     SENTINEL_TOOL_NAMES,
@@ -22,6 +29,7 @@ from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
     AgentInvocation,
+    RetrievalInvocation,
     ToolInvocation,
 )
 from opentelemetry.util.genai.types import (
@@ -34,6 +42,7 @@ if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
     from dspy.primitives.module import Module
     from dspy.primitives.prediction import Prediction
+    from dspy.retrievers.retrieve import Retrieve
 
 _REACT_MODULE = "dspy.predict.react"
 _REACT_CLASS = "ReAct"
@@ -42,29 +51,151 @@ _REACT_V2_MODULE = "dspy.predict.react_v2"
 _REACT_V2_CLASS = "ReActV2"
 
 
+if TYPE_CHECKING:
+    _BoundFunctionWrapper = BoundFunctionWrapper[Any, Any]
+    _FunctionWrapper = FunctionWrapper[Any, Any]
+else:
+    _BoundFunctionWrapper = BoundFunctionWrapper
+    _FunctionWrapper = FunctionWrapper
+
+
+class _CopyableBoundFunctionWrapper(_BoundFunctionWrapper):
+    """BoundFunctionWrapper that supports copy and deepcopy."""
+
+    def __init__(
+        self,
+        wrapped: Any,
+        instance: Any = None,
+        wrapper: Any = None,
+        enabled: Any = None,
+        binding: str = "callable",
+        parent: Any = None,
+        owner: Any = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        init_args: tuple[Any, ...] = (
+            wrapped,
+            instance,
+            wrapper,
+            enabled,
+            binding,
+            parent,
+            owner,
+            *args,
+        )
+        super().__init__(*init_args, **kwargs)
+
+    def __copy__(self) -> _CopyableBoundFunctionWrapper:
+        return _CopyableBoundFunctionWrapper(
+            self.__wrapped__,
+            self._self_instance,
+            self._self_wrapper,
+            self._self_enabled,
+            self._self_binding,
+            self._self_parent,
+            self._self_owner,
+        )
+
+    def __deepcopy__(self, memo: dict[Any, Any]) -> Any:
+        if self._self_instance is not None:
+            copied_instance: Any = deepcopy(self._self_instance, memo)
+            attr_name: str | None = getattr(self, "__name__", None)
+            if attr_name and hasattr(copied_instance, attr_name):
+                return getattr(copied_instance, attr_name)
+            return _CopyableBoundFunctionWrapper(
+                deepcopy(self.__wrapped__, memo),
+                copied_instance,
+                self._self_wrapper,
+                self._self_enabled,
+                self._self_binding,
+                self._self_parent,
+                self._self_owner,
+            )
+        return _CopyableBoundFunctionWrapper(
+            deepcopy(self.__wrapped__, memo),
+            None,
+            self._self_wrapper,
+            self._self_enabled,
+            self._self_binding,
+            self._self_parent,
+            self._self_owner,
+        )
+
+
+class _CopyableFunctionWrapper(_FunctionWrapper):
+    """FunctionWrapper that supports copy and deepcopy."""
+
+    __bound_function_wrapper__ = _CopyableBoundFunctionWrapper
+
+    def __copy__(self) -> _CopyableFunctionWrapper:
+        wrapped: Any = self.__wrapped__
+        wrapper: Any = self._self_wrapper
+        return _CopyableFunctionWrapper(
+            copy(wrapped),
+            wrapper,
+            self._self_enabled,
+        )
+
+    def __deepcopy__(self, memo: dict[Any, Any]) -> _CopyableFunctionWrapper:
+        wrapped: Any = self.__wrapped__
+        wrapper: Any = self._self_wrapper
+        return _CopyableFunctionWrapper(
+            deepcopy(wrapped, memo),
+            wrapper,
+            self._self_enabled,
+        )
+
+
+def _wrap_function(
+    target: Any,
+    name: str,
+    wrapper: Callable[..., Any],
+) -> None:
+    """Wrap a target attribute with _CopyableFunctionWrapper.
+
+    Resolves target if given as a module name string, traverses dotted attribute
+    paths to find the owning object, and applies the wrapper.
+    """
+    if isinstance(target, str):
+        target = import_module(target)
+
+    parent, attribute, original = resolve_path(target, name)
+    wrapped = _CopyableFunctionWrapper(original, wrapper)
+    apply_patch(parent, attribute, wrapped)
+
+
 def patch_dspy(handler: TelemetryHandler) -> None:
-    """Apply patches to DSPy Tool and ReAct classes."""
+    """Apply patches to DSPy Tool, ReAct, and Retrieve classes."""
     import dspy
 
     tool_module = dspy.Tool.__module__
     tool_name = dspy.Tool.__name__
-    wrap_function_wrapper(
+    _wrap_function(
         tool_module,
         f"{tool_name}.__call__",
         _tool_call(handler),
     )
-    wrap_function_wrapper(
+    _wrap_function(
         tool_module,
         f"{tool_name}.acall",
         _tool_acall(handler),
     )
 
-    wrap_function_wrapper(
+    retrieve_module = dspy.Retrieve.__module__
+    retrieve_name = dspy.Retrieve.__name__
+    _wrap_function(
+        retrieve_module,
+        f"{retrieve_name}.forward",
+        _retrieve_forward(handler),
+    )
+
+    _wrap_function(
         _REACT_MODULE,
         f"{_REACT_CLASS}.forward",
         _react_forward(handler, "dspy.ReAct"),
     )
-    wrap_function_wrapper(
+    _wrap_function(
         _REACT_MODULE,
         f"{_REACT_CLASS}.aforward",
         _react_aforward(handler, "dspy.ReAct"),
@@ -74,13 +205,13 @@ def patch_dspy(handler: TelemetryHandler) -> None:
         sys.modules.get(_REACT_V2_MODULE), _REACT_V2_CLASS, None
     )
     if react_v2_cls is not None:
-        wrap_function_wrapper(
+        _wrap_function(
             _REACT_V2_MODULE,
             f"{_REACT_V2_CLASS}.forward",
             _react_forward(handler, "dspy.ReActV2"),
         )
         if hasattr(react_v2_cls, "aforward"):
-            wrap_function_wrapper(
+            _wrap_function(
                 _REACT_V2_MODULE,
                 f"{_REACT_V2_CLASS}.aforward",
                 _react_aforward(handler, "dspy.ReActV2"),
@@ -94,6 +225,8 @@ def unpatch_dspy() -> None:
 
     unwrap(dspy.Tool, "__call__")
     unwrap(dspy.Tool, "acall")
+
+    unwrap(dspy.Retrieve, "forward")
 
     unwrap(dspy.predict.react.ReAct, "forward")
     unwrap(dspy.predict.react.ReAct, "aforward")
@@ -270,6 +403,114 @@ def _react_aforward(
             result = await wrapped(*args, **kwargs)
             if handler.should_capture_content():
                 _set_agent_invocation_output(invocation, instance, result)
+            return result
+
+    return traced_method
+
+
+def _extract_retrieval_query(
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> str | None:
+    if "query" in kwargs and kwargs["query"] is not None:
+        return str(kwargs["query"])
+    if args and args[0] is not None:
+        return str(args[0])
+    return None
+
+
+def _extract_retrieval_k(
+    instance: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> int | None:
+    k = kwargs.get("k")
+    if k is None and len(args) > 1:
+        k = args[1]
+    if k is None and hasattr(instance, "k"):
+        k = getattr(instance, "k", None)
+    if k is not None:
+        try:
+            return int(k)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _start_retrieval_invocation(
+    handler: TelemetryHandler,
+    instance: Retrieve,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> RetrievalInvocation:
+    rm: Any = getattr(instance, "rm", None)
+    if rm is None:
+        import dspy
+
+        rm = getattr(dspy.settings, "rm", None)
+
+    # DSPy retrieval models lack a uniform identifier schema, so inspect common index
+    # attributes across the Retrieve instance and configured RM.
+    data_source_id: str | None = (
+        getattr(instance, "data_source_id", None)
+        or getattr(instance, "index_name", None)
+        or (getattr(rm, "data_source_id", None) if rm is not None else None)
+        or (getattr(rm, "index_name", None) if rm is not None else None)
+        or (getattr(rm, "collection_name", None) if rm is not None else None)
+    )
+
+    invocation = handler.retrieval(
+        data_source_id=str(data_source_id)
+        if data_source_id is not None
+        else None,
+    )
+
+    invocation.query_text = _extract_retrieval_query(args, kwargs)
+    invocation.top_k = _extract_retrieval_k(instance, args, kwargs)
+    return invocation
+
+
+def _set_retrieval_invocation_documents(
+    handler: TelemetryHandler,
+    invocation: RetrievalInvocation,
+    result: object,
+) -> None:
+    if not handler.should_capture_content():
+        return
+
+    passages: Sequence[object] | None = None
+    if hasattr(result, "passages"):
+        attr_val = getattr(result, "passages")
+        if isinstance(attr_val, Sequence) and not isinstance(
+            attr_val, (str, bytes)
+        ):
+            passages = cast(Sequence[object], attr_val)
+    elif isinstance(result, Sequence) and not isinstance(result, (str, bytes)):
+        passages = cast(Sequence[object], result)
+    elif isinstance(result, str):
+        passages = [result]
+
+    if passages is None:
+        return
+
+    invocation.documents = [{"content": str(psg)} for psg in passages]
+
+
+def _retrieve_forward(
+    handler: TelemetryHandler,
+) -> Callable[..., Any]:
+    def traced_method(
+        wrapped: Callable[..., Any],
+        instance: Retrieve,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        invocation = _start_retrieval_invocation(
+            handler, instance, args, kwargs
+        )
+        with invocation:
+            result = wrapped(*args, **kwargs)
+            _set_retrieval_invocation_documents(handler, invocation, result)
             return result
 
     return traced_method
