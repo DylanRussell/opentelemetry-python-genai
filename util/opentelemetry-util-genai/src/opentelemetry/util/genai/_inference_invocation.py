@@ -83,29 +83,6 @@ _GEN_AI_CONVERSATION_COMPACTED: Final = "gen_ai.conversation.compacted"
 _GEN_AI_PROMPT_VERSION: Final = "gen_ai.prompt.version"
 
 
-def _filter_context_attributes(
-    context_attributes: Mapping[str, AttributeValue],
-    *,
-    exclude_keys: set[str] | None = None,
-) -> dict[str, AttributeValue]:
-    filtered: dict[str, AttributeValue] = {}
-    for key, value in context_attributes.items():
-        if exclude_keys is not None and key in exclude_keys:
-            continue
-        if (
-            value == 0
-            and key.startswith("gen_ai.usage.")
-            and key
-            not in (
-                GenAI.GEN_AI_USAGE_INPUT_TOKENS,
-                GenAI.GEN_AI_USAGE_OUTPUT_TOKENS,
-            )
-        ):
-            continue
-        filtered[key] = value
-    return filtered
-
-
 class InferenceInvocation(GenAIInvocation):
     """Represents a single LLM chat/completion call.
 
@@ -196,12 +173,9 @@ class InferenceInvocation(GenAIInvocation):
         # _invalidate_metric_attributes whenever an input changes.
         self._cached_metric_attributes: dict[str, AttributeValue] | None = None
 
-        existing_attrs = get_inference_attributes()
-        if existing_attrs is not None:
-            self.already_started = True
+        self.already_started = get_inference_attributes() is not None
+        if self.already_started:
             self.span = get_current_span()
-        else:
-            self.already_started = False
 
         self._start(self._get_start_attributes())
 
@@ -436,10 +410,10 @@ class InferenceInvocation(GenAIInvocation):
         if error is not None:
             self._apply_error_attributes(error)
         ctx_attrs = get_inference_attributes(self._span_context) or {}
-        attributes = _filter_context_attributes(
-            ctx_attrs,
-            exclude_keys=set(self._get_start_attributes()),
-        )
+        start_keys = set(self._get_start_attributes())
+        attributes = {
+            k: v for k, v in ctx_attrs.items() if k not in start_keys
+        }
         attributes.update(self._get_attributes())
         attributes.update(self._get_message_attributes(for_span=True))
         attributes.update(self.attributes)
@@ -467,7 +441,7 @@ class InferenceInvocation(GenAIInvocation):
             return None
 
         ctx_attrs = get_inference_attributes(self._span_context) or {}
-        attributes = _filter_context_attributes(ctx_attrs)
+        attributes = dict(ctx_attrs)
         attributes.update(self._get_start_attributes())
         attributes.update(self._get_attributes())
         attributes.update(self._get_message_attributes(for_span=False))
