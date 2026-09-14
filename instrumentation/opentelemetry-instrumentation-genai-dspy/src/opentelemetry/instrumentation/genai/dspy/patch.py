@@ -36,8 +36,8 @@ from opentelemetry.instrumentation.genai.dspy.utils import (
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
-    AgentInvocation,
     InferenceInvocation,
+    LocalAgentInvocation,
     RetrievalInvocation,
     ToolInvocation,
 )
@@ -511,7 +511,7 @@ def _start_agent_invocation(
     instance: Module,
     kwargs: dict[str, Any],
     agent_name: str,
-) -> AgentInvocation:
+) -> LocalAgentInvocation:
     invocation = handler.invoke_local_agent(agent_name=agent_name)
     if handler.should_capture_content() and kwargs:
         content_str = extract_input_content(kwargs)
@@ -525,7 +525,7 @@ def _start_agent_invocation(
 
 
 def _set_agent_invocation_output(
-    invocation: AgentInvocation,
+    invocation: LocalAgentInvocation,
     instance: Module,
     result: Prediction | None,
 ) -> None:
