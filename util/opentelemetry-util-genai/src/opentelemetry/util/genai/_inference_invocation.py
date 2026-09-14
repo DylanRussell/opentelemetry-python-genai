@@ -372,20 +372,17 @@ class InferenceInvocation(GenAIInvocation):
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
 
-    def _get_context_attributes(self) -> dict[str, AttributeValue]:
-        attrs = self._get_start_attributes()
-        attrs.update(self._get_attributes())
-        attrs.update(self.attributes)
-        # Message attributes are excluded because spans and events format
-        # content differently and evaluate capture rules independently.
-        return attrs
-
     def _finish_already_started(self, error: Error | None = None) -> None:
         # Error attributes are not recorded on inner finish to isolate errors;
         # the outer invocation records them only if the error escapes unhandled.
         existing_attrs = get_inference_attributes()
         if existing_attrs is not None:
-            existing_attrs.update(self._get_context_attributes())
+            attrs = self._get_start_attributes()
+            attrs.update(self._get_attributes())
+            attrs.update(self.attributes)
+            # Message attributes are excluded because spans and events format
+            # content differently and evaluate capture rules independently.
+            existing_attrs.update(attrs)
 
     def _invalidate_metric_attributes(self) -> None:
         """Drop the cached metric attributes so the next read rebuilds them.
