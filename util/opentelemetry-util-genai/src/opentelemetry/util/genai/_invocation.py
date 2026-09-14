@@ -183,7 +183,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
 
     def record_stream_chunk(self) -> None:
         """Mark the request as streamed and record one output chunk arriving."""
-        if self._context_token is None and not self.already_started:
+        if self.already_started or self._context_token is None:
             return
         self._request_stream = True
         self._on_stream_chunk(timeit.default_timer())
@@ -207,8 +207,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         is_first_chunk = self._ttfc_seconds is None
         if is_first_chunk:
             self._ttfc_seconds = delta
-        if self.already_started:
-            return
 
         attributes = self._get_metric_attributes()
         if is_first_chunk:

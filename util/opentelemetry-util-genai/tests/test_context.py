@@ -400,7 +400,12 @@ class TestInferenceContext(TestBase):
                 self.assertTrue(nested_inv.already_started)
                 nested_inv.record_stream_chunk()
                 nested_inv.record_stream_chunk()
-                self.assertIsNotNone(nested_inv._ttfc_seconds)
+                self.assertIsNone(nested_inv._ttfc_seconds)
+                self.assertIsNone(nested_inv._request_stream)
+
+            root_inv.record_stream_chunk()
+            self.assertIsNotNone(root_inv._ttfc_seconds)
+            self.assertTrue(root_inv._request_stream)
 
         spans = self.span_exporter.get_finished_spans()
         self.assertEqual(len(spans), 1)
