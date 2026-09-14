@@ -51,5 +51,5 @@ def get_inference_attributes(
     """
     attrs = get_value(_INFERENCE_ATTRIBUTES_KEY, context=context)
     if isinstance(attrs, dict):
-        return cast("dict[str, AttributeValue]", attrs)
+        return cast(dict[str, AttributeValue], attrs)
     return None
