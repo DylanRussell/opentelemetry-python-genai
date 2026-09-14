@@ -290,7 +290,131 @@ def test_tool_call_execute_sync(
         span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID)
         == "call_sync_1"
     )
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"a": 3, "b": 4})
     assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT) == "12"
+
+
+def test_tool_call_aexecute_async(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test FunctionCall.aexecute in non-streaming mode with content capture enabled."""
+
+    async def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    call = FunctionCall(
+        function=Function.from_callable(multiply),
+        arguments={"a": 3, "b": 4},
+        call_id="call_async_1",
+    )
+
+    async def _test() -> None:
+        result = await call.aexecute()
+        assert result.status == "success"
+        assert result.result == 12
+
+    asyncio.run(_test())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "execute_tool multiply"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "execute_tool"
+    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_NAME) == "multiply"
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_TYPE) == "function"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID)
+        == "call_async_1"
+    )
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"a": 3, "b": 4})
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT) == "12"
+
+
+def test_tool_call_execute_sync_content_capture_disabled(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test FunctionCall.execute suppresses arguments and result when content capture is disabled."""
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    call = FunctionCall(
+        function=Function.from_callable(multiply),
+        arguments={"a": 3, "b": 4},
+        call_id="call_sync_no_content",
+    )
+    result = call.execute()
+    assert result.status == "success"
+    assert result.result == 12
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "execute_tool multiply"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "execute_tool"
+    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_NAME) == "multiply"
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_TYPE) == "function"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID)
+        == "call_sync_no_content"
+    )
+    assert GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS not in span.attributes
+    assert GenAIAttributes.GEN_AI_TOOL_CALL_RESULT not in span.attributes
+
+
+def test_tool_call_aexecute_async_content_capture_disabled(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test FunctionCall.aexecute suppresses arguments and result when content capture is disabled."""
+
+    async def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    call = FunctionCall(
+        function=Function.from_callable(multiply),
+        arguments={"a": 3, "b": 4},
+        call_id="call_async_no_content",
+    )
+
+    async def _test() -> None:
+        result = await call.aexecute()
+        assert result.status == "success"
+        assert result.result == 12
+
+    asyncio.run(_test())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "execute_tool multiply"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "execute_tool"
+    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_NAME) == "multiply"
+    assert span.attributes.get(GenAIAttributes.GEN_AI_TOOL_TYPE) == "function"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_ID)
+        == "call_async_no_content"
+    )
+    assert GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS not in span.attributes
+    assert GenAIAttributes.GEN_AI_TOOL_CALL_RESULT not in span.attributes
 
 
 def test_tool_call_execute_streaming_success(
@@ -480,3 +604,49 @@ def test_tool_call_aexecute_streaming_caller_error(
     assert len(spans) == 1
     span = spans[0]
     assert span.attributes.get("error.type") == "RuntimeError"
+
+
+def test_cancelled_tool_finishes(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    error = asyncio.CancelledError("cancelled")
+
+    async def cancelled():
+        raise error
+
+    async def run():
+        call = FunctionCall(
+            function=Function.from_callable(cancelled), arguments={}
+        )
+        with pytest.raises(asyncio.CancelledError) as caught:
+            await call.aexecute()
+        assert caught.value is error
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert (
+            spans[0].attributes["error.type"]
+            == "asyncio.exceptions.CancelledError"
+        )
+
+    asyncio.run(run())
+
+
+def test_base_exception_tool_finishes(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    error = KeyboardInterrupt("interrupted")
+
+    def interrupted():
+        raise error
+
+    call = FunctionCall(
+        function=Function.from_callable(interrupted), arguments={}
+    )
+    with pytest.raises(KeyboardInterrupt) as caught:
+        call.execute()
+    assert caught.value is error
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["error.type"] == "KeyboardInterrupt"

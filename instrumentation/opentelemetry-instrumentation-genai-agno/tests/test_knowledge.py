@@ -160,6 +160,45 @@ def test_knowledge_asearch_content_capture(
     assert "Async retrieved doc" in raw_docs
 
 
+def test_knowledge_asearch_no_content_capture(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test Knowledge.asearch with content capture disabled."""
+    if not hasattr(Knowledge, "asearch"):
+        pytest.skip(
+            "Knowledge.asearch is not supported in this version of agno"
+        )
+
+    kb = Knowledge(name="private_async_kb", max_results=3)
+    kb.vector_db = MagicMock()
+    kb.vector_db.async_search = AsyncMock(
+        return_value=[Document(content="Secret content", id="secret_1")]
+    )
+
+    async def _run() -> list[Document]:
+        return await kb.asearch(query="secret query")
+
+    docs = asyncio.run(_run())
+    assert len(docs) == 1
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "retrieval private_async_kb"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "retrieval"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_DATA_SOURCE_ID)
+        == "private_async_kb"
+    )
+    assert span.attributes.get("gen_ai.retrieval.top_k") == 3
+    assert GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT not in span.attributes
+    assert GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS not in span.attributes
+
+
 def test_knowledge_retrieve_delegation(
     instrument_agno,
     span_exporter,
@@ -223,3 +262,72 @@ def test_knowledge_search_error(
     assert len(spans) == 1
     span = spans[0]
     assert span.attributes.get("error.type") == "TypeError"
+
+
+def test_knowledge_asearch_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that errors in asearch record error.type on the span."""
+    if not hasattr(Knowledge, "asearch"):
+        pytest.skip(
+            "Knowledge.asearch is not supported in this version of agno"
+        )
+    kb = Knowledge(name="error_async_kb")
+
+    async def _run() -> None:
+        with pytest.raises(TypeError):
+            await getattr(kb, "asearch")()
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes.get("error.type") == "TypeError"
+
+
+def test_cancelled_knowledge_asearch_finishes(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that cancellation in asearch records error.type on the span."""
+    if not hasattr(Knowledge, "asearch"):
+        pytest.skip(
+            "Knowledge.asearch is not supported in this version of agno"
+        )
+    kb = Knowledge(name="cancelled_kb")
+    error = asyncio.CancelledError("cancelled")
+    kb.vector_db = MagicMock()
+    kb.vector_db.async_search = AsyncMock(side_effect=error)
+
+    async def run() -> None:
+        with pytest.raises(asyncio.CancelledError) as caught:
+            await kb.asearch("query")
+        assert caught.value is error
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert (
+            spans[0].attributes["error.type"]
+            == "asyncio.exceptions.CancelledError"
+        )
+
+    asyncio.run(run())
+
+
+def test_base_exception_knowledge_search_finishes(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that BaseException in search records error.type on the span."""
+    kb = Knowledge(name="cancelled_kb")
+    error = KeyboardInterrupt("interrupted")
+    kb.vector_db = MagicMock()
+    kb.vector_db.search.side_effect = error
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        kb.search("query")
+    assert caught.value is error
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["error.type"] == "KeyboardInterrupt"
