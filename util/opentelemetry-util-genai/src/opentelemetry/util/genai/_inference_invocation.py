@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from opentelemetry._logs import Logger, LogRecord
-from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -24,8 +23,8 @@ from opentelemetry.trace import (
     get_current_span,
 )
 from opentelemetry.util.genai._context import (
+    INFERENCE_ATTRIBUTES_KEY,
     get_inference_attributes,
-    set_inference_attributes,
 )
 from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
@@ -112,6 +111,8 @@ class InferenceInvocation(GenAIInvocation):
 
     Use handler.inference(provider) rather than constructing this directly.
     """
+
+    _context_attributes_key = INFERENCE_ATTRIBUTES_KEY
 
     def __init__(
         self,
@@ -370,10 +371,6 @@ class InferenceInvocation(GenAIInvocation):
         )
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
-
-    def _create_span_context(self) -> Context:
-        ctx = super()._create_span_context()
-        return set_inference_attributes({}, context=ctx)
 
     def _get_context_attributes(self) -> dict[str, AttributeValue]:
         attrs = self._get_start_attributes()

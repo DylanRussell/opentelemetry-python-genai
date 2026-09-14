@@ -15,7 +15,7 @@ from typing import Any, TypeAlias, cast
 from typing_extensions import Self
 
 from opentelemetry._logs import Logger, LogRecord
-from opentelemetry.context import Context, attach, detach
+from opentelemetry.context import Context, attach, detach, set_value
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -155,9 +155,23 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._monotonic_start_s = timeit.default_timer()
         self._context_token = attach(self._span_context)
 
+    _context_attributes_key: str | None = None
+    """Context key used to attach an attributes dictionary for nested deduplication.
+
+    Subclasses opting into context deduplication should:
+    1. Set ``_context_attributes_key`` to their type-specific context key.
+    2. In ``__init__``, check ``get_value(self._context_attributes_key)``; if present,
+       set ``self.already_started = True`` and ``self.span = get_current_span()``.
+    3. Implement ``_finish_already_started`` to populate the context dict with inner attributes.
+    4. In ``_apply_finish``, read the context dict from ``self._span_context`` to merge downstream attributes.
+    """
+
     def _create_span_context(self) -> Context:
         """Create the context to attach for this invocation's span."""
-        return set_span_in_context(self.span)
+        ctx = set_span_in_context(self.span)
+        if self._context_attributes_key is not None:
+            return set_value(self._context_attributes_key, {}, context=ctx)
+        return ctx
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         """Return low-cardinality attributes for metric recording."""
