@@ -46,9 +46,6 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     prepare_tool_definitions,
 )
 from opentelemetry.instrumentation.utils import unwrap
-from opentelemetry.semconv._incubating.attributes import (
-    gen_ai_attributes as GenAI,
-)
 from opentelemetry.semconv._incubating.attributes.error_attributes import (
     ErrorTypeValues,
 )
@@ -337,12 +334,6 @@ def _set_invocation_output(
     session_id = getattr(result, "session_id", None)
     if session_id:
         invocation.conversation_id = str(session_id)
-    if isinstance(invocation, AgentInvocation):
-        model = getattr(result, "model", None)
-        if model:
-            invocation.attributes.setdefault(
-                GenAI.GEN_AI_REQUEST_MODEL, str(model)
-            )
 
 
 def _start_agent_invocation(
@@ -353,11 +344,13 @@ def _start_agent_invocation(
     capture_content: bool,
 ) -> AgentInvocation:
     agent_name = getattr(instance, "name", None)
-    model_obj = getattr(instance, "model", None)
+    model_obj = kwargs.get("model") or getattr(instance, "model", None)
     request_model = None
     if model_obj is not None:
-        request_model = getattr(model_obj, "id", None) or (
-            model_obj if isinstance(model_obj, str) else None
+        request_model = (
+            getattr(model_obj, "id", None)
+            or getattr(model_obj, "name", None)
+            or (model_obj if isinstance(model_obj, str) else None)
         )
 
     invocation = handler.invoke_local_agent(

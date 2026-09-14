@@ -830,20 +830,18 @@ def test_agent_arun_attributes(
     assert GenAIAttributes.GEN_AI_PROVIDER_NAME not in span.attributes
 
 
-def test_agent_run_attributes_from_run_output(
+def test_agent_run_attributes_model_from_kwargs(
     instrument_agno,
     span_exporter,
 ) -> None:
-    """Test extracting model from RunOutput when not present on Agent."""
+    """Test capturing model passed via kwargs at invocation start."""
     import agno.agent
     from agno.agent import RunOutput
 
-    agent = Agent(name="unconfigured-agent", model=MockModel(id=None))
+    agent = Agent(name="kwargs-agent", model=MockModel(id=None))
 
     mock_run_output = RunOutput(
         agent_id="extracted-agent-id",
-        model="extracted-model",
-        model_provider="ExtractedProvider",
         content="Hello output",
     )
 
@@ -853,10 +851,8 @@ def test_agent_run_attributes_from_run_output(
         else "agno.agent.agent.Agent._run"
     )
 
-    with (
-        patch(dispatch_target, return_value=mock_run_output),
-    ):
-        res = agent.run("test")
+    with patch(dispatch_target, return_value=mock_run_output):
+        res = agent.run("test", model=MockModel(id="kwargs-model"))
         assert res is not None
 
     spans = span_exporter.get_finished_spans()
@@ -864,7 +860,41 @@ def test_agent_run_attributes_from_run_output(
     span = spans[0]
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MODEL)
-        == "extracted-model"
+        == "kwargs-model"
     )
+    assert GenAIAttributes.GEN_AI_AGENT_ID not in span.attributes
+    assert GenAIAttributes.GEN_AI_PROVIDER_NAME not in span.attributes
+
+
+def test_agent_run_does_not_extract_model_from_run_output(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that model from RunOutput is not used as a fallback."""
+    import agno.agent
+    from agno.agent import RunOutput
+
+    agent = Agent(name="unconfigured-agent", model=MockModel(id=None))
+
+    mock_run_output = RunOutput(
+        agent_id="extracted-agent-id",
+        model="extracted-model",
+        content="Hello output",
+    )
+
+    dispatch_target = (
+        "agno.agent._run.run_dispatch"
+        if hasattr(agno.agent, "_run")
+        else "agno.agent.agent.Agent._run"
+    )
+
+    with patch(dispatch_target, return_value=mock_run_output):
+        res = agent.run("test")
+        assert res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert GenAIAttributes.GEN_AI_REQUEST_MODEL not in span.attributes
     assert GenAIAttributes.GEN_AI_AGENT_ID not in span.attributes
     assert GenAIAttributes.GEN_AI_PROVIDER_NAME not in span.attributes
