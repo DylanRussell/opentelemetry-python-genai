@@ -94,7 +94,9 @@ class TestInferenceContext(TestBase):
         finally:
             detach(token)
 
-    def test_inference_invocation_sets_attributes_on_context(self) -> None:
+    def test_inference_invocation_outer_sets_empty_object_on_context(
+        self,
+    ) -> None:
         self.assertIsNone(get_inference_attributes())
 
         with self.handler.inference(
@@ -104,25 +106,15 @@ class TestInferenceContext(TestBase):
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            # Start attributes are placed in context upon initialization
-            self.assertEqual(attrs.get(GenAI.GEN_AI_PROVIDER_NAME), "openai")
-            self.assertEqual(
-                attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "gpt-4o-mini"
-            )
-            self.assertEqual(attrs.get(GenAI.GEN_AI_OPERATION_NAME), "chat")
+            # Outer adds an empty object on the context
+            self.assertEqual(attrs, {})
 
-            # Live updates when setting typed fields
+            # Setting fields on outer does not mutate context object
             invocation.input_tokens = 42
             invocation.output_tokens = 84
             invocation.temperature = 0.7
             invocation.response_model_name = "gpt-4o-mini-2024-07-18"
-            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 42)
-            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS), 84)
-            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_TEMPERATURE), 0.7)
-            self.assertEqual(
-                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL),
-                "gpt-4o-mini-2024-07-18",
-            )
+            self.assertEqual(attrs, {})
 
         self.assertIsNone(get_inference_attributes())
 
@@ -589,4 +581,70 @@ class TestInferenceContext(TestBase):
         self.assertEqual(
             root_span.attributes.get("custom.downstream_only"),
             "downstream-only",
+        )
+
+    def test_multiple_inner_invocations_overwrite_context(self) -> None:
+        with self.handler.inference("root-provider") as root:
+            self.assertFalse(root.already_started)
+            self.assertEqual(get_inference_attributes(), {})
+
+            with self.handler.inference(
+                "inner1-provider",
+                request_model="model-1",
+            ) as inner1:
+                self.assertTrue(inner1.already_started)
+                inner1.input_tokens = 10
+                inner1.output_tokens = 20
+                inner1.response_model_name = "resp-model-1"
+
+            # After inner1 finishes, context has inner1's attributes
+            attrs = get_inference_attributes()
+            assert attrs is not None
+            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-1")
+            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 10)
+            self.assertEqual(
+                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-1"
+            )
+
+            with self.handler.inference(
+                "inner2-provider",
+                request_model="model-2",
+            ) as inner2:
+                self.assertTrue(inner2.already_started)
+                inner2.input_tokens = 30
+                inner2.output_tokens = 40
+                inner2.response_model_name = "resp-model-2"
+
+            # After inner2 finishes, inner2 overwrites inner1
+            attrs = get_inference_attributes()
+            assert attrs is not None
+            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-2")
+            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 30)
+            self.assertEqual(
+                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-2"
+            )
+
+        # After root finishes, root reconciles with context (inner2's values)
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        root_span = spans[0]
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_PROVIDER_NAME),
+            "root-provider",
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_REQUEST_MODEL),
+            "model-2",
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_RESPONSE_MODEL),
+            "resp-model-2",
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS),
+            30,
+        )
+        self.assertEqual(
+            root_span.attributes.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS),
+            40,
         )
