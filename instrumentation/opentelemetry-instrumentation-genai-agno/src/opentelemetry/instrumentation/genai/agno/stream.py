@@ -21,7 +21,9 @@ from opentelemetry.util.genai.invocation import (
 )
 from opentelemetry.util.genai.stream import (
     AsyncStreamWrapper,
+    AsyncToolStreamWrapper,
     SyncStreamWrapper,
+    SyncToolStreamWrapper,
 )
 from opentelemetry.util.genai.types import (
     OutputMessage,
@@ -313,7 +315,7 @@ class AsyncAgnoWorkflowStreamWrapper(
         self._self_finish_reason = "stop"
 
 
-class AgnoToolStreamWrapper(SyncStreamWrapper[Any]):
+class AgnoToolStreamWrapper(SyncToolStreamWrapper[Any]):
     """Stream wrapper for synchronous tool executions that return iterators/generators."""
 
     def __init__(
@@ -322,25 +324,15 @@ class AgnoToolStreamWrapper(SyncStreamWrapper[Any]):
         invocation: ToolInvocation,
         capture_content: bool,
     ) -> None:
-        super().__init__(stream)
-        self._self_tool_invocation = invocation
+        super().__init__(stream, invocation)
         self._self_capture_content = capture_content
-        self._self_chunks: list[str] = []
 
     def _process_chunk(self, chunk: Any) -> None:
         if self._self_capture_content:
             self._self_chunks.append(format_content(chunk))
 
-    def _on_stream_end(self) -> None:
-        if self._self_capture_content:
-            self._self_tool_invocation.tool_result = "".join(self._self_chunks)
-        self._self_tool_invocation.stop()
 
-    def _on_stream_error(self, error: BaseException) -> None:
-        self._self_tool_invocation.fail(error)
-
-
-class AsyncAgnoToolStreamWrapper(AsyncStreamWrapper[Any]):
+class AsyncAgnoToolStreamWrapper(AsyncToolStreamWrapper[Any]):
     """Stream wrapper for asynchronous tool executions that return async iterators/generators."""
 
     def __init__(
@@ -349,19 +341,9 @@ class AsyncAgnoToolStreamWrapper(AsyncStreamWrapper[Any]):
         invocation: ToolInvocation,
         capture_content: bool,
     ) -> None:
-        super().__init__(stream)
-        self._self_tool_invocation = invocation
+        super().__init__(stream, invocation)
         self._self_capture_content = capture_content
-        self._self_chunks: list[str] = []
 
     def _process_chunk(self, chunk: Any) -> None:
         if self._self_capture_content:
             self._self_chunks.append(format_content(chunk))
-
-    def _on_stream_end(self) -> None:
-        if self._self_capture_content:
-            self._self_tool_invocation.tool_result = "".join(self._self_chunks)
-        self._self_tool_invocation.stop()
-
-    def _on_stream_error(self, error: BaseException) -> None:
-        self._self_tool_invocation.fail(error)
