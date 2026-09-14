@@ -11,9 +11,6 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     _get_property_value,
     format_content,
 )
-from opentelemetry.semconv._incubating.attributes import (
-    gen_ai_attributes as GenAI,
-)
 from opentelemetry.util.genai.invocation import (
     LocalAgentInvocation,
     ToolInvocation,
@@ -53,12 +50,6 @@ class _AgentStreamMixin:
         session_id = getattr(chunk, "session_id", None)
         if session_id and not self._self_agent_invocation.conversation_id:
             self._self_agent_invocation.conversation_id = str(session_id)
-
-        model = getattr(chunk, "model", None)
-        if model:
-            self._self_agent_invocation.attributes.setdefault(
-                GenAI.GEN_AI_REQUEST_MODEL, str(model)
-            )
 
         metrics = getattr(chunk, "metrics", None)
         if metrics is not None:
