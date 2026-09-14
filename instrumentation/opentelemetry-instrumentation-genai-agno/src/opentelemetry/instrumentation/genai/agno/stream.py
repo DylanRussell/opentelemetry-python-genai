@@ -12,7 +12,7 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     format_content,
 )
 from opentelemetry.util.genai.invocation import (
-    AgentInvocation,
+    LocalAgentInvocation,
     ToolInvocation,
     WorkflowInvocation,
 )
@@ -40,7 +40,7 @@ def _extract_chunk_content(chunk: Any) -> str | None:
 
 
 class _AgentStreamMixin:
-    _self_agent_invocation: AgentInvocation
+    _self_agent_invocation: LocalAgentInvocation
     _self_capture_content: bool
     _self_content_parts: list[str]
     _self_completed_content: str | None
@@ -58,14 +58,6 @@ class _AgentStreamMixin:
             if getattr(metrics, "output_tokens", None) is not None:
                 self._self_agent_invocation.output_tokens = (
                     metrics.output_tokens
-                )
-            if getattr(metrics, "cache_read_tokens", None) is not None:
-                self._self_agent_invocation.cache_read_input_tokens = (
-                    metrics.cache_read_tokens
-                )
-            if getattr(metrics, "cache_write_tokens", None) is not None:
-                self._self_agent_invocation.cache_write_input_tokens = (
-                    metrics.cache_write_tokens
                 )
 
         event_name = str(getattr(chunk, "event", ""))
@@ -162,7 +154,7 @@ class AgnoAgentStreamWrapper(_AgentStreamMixin, SyncStreamWrapper[Any]):
     def __init__(
         self,
         stream: Any,
-        invocation: AgentInvocation,
+        invocation: LocalAgentInvocation,
         capture_content: bool,
     ) -> None:
         super().__init__(stream)
@@ -179,7 +171,7 @@ class AsyncAgnoAgentStreamWrapper(_AgentStreamMixin, AsyncStreamWrapper[Any]):
     def __init__(
         self,
         stream: Any,
-        invocation: AgentInvocation,
+        invocation: LocalAgentInvocation,
         capture_content: bool,
     ) -> None:
         super().__init__(stream)

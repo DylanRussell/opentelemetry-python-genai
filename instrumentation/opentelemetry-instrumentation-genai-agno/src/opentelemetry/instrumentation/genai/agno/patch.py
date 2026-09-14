@@ -51,7 +51,7 @@ from opentelemetry.semconv._incubating.attributes.error_attributes import (
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
-    AgentInvocation,
+    LocalAgentInvocation,
     RetrievalInvocation,
     ToolInvocation,
     WorkflowInvocation,
@@ -294,7 +294,7 @@ def _set_tool_invocation_output(
 
 
 def _set_invocation_input(
-    invocation: AgentInvocation | WorkflowInvocation,
+    invocation: LocalAgentInvocation | WorkflowInvocation,
     instance: Any,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
@@ -318,7 +318,7 @@ def _extract_finish_reason(result: object) -> str:
 
 
 def _set_invocation_output(
-    invocation: AgentInvocation | WorkflowInvocation,
+    invocation: LocalAgentInvocation | WorkflowInvocation,
     result: object | None,
     capture_content: bool,
 ) -> None:
@@ -342,7 +342,7 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-) -> AgentInvocation:
+) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
     model_obj = kwargs.get("model") or getattr(instance, "model", None)
     request_model = None
