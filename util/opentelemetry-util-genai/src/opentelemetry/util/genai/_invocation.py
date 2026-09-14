@@ -126,13 +126,21 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             ContentCapturingMode.SPAN_AND_EVENT,
         )
 
+    @property
+    def context(self) -> Context:
+        """The OpenTelemetry Context containing this invocation's span."""
+        return self._span_context
+
     def _start(
-        self, attributes: dict[str, AttributeValue] | None = None
+        self,
+        attributes: dict[str, AttributeValue] | None = None,
+        context: Context | None = None,
     ) -> None:
         """Start the invocation span and attach it to the current context.
 
         Args:
             attributes: Initial span attributes available for sampling decisions.
+            context: An optional OpenTelemetry Context to parent the span.
         """
         if self.already_started:
             return
@@ -141,6 +149,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             name=self._span_name,
             kind=self._span_kind,
             attributes=attributes,
+            context=context,
         )
         self._span_context = self._create_span_context()
         self._monotonic_start_s = timeit.default_timer()

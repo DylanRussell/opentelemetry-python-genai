@@ -32,10 +32,7 @@ from opentelemetry.semconv.attributes import (
 from opentelemetry.semconv.schemas import Schemas
 from opentelemetry.trace.status import StatusCode
 from opentelemetry.util.genai._inference_invocation import LLMInvocation
-from opentelemetry.util.genai.handler import (
-    TelemetryHandler,
-    get_telemetry_handler,
-)
+from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.types import (
     Blob,
     BlobPart,
@@ -308,7 +305,7 @@ class TestTelemetryHandler(unittest.TestCase):
         self.logger_provider.add_log_record_processor(
             SimpleLogRecordProcessor(self.log_exporter)
         )
-        self.telemetry_handler = get_telemetry_handler(
+        self.telemetry_handler = TelemetryHandler(
             tracer_provider=self.tracer_provider,
             logger_provider=self.logger_provider,
         )
@@ -317,8 +314,6 @@ class TestTelemetryHandler(unittest.TestCase):
         # Clear spans and reset the singleton telemetry handler so each test starts clean
         self.span_exporter.clear()
         self.log_exporter.clear()
-        if hasattr(get_telemetry_handler, "_default_handler"):
-            delattr(get_telemetry_handler, "_default_handler")
 
     @patch.dict(
         os.environ,
@@ -344,6 +339,7 @@ class TestTelemetryHandler(unittest.TestCase):
             invocation.attributes = {"custom_attr": "value"}
             invocation.temperature = 0.5
             invocation.top_p = 0.9
+            invocation.top_k = 40
             invocation.stop_sequences = ["stop"]
             invocation.finish_reasons = ["stop"]
             invocation.response_model_name = "test-response-model"
@@ -372,6 +368,7 @@ class TestTelemetryHandler(unittest.TestCase):
                 GenAI.GEN_AI_SYSTEM_INSTRUCTIONS: AnyNonNone(),
                 GenAI.GEN_AI_REQUEST_TEMPERATURE: 0.5,
                 GenAI.GEN_AI_REQUEST_TOP_P: 0.9,
+                GenAI.GEN_AI_REQUEST_TOP_K: 40,
                 GenAI.GEN_AI_REQUEST_STOP_SEQUENCES: ("stop",),
                 GenAI.GEN_AI_RESPONSE_FINISH_REASONS: ("stop",),
                 GenAI.GEN_AI_RESPONSE_MODEL: "test-response-model",
@@ -384,6 +381,7 @@ class TestTelemetryHandler(unittest.TestCase):
                 "custom_attr": "value",
             },
         )
+        self.assertIsInstance(span_attrs[GenAI.GEN_AI_REQUEST_TOP_K], int)
 
         input_message = _get_single_message(
             span_attrs, "gen_ai.input.messages"
