@@ -909,3 +909,158 @@ def test_extract_multimodal_and_generic_parts() -> None:
         uri="https://example.com/out.png",
     )
     assert out_msgs[0].parts[2] == GenericPart(type="citation")
+
+
+def test_safe_numeric_overflow() -> None:
+    from opentelemetry.instrumentation.genai.dspy.utils import (
+        _safe_float,
+        _safe_int,
+    )
+
+    assert _safe_int(float("inf")) is None
+    assert _safe_int(float("-inf")) is None
+    assert _safe_int(float("nan")) is None
+    assert _safe_float(10**1000) is None
+
+
+def test_lm_multiple_choices_different_finish_reasons(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter,
+) -> None:
+    class MultiChoiceLM(dspy.LM):
+        def __init__(self) -> None:
+            super().__init__(
+                model="openai/gpt-4o",
+                api_key="fake-api-key",
+                model_type="chat",
+            )
+
+        def forward(self, *args: Any, **kwargs: Any) -> Any:
+            resp = mock.MagicMock()
+            c1 = mock.MagicMock()
+            c1.message.content = "First choice"
+            c1.message.reasoning_content = None
+            c1.message.tool_calls = None
+            c1.finish_reason = "stop"
+
+            c2 = mock.MagicMock()
+            c2.message.content = "Second choice"
+            c2.message.reasoning_content = None
+            c2.message.tool_calls = None
+            c2.finish_reason = "length"
+
+            resp.choices = [c1, c2]
+            resp.model = "gpt-4o-2024-05-13"
+            resp.id = "chatcmpl-multi"
+            resp.usage = {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+            }
+            return resp
+
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+        content_capture="SPAN_ONLY",
+    ):
+        lm = MultiChoiceLM()
+        res = lm("Tell me two things", n=2)
+
+    assert len(res) == 2
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+        "length",
+    )
+    output_messages = json.loads(span.attributes[GenAI.GEN_AI_OUTPUT_MESSAGES])
+    assert len(output_messages) == 2
+    assert output_messages[0]["parts"][0]["content"] == "First choice"
+    assert output_messages[0]["finish_reason"] == "stop"
+    assert output_messages[1]["parts"][0]["content"] == "Second choice"
+    assert output_messages[1]["finish_reason"] == "length"
+
+
+@pytest.mark.anyio
+async def test_lm_concurrent_history_isolation(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter,
+) -> None:
+    import asyncio
+
+    class InterleavedLM(dspy.LM):
+        def __init__(self) -> None:
+            super().__init__(
+                model="openai/gpt-4o",
+                api_key="fake-api-key",
+                model_type="chat",
+            )
+
+        async def aforward(self, *args: Any, **kwargs: Any) -> Any:
+            call_id = kwargs.get("call_id")
+            delay = 0.05 if call_id == "call-1" else 0.01
+            await asyncio.sleep(delay)
+
+            resp = mock.MagicMock()
+            c = mock.MagicMock()
+            c.message.content = f"Result for {call_id}"
+            c.message.reasoning_content = None
+            c.message.tool_calls = None
+            c.finish_reason = "stop"
+
+            resp.choices = [c]
+            resp.model = f"gpt-4o-{call_id}"
+            resp.id = f"id-{call_id}"
+            resp.usage = {
+                "prompt_tokens": 5 if call_id == "call-1" else 10,
+                "completion_tokens": 5,
+            }
+            return resp
+
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+        content_capture="SPAN_ONLY",
+    ):
+        lm = InterleavedLM()
+        res1, res2 = await asyncio.gather(
+            lm.acall(prompt="Prompt 1", call_id="call-1"),
+            lm.acall(prompt="Prompt 2", call_id="call-2"),
+        )
+
+    assert res1 is not None
+    assert res2 is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+
+    # Map spans by their prompt content
+    span_by_prompt = {}
+    for s in spans:
+        input_msgs = json.loads(s.attributes[GenAI.GEN_AI_INPUT_MESSAGES])
+        prompt_text = input_msgs[0]["parts"][0]["content"]
+        span_by_prompt[prompt_text] = s
+
+    span1 = span_by_prompt["Prompt 1"]
+    span2 = span_by_prompt["Prompt 2"]
+
+    assert span1.attributes[GenAI.GEN_AI_RESPONSE_MODEL] == "gpt-4o-call-1"
+    assert span1.attributes[GenAI.GEN_AI_USAGE_INPUT_TOKENS] == 5
+    out1 = json.loads(span1.attributes[GenAI.GEN_AI_OUTPUT_MESSAGES])
+    assert out1[0]["parts"][0]["content"] == "Result for call-1"
+
+    assert span2.attributes[GenAI.GEN_AI_RESPONSE_MODEL] == "gpt-4o-call-2"
+    assert span2.attributes[GenAI.GEN_AI_USAGE_INPUT_TOKENS] == 10
+    out2 = json.loads(span2.attributes[GenAI.GEN_AI_OUTPUT_MESSAGES])
+    assert out2[0]["parts"][0]["content"] == "Result for call-2"

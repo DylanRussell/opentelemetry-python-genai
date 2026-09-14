@@ -71,7 +71,7 @@ def safe_int(val: object) -> int | None:
     if isinstance(val, (int, float, str, bytes)):
         try:
             return int(val)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
     return None
 
@@ -81,7 +81,7 @@ def safe_float(val: object) -> float | None:
     if isinstance(val, (int, float, str, bytes)):
         try:
             return float(val)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
     return None
 
@@ -528,21 +528,23 @@ def extract_lm_input_messages(
 def extract_lm_output_messages(
     result: LMResponse | Sequence[Mapping[str, object] | str] | str,
     finish_reason: str | None = None,
+    finish_reasons: Sequence[str | None] | None = None,
     capture_content: bool = True,
 ) -> list[OutputMessage]:
     """Extract OutputMessage list from LM call result."""
     if isinstance(result, str):
+        fr = finish_reasons[0] if finish_reasons else finish_reason
         return [
             OutputMessage(
                 role="assistant",
                 parts=[TextPart(content=result)],
-                finish_reason=finish_reason,
+                finish_reason=str(fr) if fr else None,
             )
         ]
 
     if not isinstance(result, Sequence):
         msgs: list[OutputMessage] = []
-        for out in result.outputs:
+        for idx, out in enumerate(result.outputs):
             parts: list[MessagePart] = []
             if out.parts:
                 for p in out.parts:
@@ -565,7 +567,12 @@ def extract_lm_output_messages(
                     )
                     if tcp:
                         parts.append(tcp)
-            fr = out.finish_reason or finish_reason
+            fallback_fr = (
+                finish_reasons[idx]
+                if finish_reasons and idx < len(finish_reasons)
+                else finish_reason
+            )
+            fr = out.finish_reason or fallback_fr
             if parts:
                 msgs.append(
                     OutputMessage(
@@ -577,13 +584,18 @@ def extract_lm_output_messages(
         return msgs
 
     msgs: list[OutputMessage] = []
-    for item in result:
+    for idx, item in enumerate(result):
+        fallback_fr = (
+            finish_reasons[idx]
+            if finish_reasons and idx < len(finish_reasons)
+            else finish_reason
+        )
         if isinstance(item, str):
             msgs.append(
                 OutputMessage(
                     role="assistant",
                     parts=[TextPart(content=item)],
-                    finish_reason=finish_reason,
+                    finish_reason=str(fallback_fr) if fallback_fr else None,
                 )
             )
         else:
@@ -624,7 +636,7 @@ def extract_lm_output_messages(
             if not parts:
                 parts.append(TextPart(content=str(item)))
 
-            fr = item.get("finish_reason") or finish_reason
+            fr = item.get("finish_reason") or fallback_fr
             msgs.append(
                 OutputMessage(
                     role="assistant",
