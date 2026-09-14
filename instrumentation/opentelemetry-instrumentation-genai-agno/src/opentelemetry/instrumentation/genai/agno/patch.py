@@ -364,8 +364,6 @@ def _start_agent_invocation(
         agent_name=str(agent_name) if agent_name else None,
         request_model=str(request_model) if request_model else None,
     )
-    if request_model:
-        invocation.attributes[GenAI.GEN_AI_REQUEST_MODEL] = str(request_model)
     description = getattr(instance, "description", None)
     if description:
         invocation.agent_description = str(description)
@@ -537,7 +535,7 @@ def _tool_call_execute(
         invocation = _start_tool_invocation(handler, instance, capture_content)
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
         return _handle_tool_result(
@@ -561,7 +559,7 @@ def _tool_call_aexecute(
         invocation = _start_tool_invocation(handler, instance, capture_content)
         try:
             result = await wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
         return _handle_tool_result(
@@ -765,7 +763,7 @@ def _knowledge_search(
         )
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
@@ -795,7 +793,7 @@ def _knowledge_asearch(
         )
         try:
             result = await wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
