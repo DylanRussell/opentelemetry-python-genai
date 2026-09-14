@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator, Iterator
 from unittest.mock import patch
 
 import pytest
@@ -650,3 +651,39 @@ def test_base_exception_tool_finishes(
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     assert spans[0].attributes["error.type"] == "KeyboardInterrupt"
+
+
+def test_tool_stream_restores_caller_context(instrument_agno) -> None:
+    from opentelemetry.trace import get_current_span
+
+    def streaming_tool() -> Iterator[str]:
+        yield "chunk"
+
+    caller = get_current_span()
+    call = FunctionCall(
+        function=Function.from_callable(streaming_tool), arguments={}
+    )
+    result = call.execute()
+    current_after_return = get_current_span()
+    assert list(result.result) == ["chunk"]
+    assert current_after_return is caller
+
+
+def test_async_tool_stream_restores_caller_context(instrument_agno) -> None:
+    from opentelemetry.trace import get_current_span
+
+    async def streaming_tool() -> AsyncIterator[str]:
+        yield "chunk"
+
+    async def _test() -> None:
+        caller = get_current_span()
+        call = FunctionCall(
+            function=Function.from_callable(streaming_tool), arguments={}
+        )
+        result = await call.aexecute()
+        current_after_return = get_current_span()
+        chunks = [c async for c in result.result]
+        assert chunks == ["chunk"]
+        assert current_after_return is caller
+
+    asyncio.run(_test())
