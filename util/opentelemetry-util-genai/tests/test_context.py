@@ -180,6 +180,9 @@ class TestInferenceContext(TestBase):
                     server_port=443,
                 ) as nested_inv:
                     self.assertTrue(nested_inv.already_started)
+                    self.assertIs(nested_inv.span, root_inv.span)
+                    self.assertTrue(nested_inv.span.is_recording())
+                    self.assertFalse(nested_inv.should_capture_content)
                     nested_inv.input_tokens = 15
                     nested_inv.output_tokens = 25
                     nested_inv.response_model_name = "gpt-4o-2024-08-06"
@@ -414,12 +417,14 @@ class TestInferenceContext(TestBase):
             nested_inv = LLMInvocation(request_model="nested")
             self.handler.start_llm(nested_inv)
             self.assertTrue(nested_inv.already_started)
+            self.assertTrue(nested_inv.span.is_recording())
+            self.assertFalse(nested_inv.should_capture_content)
+            nested_inv.attributes["custom.llm"] = "val"
+            self.handler.stop_llm(nested_inv)
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
             self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "nested")
-            nested_inv.attributes["custom.llm"] = "val"
-            self.handler.stop_llm(nested_inv)
             self.assertEqual(attrs.get("custom.llm"), "val")
 
     def test_metric_enrichment_precedence_and_error(self) -> None:
