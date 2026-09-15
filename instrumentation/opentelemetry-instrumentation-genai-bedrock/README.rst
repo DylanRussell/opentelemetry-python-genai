@@ -1,7 +1,7 @@
 OpenTelemetry Amazon Bedrock Instrumentation
 ============================================
 
-This package provides OpenTelemetry instrumentation for Amazon Bedrock (via the AWS SDK for Python, ``boto3`` and ``aiobotocore``),
+This package provides OpenTelemetry instrumentation for Amazon Bedrock (via the AWS SDK for Python: ``boto3``, ``botocore``, ``aioboto3``, and ``aiobotocore``),
 implementing the OpenTelemetry Generative AI semantic conventions.
 
 Supported Operations
