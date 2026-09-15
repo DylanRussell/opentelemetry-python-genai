@@ -194,10 +194,6 @@ def _handle_invoke_model(
             response["body"] = StreamingBody(
                 io.BytesIO(raw_bytes), len(raw_bytes)
             )
-        elif isinstance(body_stream, (bytes, bytearray)):
-            raw_bytes = bytes(body_stream)
-        elif isinstance(body_stream, str):
-            raw_bytes = body_stream.encode("utf-8")
 
         extract_invoke_model_response(
             response,
@@ -271,10 +267,6 @@ async def _handle_async_invoke_model(
                 response["body"] = StreamingBody(
                     io.BytesIO(raw_bytes), len(raw_bytes)
                 )
-            elif isinstance(body_stream, (bytes, bytearray)):
-                raw_bytes = bytes(body_stream)
-            elif isinstance(body_stream, str):
-                raw_bytes = body_stream.encode("utf-8")
 
             extract_invoke_model_response(
                 response,
