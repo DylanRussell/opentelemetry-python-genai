@@ -560,6 +560,7 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
         if self._self_finalized:
             return
         self._self_finalized = True
+        self._self_chunks.clear()
         extract_invoke_model_response(
             self._self_response,
             full_bytes,
@@ -572,6 +573,7 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
         if self._self_finalized:
             return
         self._self_finalized = True
+        self._self_chunks.clear()
         self._self_invocation.fail(exc)
 
     async def read(self, amt: int | None = None) -> bytes:
@@ -582,7 +584,8 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
             raise
 
         if amt is None:
-            self._finalize(chunk)
+            self._self_chunks.append(chunk)
+            self._finalize(b"".join(self._self_chunks))
         elif not chunk:
             self._finalize(b"".join(self._self_chunks))
         else:
