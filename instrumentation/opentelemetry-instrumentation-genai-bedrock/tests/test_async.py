@@ -23,6 +23,8 @@ from opentelemetry.instrumentation.genai.bedrock.stream import (
 )
 from opentelemetry.semconv._incubating.attributes import (
     error_attributes as ErrorAttributes,
+)
+from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
@@ -176,7 +178,10 @@ def test_async_converse_success(
             },
             handler,
         )
-        assert response["output"]["message"]["content"][0]["text"] == "Hello, async world!"
+        assert (
+            response["output"]["message"]["content"][0]["text"]
+            == "Hello, async world!"
+        )
 
     asyncio.run(_run())
 
@@ -187,7 +192,9 @@ def test_async_converse_success(
     assert span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "chat"
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 12
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 8
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
 
 
 def test_async_converse_stream_success(
@@ -242,7 +249,9 @@ def test_async_converse_stream_success(
             is_stream=True,
         )
 
-        assert isinstance(response["stream"], AsyncBedrockConverseStreamWrapper)
+        assert isinstance(
+            response["stream"], AsyncBedrockConverseStreamWrapper
+        )
         chunks = []
         async for chunk in response["stream"]:
             chunks.append(chunk)
@@ -259,11 +268,10 @@ def test_async_converse_stream_success(
         span.attributes[GenAIAttributes.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]
         == 2
     )
-    assert (
-        span.attributes["gen_ai.usage.cache_write.input_tokens"]
-        == 1
+    assert span.attributes["gen_ai.usage.cache_write.input_tokens"] == 1
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
     )
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
 
 
 def test_async_converse_stream_error(
@@ -378,7 +386,9 @@ def test_async_invoke_model_lazy_read(
     span = spans[0]
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 7
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
 
 
 def test_async_invoke_model_chunked_read(
@@ -487,7 +497,9 @@ def test_async_invoke_model_stream_success(
         span.attributes[GenAIAttributes.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]
         == 5
     )
-    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
+    )
 
 
 def test_make_aio_api_call_wrapper_routing(
@@ -503,14 +515,18 @@ def test_make_aio_api_call_wrapper_routing(
         async def original_func(op: str, params: dict[str, Any]) -> Any:
             if op == "Converse":
                 return {
-                    "output": {"message": {"role": "assistant", "content": []}},
+                    "output": {
+                        "message": {"role": "assistant", "content": []}
+                    },
                     "stopReason": "end_turn",
                 }
             elif op == "NonBedrockOp":
                 return {"result": "ok"}
             return {}
 
-        wrapped_fn = wrapper(original_func, client, ("Converse", {"modelId": "m"}), {})
+        wrapped_fn = wrapper(
+            original_func, client, ("Converse", {"modelId": "m"}), {}
+        )
         res = await wrapped_fn
 
         assert "output" in res
