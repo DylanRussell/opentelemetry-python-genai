@@ -34,6 +34,7 @@ from opentelemetry.util.genai.handler import TelemetryHandler
 
 MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
 NOVA_MODEL_ID = "amazon.nova-micro-v1:0"
+EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
 
 
 def _anthropic_body(text: str = "Hi", inp: int = 15, out: int = 7) -> bytes:
@@ -901,47 +902,41 @@ def test_patch_and_unpatch_bedrock(tracer_provider) -> None:
 
 @pytest.mark.asyncio
 async def test_async_invoke_model_titan_embeddings(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
     body_content = b'{"embedding":[0.1,0.2,0.3,0.4],"inputTextTokenCount":7}'
-    mock_body = _MockAsyncStreamingBody(body_content)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {
-            "body": mock_body,
+    request_body = '{"inputText":"This is the text to embed."}'
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
             "ResponseMetadata": {
                 "HTTPHeaders": {
                     "x-amzn-bedrock-input-token-count": "7",
                 }
             },
-        }
-
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
-        {
-            "modelId": "amazon.titan-embed-text-v1",
-            "body": '{"inputText":"This is the text to embed."}',
         },
-        handler,
-    )
+        modelId=EMBEDDING_MODEL_ID,
+        body=request_body,
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=EMBEDDING_MODEL_ID, body=request_body
+        )
 
-    # Before read() is called, the span should NOT be finished yet
-    assert len(span_exporter.get_finished_spans()) == 0
-    assert isinstance(response["body"], AsyncBedrockStreamingBodyWrapper)
+        # The span stays open until the caller drains the body.
+        assert len(span_exporter.get_finished_spans()) == 0
+        assert isinstance(response["body"], AsyncBedrockStreamingBodyWrapper)
 
-    # Now read the body
-    data = await response["body"].read()
-    assert data == body_content
+        assert await response["body"].read() == body_content
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "embeddings amazon.titan-embed-text-v1"
+    assert span.name == f"embeddings {EMBEDDING_MODEL_ID}"
     assert (
         span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME]
         == GenAIAttributes.GenAiOperationNameValues.EMBEDDINGS.value
@@ -952,7 +947,7 @@ async def test_async_invoke_model_titan_embeddings(
     )
     assert (
         span.attributes[GenAIAttributes.GEN_AI_REQUEST_MODEL]
-        == "amazon.titan-embed-text-v1"
+        == EMBEDDING_MODEL_ID
     )
     assert (
         span.attributes[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT] == 4
@@ -962,69 +957,61 @@ async def test_async_invoke_model_titan_embeddings(
 
 @pytest.mark.asyncio
 async def test_async_invoke_model_titan_embeddings_chunked(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
     body_content = b'{"embedding":[0.5,0.6,0.7],"inputTextTokenCount":5}'
-    mock_body = _MockAsyncStreamingBody(body_content)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"body": mock_body}
-
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
+    request_body = '{"inputText":"Test chunked embedding"}'
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
         {
-            "modelId": "amazon.titan-embed-text-v1",
-            "body": '{"inputText":"Test chunked embedding"}',
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
         },
-        handler,
-    )
+        modelId=EMBEDDING_MODEL_ID,
+        body=request_body,
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=EMBEDDING_MODEL_ID, body=request_body
+        )
 
-    # Read in chunks
-    chunk1 = await response["body"].read(10)
-    assert len(span_exporter.get_finished_spans()) == 0
-    chunk2 = await response["body"].read(None)
-    assert chunk1 + chunk2 == body_content
+        chunk1 = await response["body"].read(10)
+        assert len(span_exporter.get_finished_spans()) == 0
+        chunk2 = await response["body"].read(None)
+        assert chunk1 + chunk2 == body_content
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "embeddings amazon.titan-embed-text-v1"
+    assert span.name == f"embeddings {EMBEDDING_MODEL_ID}"
     assert (
         span.attributes[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT] == 3
     )
+    # No token-count header on this response, so the count comes from the body.
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 5
 
 
 @pytest.mark.asyncio
 async def test_async_invoke_model_embedding_error(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
+    async def _raise(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("Embedding failure")
 
+    async_bedrock_client._endpoint.make_request = _raise
+
     with pytest.raises(RuntimeError, match="Embedding failure"):
-        await _handle_async_invoke_model(
-            _call,
-            _bedrock_client(),
-            (),
-            {},
-            {
-                "modelId": "amazon.titan-embed-text-v1",
-                "body": '{"inputText":"Test failure"}',
-            },
-            handler,
+        await async_bedrock_client.invoke_model(
+            modelId=EMBEDDING_MODEL_ID,
+            body='{"inputText":"Test failure"}',
         )
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "embeddings amazon.titan-embed-text-v1"
+    assert span.name == f"embeddings {EMBEDDING_MODEL_ID}"
     assert span.attributes[ErrorAttributes.ERROR_TYPE] == "RuntimeError"
