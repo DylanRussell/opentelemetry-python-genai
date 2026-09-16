@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -923,7 +924,12 @@ def test_agent_continue_run_spans(
     with patch(
         "agno.models.base.Model.response", return_value=mock_cont_output
     ):
-        cont_res = agent.continue_run(run_res, input="continue instruction")
+        kwargs = (
+            {"input": "continue instruction"}
+            if "input" in inspect.signature(Agent.continue_run).parameters
+            else {}
+        )
+        cont_res = agent.continue_run(run_res, **kwargs)
         assert cont_res is not None
 
     spans = span_exporter.get_finished_spans()
@@ -976,9 +982,12 @@ def test_agent_acontinue_run_spans(
         with patch(
             "agno.models.base.Model.aresponse", return_value=mock_cont_output
         ):
-            cont_res = await agent.acontinue_run(
-                run_res, input="continue async"
+            kwargs = (
+                {"input": "continue async"}
+                if "input" in inspect.signature(Agent.acontinue_run).parameters
+                else {}
             )
+            cont_res = await agent.acontinue_run(run_res, **kwargs)
             assert cont_res is not None
 
     asyncio.run(_run())
@@ -1002,6 +1011,11 @@ def test_team_continue_run_spans(
     span_exporter,
 ) -> None:
     """Test that Team.continue_run emits an invoke_agent span."""
+    if not hasattr(Team, "continue_run"):
+        pytest.skip(
+            "Team.continue_run is not supported in this version of agno"
+        )
+
     agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
     agent2 = Agent(name="m2", model=MockModel(id="mock-model"))
     team = Team(
@@ -1043,6 +1057,11 @@ def test_team_acontinue_run_spans(
     span_exporter,
 ) -> None:
     """Test that Team.acontinue_run emits an invoke_agent span."""
+    if not hasattr(Team, "acontinue_run"):
+        pytest.skip(
+            "Team.acontinue_run is not supported in this version of agno"
+        )
+
     agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
     agent2 = Agent(name="m2", model=MockModel(id="mock-model"))
     team = Team(
@@ -1087,8 +1106,14 @@ def test_workflow_continue_run_spans(
     span_exporter,
 ) -> None:
     """Test that Workflow.continue_run emits a workflow span."""
-    from agno.run.workflow import RunStatus, WorkflowRunOutput
     from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "continue_run"):
+        pytest.skip(
+            "Workflow.continue_run is not supported in this version of agno"
+        )
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
 
     workflow = Workflow(
         name="test-continue-workflow",
@@ -1134,10 +1159,16 @@ def test_workflow_acontinue_run_spans(
     span_exporter,
 ) -> None:
     """Test that Workflow.acontinue_run emits a workflow span."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "acontinue_run"):
+        pytest.skip(
+            "Workflow.acontinue_run is not supported in this version of agno"
+        )
+
     from unittest.mock import AsyncMock
 
     from agno.run.workflow import RunStatus, WorkflowRunOutput
-    from agno.workflow.workflow import Workflow
 
     workflow = Workflow(
         name="test-async-continue-workflow",
@@ -1194,18 +1225,238 @@ def test_agent_continue_run_error(
     span_exporter,
 ) -> None:
     """Test that an error in Agent.continue_run records error telemetry."""
+    import agno.agent
+
     agent = Agent(
         name="error-continue-agent", model=MockModel(id="mock-model")
     )
 
-    with (
-        patch(
+    if hasattr(agno.agent, "_run"):
+        cm = patch(
             "agno.agent._run.continue_run_dispatch",
             side_effect=RuntimeError("continue boom"),
-        ),
+        )
+    else:
+        cm = patch.object(
+            Agent,
+            "_initialize_session",
+            side_effect=RuntimeError("continue boom"),
+        )
+
+    with (
+        cm,
         pytest.raises(RuntimeError, match="continue boom"),
     ):
-        agent.continue_run(run_id="some-id")
+        agent.continue_run(run_id="some-id", session_id="sess-err")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_agent_acontinue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Agent.acontinue_run records error telemetry."""
+    import agno.agent
+
+    agent = Agent(
+        name="error-async-continue-agent", model=MockModel(id="mock-model")
+    )
+
+    if hasattr(agno.agent, "_run"):
+        cm = patch(
+            "agno.agent._run.acontinue_run_dispatch",
+            side_effect=RuntimeError("async continue boom"),
+        )
+    else:
+        cm = patch.object(
+            Agent,
+            "_initialize_session",
+            side_effect=RuntimeError("async continue boom"),
+        )
+
+    async def _run() -> None:
+        with (
+            cm,
+            pytest.raises(RuntimeError, match="async continue boom"),
+        ):
+            await agent.acontinue_run(run_id="some-id", session_id="sess-err")
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_team_continue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Team.continue_run records error telemetry."""
+    if not hasattr(Team, "continue_run"):
+        pytest.skip(
+            "Team.continue_run is not supported in this version of agno"
+        )
+
+    agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-err-team",
+        members=[agent1],
+        model=MockModel(id="mock-model"),
+    )
+    with (
+        patch(
+            "agno.team._run.continue_run_dispatch",
+            side_effect=RuntimeError("team continue boom"),
+        ),
+        pytest.raises(RuntimeError, match="team continue boom"),
+    ):
+        team.continue_run(run_id="some-id")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_team_acontinue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Team.acontinue_run records error telemetry."""
+    if not hasattr(Team, "acontinue_run"):
+        pytest.skip(
+            "Team.acontinue_run is not supported in this version of agno"
+        )
+
+    agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-err-async-team",
+        members=[agent1],
+        model=MockModel(id="mock-model"),
+    )
+
+    async def _run() -> None:
+        with (
+            patch(
+                "agno.team._run.acontinue_run_dispatch",
+                side_effect=RuntimeError("async team continue boom"),
+            ),
+            pytest.raises(RuntimeError, match="async team continue boom"),
+        ):
+            await team.acontinue_run(run_id="some-id")
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_workflow_continue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Workflow.continue_run records error telemetry."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "continue_run"):
+        pytest.skip(
+            "Workflow.continue_run is not supported in this version of agno"
+        )
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+
+    workflow = Workflow(
+        name="test-err-workflow",
+        steps=[],
+        session_id="wf-err-sess",
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-err-sess",
+        status=RunStatus.paused,
+        paused_step_index=0,
+        content="Workflow continued",
+        step_requirements=[],
+    )
+    with (
+        patch.object(Workflow, "get_session", return_value=MagicMock()),
+        patch.object(
+            Workflow,
+            "_continue_execute",
+            side_effect=RuntimeError("workflow continue boom"),
+        ),
+        pytest.raises(RuntimeError, match="workflow continue boom"),
+    ):
+        workflow.continue_run(run_response=mock_wf_output)
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_workflow_acontinue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Workflow.acontinue_run records error telemetry."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "acontinue_run"):
+        pytest.skip(
+            "Workflow.acontinue_run is not supported in this version of agno"
+        )
+
+    from unittest.mock import AsyncMock
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+
+    workflow = Workflow(
+        name="test-err-async-workflow",
+        steps=[],
+        session_id="wf-async-err-sess",
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-async-err-sess",
+        status=RunStatus.paused,
+        paused_step_index=0,
+        content="Workflow async continued",
+        step_requirements=[],
+    )
+
+    async def _run() -> None:
+        with (
+            patch.object(
+                Workflow,
+                "aget_session",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                Workflow,
+                "_acontinue_execute",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("async workflow continue boom"),
+            ),
+            pytest.raises(RuntimeError, match="async workflow continue boom"),
+        ):
+            await workflow.acontinue_run(run_response=mock_wf_output)
+
+    asyncio.run(_run())
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -1219,6 +1470,14 @@ def test_agent_continue_run_with_additional_instructions(
     span_exporter,
 ) -> None:
     """Test Agent.continue_run with additional_instructions parameter."""
+    if (
+        "additional_instructions"
+        not in inspect.signature(Agent.continue_run).parameters
+    ):
+        pytest.skip(
+            "Agent.continue_run does not support additional_instructions in this version of agno"
+        )
+
     agent = Agent(name="test-add-inst-agent", model=MockModel(id="mock-model"))
     mock_run_output = ModelResponse(content="Initial response")
     mock_cont_output = ModelResponse(content="Continued response")
@@ -1254,6 +1513,14 @@ def test_agent_continue_run_with_additional_instructions_camel_case(
     span_exporter,
 ) -> None:
     """Test Agent.continue_run with camelCase additionalInstructions alias."""
+    if (
+        "additional_instructions"
+        not in inspect.signature(Agent.continue_run).parameters
+    ):
+        pytest.skip(
+            "Agent.continue_run does not support additional_instructions in this version of agno"
+        )
+
     agent = Agent(
         name="test-camel-inst-agent", model=MockModel(id="mock-model")
     )
@@ -1330,6 +1597,13 @@ def test_agent_continue_run_with_tools_kwarg_json_string(
     span_exporter,
 ) -> None:
     """Test Agent.continue_run with tools kwarg directly passed as JSON string."""
+    import agno.agent
+
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "Agent.continue_run kwargs not supported in this version of agno"
+        )
+
     agent = Agent(
         name="test-tools-direct-agent", model=MockModel(id="mock-model")
     )
@@ -1368,6 +1642,14 @@ def test_agent_continue_run_with_tools_json_string_and_additional_instructions(
     span_exporter,
 ) -> None:
     """Test Agent.continue_run with both tools JSON string and additional_instructions."""
+    if (
+        "additional_instructions"
+        not in inspect.signature(Agent.continue_run).parameters
+    ):
+        pytest.skip(
+            "Agent.continue_run does not support additional_instructions in this version of agno"
+        )
+
     agent = Agent(
         name="test-tools-hitl-agent", model=MockModel(id="mock-model")
     )
@@ -1442,7 +1724,12 @@ def test_agent_continue_run_with_tools_json_string_tool_definitions(
         with patch(
             "agno.models.base.Model.response", return_value=mock_cont_output
         ):
-            cont_res = agent.continue_run(run_res, input="next")
+            kwargs = (
+                {"input": "next"}
+                if "input" in inspect.signature(Agent.continue_run).parameters
+                else {}
+            )
+            cont_res = agent.continue_run(run_res, **kwargs)
             assert cont_res is not None
 
     spans = span_exporter.get_finished_spans()
@@ -1461,6 +1748,14 @@ def test_agent_acontinue_run_with_tools_and_additional_instructions(
     span_exporter,
 ) -> None:
     """Test Agent.acontinue_run with tools JSON string and additional_instructions."""
+    if (
+        "additional_instructions"
+        not in inspect.signature(Agent.acontinue_run).parameters
+    ):
+        pytest.skip(
+            "Agent.acontinue_run does not support additional_instructions in this version of agno"
+        )
+
     agent = Agent(
         name="test-async-tools-agent", model=MockModel(id="mock-model")
     )

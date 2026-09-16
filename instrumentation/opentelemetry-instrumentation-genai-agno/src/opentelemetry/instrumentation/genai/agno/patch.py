@@ -230,51 +230,52 @@ def unpatch_agent() -> None:
     global _instrumentation_generation, _is_instrumented
     _instrumentation_generation += 1
     _is_instrumented = False
+
+    def _safe_unwrap(target: Any, attr: str) -> None:
+        try:
+            unwrap(target, attr)
+        except (AttributeError, ValueError):
+            pass
+
     if _AGNO_MODULE in sys.modules:
         try:
             import agno.agent
 
-            unwrap(agno.agent.Agent, "run")
-            unwrap(agno.agent.Agent, "arun")
-            unwrap(agno.agent.Agent, "continue_run")
-            unwrap(agno.agent.Agent, "acontinue_run")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.agent.Agent, attr)
+        except ImportError:
             pass
     if _AGNO_TEAM_MODULE in sys.modules:
         try:
             import agno.team
 
-            unwrap(agno.team.Team, "run")
-            unwrap(agno.team.Team, "arun")
-            unwrap(agno.team.Team, "continue_run")
-            unwrap(agno.team.Team, "acontinue_run")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.team.Team, attr)
+        except ImportError:
             pass
     if _AGNO_TOOLS_MODULE in sys.modules:
         try:
             import agno.tools.function
 
-            unwrap(agno.tools.function.FunctionCall, "execute")
-            unwrap(agno.tools.function.FunctionCall, "aexecute")
-        except (ImportError, AttributeError):
+            for attr in ("execute", "aexecute"):
+                _safe_unwrap(agno.tools.function.FunctionCall, attr)
+        except ImportError:
             pass
     if _AGNO_WORKFLOW_MODULE in sys.modules:
         try:
             import agno.workflow.workflow
 
-            unwrap(agno.workflow.workflow.Workflow, "run")
-            unwrap(agno.workflow.workflow.Workflow, "arun")
-            unwrap(agno.workflow.workflow.Workflow, "continue_run")
-            unwrap(agno.workflow.workflow.Workflow, "acontinue_run")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.workflow.workflow.Workflow, attr)
+        except ImportError:
             pass
     if _AGNO_KNOWLEDGE_MODULE in sys.modules:
         try:
             import agno.knowledge.knowledge
 
-            unwrap(agno.knowledge.knowledge.Knowledge, "search")
-            unwrap(agno.knowledge.knowledge.Knowledge, "asearch")
-        except (ImportError, AttributeError):
+            for attr in ("search", "asearch"):
+                _safe_unwrap(agno.knowledge.knowledge.Knowledge, attr)
+        except ImportError:
             pass
 
 
@@ -425,9 +426,9 @@ def _extract_continue_tool_results(
                 pass
 
         if hasattr(item, "tool_execution"):
-            te: Any = getattr(item, "tool_execution")
-            if te is not None:
-                item = te
+            tool_exec: Any = getattr(item, "tool_execution")
+            if tool_exec is not None:
+                item = tool_exec
 
         if isinstance(item, dict):
             item_dict = cast(dict[str, Any], item)
@@ -629,7 +630,7 @@ def _agent_run(
         )
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
@@ -658,7 +659,7 @@ def _agent_arun(
     ) -> Any:
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation = _start_agent_invocation(
                 handler,
                 instance,
@@ -707,7 +708,7 @@ def _agent_arun(
                     )
                     invocation.stop()
                     return response
-                except Exception as error:
+                except BaseException as error:
                     invocation.fail(error)
                     raise
 
@@ -855,7 +856,7 @@ def _workflow_run(
         )
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
@@ -886,7 +887,7 @@ def _workflow_arun(
     ) -> Any:
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation = _start_workflow_invocation(
                 handler,
                 instance,
@@ -935,7 +936,7 @@ def _workflow_arun(
                     )
                     invocation.stop()
                     return response
-                except Exception as error:
+                except BaseException as error:
                     invocation.fail(error)
                     raise
 
