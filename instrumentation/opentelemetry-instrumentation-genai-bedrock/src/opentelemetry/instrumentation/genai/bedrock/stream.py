@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from opentelemetry.util.genai.invocation import InferenceInvocation
@@ -540,6 +541,7 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
     _self_capture_content: bool
     _self_chunks: list[bytes]
     _self_finalized: bool
+    _self_body_class: Any
 
     def __init__(
         self,
@@ -555,6 +557,7 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
         self._self_capture_content = capture_content
         self._self_chunks = []
         self._self_finalized = False
+        self._self_body_class = type(body)
 
     def _finalize(self, full_bytes: bytes) -> None:
         if self._self_finalized:
@@ -592,6 +595,42 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
             self._self_chunks.append(chunk)
 
         return chunk
+
+    async def readinto(self, b: bytearray) -> int:
+        # Reimplemented on top of read() because the SDK's readinto pulls from
+        # the raw stream directly, which would skip chunk collection.
+        chunk = await self.read(len(b))
+        b[: len(chunk)] = chunk
+        return len(chunk)
+
+    # The SDK funnels every async read path through self.read(). Calling the
+    # wrapped implementations with the proxy as self therefore routes them
+    # through the instrumented read() above, rather than reimplementing the
+    # SDK's iteration and line-splitting here.
+    def iter_chunks(self, *args: Any, **kwargs: Any) -> AsyncIterator[bytes]:
+        return self._self_body_class.iter_chunks(self, *args, **kwargs)
+
+    def iter_lines(self, *args: Any, **kwargs: Any) -> AsyncIterator[bytes]:
+        return self._self_body_class.iter_lines(self, *args, **kwargs)
+
+    async def readlines(self) -> list[bytes]:
+        return await self._self_body_class.readlines(self)
+
+    def __aiter__(self) -> AsyncIterator[bytes]:
+        # ObjectProxy cannot forward this: Python looks special methods up on
+        # the type, so without it 'async for' rejects the wrapper outright.
+        return self._self_body_class.__aiter__(self)
+
+    async def __anext__(self) -> bytes:
+        return await self._self_body_class.__anext__(self)
+
+    anext = __anext__
+
+    async def __aenter__(self) -> AsyncBedrockStreamingBodyWrapper:
+        # Returning self is what keeps `async with body as b` instrumented;
+        # ObjectProxy would otherwise bind the unwrapped SDK body to b.
+        await self.__wrapped__.__aenter__()
+        return self
 
     async def aclose(self) -> None:
         try:

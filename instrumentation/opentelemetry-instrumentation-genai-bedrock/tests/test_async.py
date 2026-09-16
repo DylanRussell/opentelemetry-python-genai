@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+import json
+import os
 from typing import Any
 
+import aiobotocore
+import aiobotocore.session
 import pytest
+import pytest_asyncio
+from aiobotocore.response import StreamingBody as AioStreamingBody
+from botocore.stub import Stubber
 
 from opentelemetry.instrumentation.genai.bedrock.patch import (
-    _handle_async_converse,
-    _handle_async_invoke_model,
-    _make_aio_api_call_wrapper,
     patch_bedrock,
     unpatch_bedrock,
 )
@@ -29,49 +32,71 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 
-
-def _bedrock_client() -> Any:
-    return SimpleNamespace(
-        meta=SimpleNamespace(
-            endpoint_url="https://bedrock-runtime.us-east-1.amazonaws.com"
-        ),
-        _service_model=SimpleNamespace(service_name="bedrock-runtime"),
-    )
+MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
+NOVA_MODEL_ID = "amazon.nova-micro-v1:0"
 
 
-class _MockAsyncStreamingBody:
+def _anthropic_body(text: str = "Hi", inp: int = 15, out: int = 7) -> bytes:
+    return json.dumps(
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": inp, "output_tokens": out},
+        }
+    ).encode("utf-8")
+
+
+class _FakeHTTPContent:
+    """Stands in for the aiohttp payload behind a real streaming body."""
+
     def __init__(self, data: bytes) -> None:
         self._data = data
         self._pos = 0
-        self.closed = False
 
-    async def read(self, amt: int | None = None) -> bytes:
-        if self._pos >= len(self._data):
-            return b""
-        if amt is None:
+    async def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
             chunk = self._data[self._pos :]
             self._pos = len(self._data)
             return chunk
-        chunk = self._data[self._pos : self._pos + amt]
+        chunk = self._data[self._pos : self._pos + n]
         self._pos += len(chunk)
         return chunk
 
-    async def aclose(self) -> None:
-        self.closed = True
+    def at_eof(self) -> bool:
+        return self._pos >= len(self._data)
+
+
+class _FakeHTTPResponse:
+    """Transport-level stand-in so tests exercise the SDK's real body class.
+
+    Only the socket is faked: the object handed to the instrumentation is a
+    genuine aiobotocore streaming body, so its read/iteration contract is the
+    one under test.
+    """
+
+    def __init__(self, data: bytes) -> None:
+        self.content = _FakeHTTPContent(data)
+        self.url = "https://bedrock-runtime.us-east-1.amazonaws.com/"
+        self.closed = False
+
+    def at_eof(self) -> bool:
+        return self.content.at_eof()
 
     def close(self) -> None:
         self.closed = True
 
-    async def __aenter__(self) -> _MockAsyncStreamingBody:
+    async def __aenter__(self) -> _FakeHTTPResponse:
         return self
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: Any,
-    ) -> None:
-        await self.aclose()
+    async def __aexit__(self, *_exc: Any) -> None:
+        self.close()
+
+
+def _streaming_body(data: bytes | None = None) -> AioStreamingBody:
+    payload = _anthropic_body() if data is None else data
+    return AioStreamingBody(_FakeHTTPResponse(payload), len(payload))
 
 
 class _MockAsyncEventStream:
@@ -107,75 +132,60 @@ class _FailingAsyncEventStream:
             raise StopAsyncIteration
 
 
-@pytest.mark.asyncio
-async def test_async_converse_records_cancelled_error(
-    tracer_provider,
-    span_exporter,
-) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
+@pytest_asyncio.fixture
+async def async_bedrock_client():
+    """A real aiobotocore Bedrock runtime client."""
+    session = aiobotocore.session.AioSession()
+    async with session.create_client(
+        "bedrock-runtime",
+        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+    ) as client:
+        yield client
 
-    async def _cancelled_call(*_args: Any, **_kwargs: Any) -> Any:
-        raise asyncio.CancelledError()
 
-    with pytest.raises(asyncio.CancelledError):
-        await _handle_async_converse(
-            _cancelled_call,
-            _bedrock_client(),
-            (),
-            {},
-            {
-                "modelId": "amazon.nova-micro-v1:0",
-                "messages": [],
-            },
-            handler,
-        )
-
-    spans = span_exporter.get_finished_spans()
-    assert len(spans) == 1
-    assert (
-        spans[0].attributes[ErrorAttributes.ERROR_TYPE]
-        == "asyncio.exceptions.CancelledError"
+def _stub(
+    client: Any, operation: str, response: Any, **params: Any
+) -> Stubber:
+    stubber = Stubber(client)
+    # Event streams and streaming bodies are not describable by the output
+    # shape, so Stubber's response validation cannot accept them.
+    stubber._validate_response = lambda *args, **kwargs: None
+    stubber.add_response(
+        operation, service_response=response, expected_params=params
     )
+    return stubber
+
+
+CONVERSE_RESPONSE = {
+    "output": {
+        "message": {
+            "role": "assistant",
+            "content": [{"text": "Hello, async world!"}],
+        }
+    },
+    "stopReason": "end_turn",
+    "usage": {"inputTokens": 12, "outputTokens": 8},
+}
 
 
 @pytest.mark.asyncio
 async def test_async_converse_success(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    messages = [{"role": "user", "content": [{"text": "Hello"}]}]
+    with _stub(
+        async_bedrock_client,
+        "converse",
+        CONVERSE_RESPONSE,
+        modelId=NOVA_MODEL_ID,
+        messages=messages,
+    ):
+        response = await async_bedrock_client.converse(
+            modelId=NOVA_MODEL_ID, messages=messages
+        )
 
-    async def _success_call(*_args: Any, **_kwargs: Any) -> Any:
-        return {
-            "output": {
-                "message": {
-                    "role": "assistant",
-                    "content": [{"text": "Hello, async world!"}],
-                }
-            },
-            "stopReason": "end_turn",
-            "usage": {
-                "inputTokens": 12,
-                "outputTokens": 8,
-            },
-        }
-
-    response = await _handle_async_converse(
-        _success_call,
-        _bedrock_client(),
-        (),
-        {},
-        {
-            "modelId": "amazon.nova-micro-v1:0",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"text": "Hello"}],
-                }
-            ],
-        },
-        handler,
-    )
     assert (
         response["output"]["message"]["content"][0]["text"]
         == "Hello, async world!"
@@ -184,7 +194,7 @@ async def test_async_converse_success(
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "chat amazon.nova-micro-v1:0"
+    assert span.name == f"chat {NOVA_MODEL_ID}"
     assert span.attributes[GenAIAttributes.GEN_AI_OPERATION_NAME] == "chat"
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 12
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 8
@@ -194,61 +204,104 @@ async def test_async_converse_success(
 
 
 @pytest.mark.asyncio
-async def test_async_converse_stream_success(
-    tracer_provider,
+async def test_async_converse_client_error(
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    events = [
-        {"messageStart": {"role": "assistant"}},
-        {"contentBlockStart": {"contentBlockIndex": 0, "start": {}}},
-        {
-            "contentBlockDelta": {
-                "contentBlockIndex": 0,
-                "delta": {"text": "Async "},
-            }
-        },
-        {
-            "contentBlockDelta": {
-                "contentBlockIndex": 0,
-                "delta": {"text": "stream!"},
-            }
-        },
-        {"contentBlockStop": {"contentBlockIndex": 0}},
-        {"messageStop": {"stopReason": "end_turn"}},
-        {
-            "metadata": {
-                "usage": {
-                    "inputTokens": 10,
-                    "outputTokens": 5,
-                    "cacheReadInputTokens": 2,
-                    "cacheWriteInputTokens": 1,
-                }
-            }
-        },
-    ]
-
-    async def _stream_call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"stream": _MockAsyncEventStream(events)}
-
-    response = await _handle_async_converse(
-        _stream_call,
-        _bedrock_client(),
-        (),
-        {},
-        {
-            "modelId": "amazon.nova-micro-v1:0",
-            "messages": [],
-        },
-        handler,
-        is_stream=True,
+    stubber = Stubber(async_bedrock_client)
+    stubber.add_client_error(
+        "converse",
+        service_error_code="ValidationException",
+        service_message="Invalid input",
+        expected_params={"modelId": NOVA_MODEL_ID, "messages": []},
     )
 
-    assert isinstance(response["stream"], AsyncBedrockConverseStreamWrapper)
-    chunks = []
-    async for chunk in response["stream"]:
-        chunks.append(chunk)
-    assert len(chunks) == len(events)
+    with stubber, pytest.raises(Exception):
+        await async_bedrock_client.converse(modelId=NOVA_MODEL_ID, messages=[])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[ErrorAttributes.ERROR_TYPE] in (
+        "ValidationException",
+        "botocore.errorfactory.ValidationException",
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_converse_records_cancelled_error(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    async def _cancel(*_args: Any, **_kwargs: Any) -> Any:
+        raise asyncio.CancelledError()
+
+    async_bedrock_client._endpoint.make_request = _cancel
+
+    with pytest.raises(asyncio.CancelledError):
+        await async_bedrock_client.converse(modelId=NOVA_MODEL_ID, messages=[])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert (
+        spans[0].attributes[ErrorAttributes.ERROR_TYPE]
+        == "asyncio.exceptions.CancelledError"
+    )
+
+
+CONVERSE_STREAM_EVENTS = [
+    {"messageStart": {"role": "assistant"}},
+    {"contentBlockStart": {"contentBlockIndex": 0, "start": {}}},
+    {
+        "contentBlockDelta": {
+            "contentBlockIndex": 0,
+            "delta": {"text": "Async "},
+        }
+    },
+    {
+        "contentBlockDelta": {
+            "contentBlockIndex": 0,
+            "delta": {"text": "stream!"},
+        }
+    },
+    {"contentBlockStop": {"contentBlockIndex": 0}},
+    {"messageStop": {"stopReason": "end_turn"}},
+    {
+        "metadata": {
+            "usage": {
+                "inputTokens": 10,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 2,
+                "cacheWriteInputTokens": 1,
+            }
+        }
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_async_converse_stream_success(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    with _stub(
+        async_bedrock_client,
+        "converse_stream",
+        {"stream": _MockAsyncEventStream(CONVERSE_STREAM_EVENTS)},
+        modelId=NOVA_MODEL_ID,
+        messages=[],
+    ):
+        response = await async_bedrock_client.converse_stream(
+            modelId=NOVA_MODEL_ID, messages=[]
+        )
+
+        assert isinstance(
+            response["stream"], AsyncBedrockConverseStreamWrapper
+        )
+        chunks = [chunk async for chunk in response["stream"]]
+        assert len(chunks) == len(CONVERSE_STREAM_EVENTS)
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -267,34 +320,26 @@ async def test_async_converse_stream_success(
 
 @pytest.mark.asyncio
 async def test_async_converse_stream_error(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    events = [
-        {"messageStart": {"role": "assistant"}},
-        {"fail": True},
-    ]
+    """A stream-side failure raised by the SDK mid-iteration."""
+    events = [{"messageStart": {"role": "assistant"}}, {"fail": True}]
+    with _stub(
+        async_bedrock_client,
+        "converse_stream",
+        {"stream": _FailingAsyncEventStream(events)},
+        modelId=NOVA_MODEL_ID,
+        messages=[],
+    ):
+        response = await async_bedrock_client.converse_stream(
+            modelId=NOVA_MODEL_ID, messages=[]
+        )
 
-    async def _stream_call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"stream": _FailingAsyncEventStream(events)}
-
-    response = await _handle_async_converse(
-        _stream_call,
-        _bedrock_client(),
-        (),
-        {},
-        {
-            "modelId": "amazon.nova-micro-v1:0",
-            "messages": [],
-        },
-        handler,
-        is_stream=True,
-    )
-
-    with pytest.raises(RuntimeError, match="Stream read failure"):
-        async for _ in response["stream"]:
-            pass
+        with pytest.raises(RuntimeError, match="Stream read failure"):
+            async for _ in response["stream"]:
+                pass
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -302,27 +347,46 @@ async def test_async_converse_stream_error(
 
 
 @pytest.mark.asyncio
-async def test_async_invoke_model_records_cancelled_error(
-    tracer_provider,
+async def test_async_converse_stream_caller_error(
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    """A caller-side failure raised inside `async with` before draining."""
+    with _stub(
+        async_bedrock_client,
+        "converse_stream",
+        {"stream": _MockAsyncEventStream(CONVERSE_STREAM_EVENTS)},
+        modelId=NOVA_MODEL_ID,
+        messages=[],
+    ):
+        response = await async_bedrock_client.converse_stream(
+            modelId=NOVA_MODEL_ID, messages=[]
+        )
 
-    async def _cancelled_call(*_args: Any, **_kwargs: Any) -> Any:
+        with pytest.raises(ValueError, match="caller error"):
+            async with response["stream"] as stream:
+                async for _ in stream:
+                    raise ValueError("caller error")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[ErrorAttributes.ERROR_TYPE] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_records_cancelled_error(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    async def _cancel(*_args: Any, **_kwargs: Any) -> Any:
         raise asyncio.CancelledError()
 
+    async_bedrock_client._endpoint.make_request = _cancel
+
     with pytest.raises(asyncio.CancelledError):
-        await _handle_async_invoke_model(
-            _cancelled_call,
-            _bedrock_client(),
-            (),
-            {},
-            {
-                "modelId": "anthropic.claude-v2",
-                "body": "{}",
-            },
-            handler,
-        )
+        await async_bedrock_client.invoke_model(modelId=MODEL_ID, body="{}")
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -334,35 +398,30 @@ async def test_async_invoke_model_records_cancelled_error(
 
 @pytest.mark.asyncio
 async def test_async_invoke_model_lazy_read(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    body_content = b'{"type":"message","role":"assistant","content":[{"type":"text","text":"Async invoke response"}],"stop_reason":"end_turn","usage":{"input_tokens":15,"output_tokens":7}}'
-    mock_body = _MockAsyncStreamingBody(body_content)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"body": mock_body}
-
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
+    body_content = _anthropic_body("Async invoke response")
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
         {
-            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "body": '{"messages":[{"role":"user","content":"Hi"}]}',
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
         },
-        handler,
-    )
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
 
-    # Before read() is called, the span should NOT be finished yet
-    assert len(span_exporter.get_finished_spans()) == 0
-    assert isinstance(response["body"], AsyncBedrockStreamingBodyWrapper)
+        # The span stays open until the caller drains the body.
+        assert len(span_exporter.get_finished_spans()) == 0
+        assert isinstance(response["body"], AsyncBedrockStreamingBodyWrapper)
 
-    # Now read the body
-    data = await response["body"].read()
-    assert data == body_content
+        assert await response["body"].read() == body_content
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -375,37 +434,93 @@ async def test_async_invoke_model_lazy_read(
 
 
 @pytest.mark.asyncio
-async def test_async_invoke_model_chunked_read(
-    tracer_provider,
+async def test_async_invoke_model_body_forwards_attributes(
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    body_content = b'{"type":"message","role":"assistant","content":[{"type":"text","text":"Chunked"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":3}}'
-    mock_body = _MockAsyncStreamingBody(body_content)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"body": mock_body}
-
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
+    """Non-instrumented attributes must reach the wrapped body unchanged."""
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
         {
-            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "body": '{"messages":[]}',
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
         },
-        handler,
-    )
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+        body = response["body"]
 
-    chunks = []
-    while True:
-        chunk = await response["body"].read(20)
-        if not chunk:
-            break
-        chunks.append(chunk)
+        assert body.tell() == 0
+        assert await body.read() == body_content
+        assert body.tell() == len(body_content)
 
-    assert b"".join(chunks) == body_content
+
+@pytest.mark.skipif(
+    int(aiobotocore.__version__.split(".")[0]) < 3,
+    reason=(
+        "aiobotocore 2.x's StreamingBody is itself a wrapt proxy that reports "
+        "the HTTP response as its __class__, so isinstance cannot survive a "
+        "second proxy layer"
+    ),
+)
+@pytest.mark.asyncio
+async def test_async_invoke_model_body_is_transparent_proxy(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    """isinstance must still resolve to the SDK's own body type."""
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {"contentType": "application/json", "body": _streaming_body()},
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+        body = response["body"]
+
+        assert isinstance(body, AioStreamingBody)
+        await body.read()
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_chunked_read(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    body_content = _anthropic_body("Chunked", inp=5, out=3)
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+
+        chunks = []
+        while True:
+            chunk = await response["body"].read(20)
+            if not chunk:
+                break
+            chunks.append(chunk)
+
+        assert b"".join(chunks) == body_content
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -414,35 +529,29 @@ async def test_async_invoke_model_chunked_read(
 
 @pytest.mark.asyncio
 async def test_async_invoke_model_chunked_then_drain_read(
-    tracer_provider,
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    body_content = b'{"type":"message","role":"assistant","content":[{"type":"text","text":"Chunked then drain"}],"stop_reason":"end_turn","usage":{"input_tokens":18,"output_tokens":4}}'
-    mock_body = _MockAsyncStreamingBody(body_content)
-
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"body": mock_body}
-
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
+    body_content = _anthropic_body("Chunked then drain", inp=18, out=4)
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
         {
-            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "body": '{"messages":[]}',
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
         },
-        handler,
-    )
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
 
-    # Read the first 20 bytes as a chunk
-    first_chunk = await response["body"].read(20)
-    assert len(first_chunk) == 20
-
-    # Drain the remainder with read() (amt=None)
-    remainder = await response["body"].read()
-    assert first_chunk + remainder == body_content
+        first_chunk = await response["body"].read(20)
+        assert len(first_chunk) == 20
+        remainder = await response["body"].read()
+        assert first_chunk + remainder == body_content
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -451,55 +560,244 @@ async def test_async_invoke_model_chunked_then_drain_read(
 
 
 @pytest.mark.asyncio
-async def test_async_invoke_model_stream_success(
-    tracer_provider,
+async def test_async_invoke_model_context_manager(
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    events = [
+    """`async with body as b` must bind the instrumented body, not the raw one."""
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
         {
-            "chunk": {
-                "bytes": b'{"type":"message_start","message":{"role":"assistant","usage":{"input_tokens":20,"cache_read_input_tokens":5}}}'
-            }
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
         },
-        {
-            "chunk": {
-                "bytes": b'{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}'
-            }
-        },
-        {
-            "chunk": {
-                "bytes": b'{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Async streaming invoke"}}'
-            }
-        },
-        {
-            "chunk": {
-                "bytes": b'{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":8}}'
-            }
-        },
-    ]
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
 
-    async def _call(*_args: Any, **_kwargs: Any) -> Any:
-        return {"body": _MockAsyncEventStream(events)}
+        async with response["body"] as body:
+            assert body is response["body"]
+            assert await body.read() == body_content
 
-    response = await _handle_async_invoke_model(
-        _call,
-        _bedrock_client(),
-        (),
-        {},
-        {
-            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "body": "{}",
-        },
-        handler,
-        is_stream=True,
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+    assert span.attributes[GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS] == 7
+    assert span.attributes[GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "stop",
     )
 
-    assert isinstance(response["body"], AsyncBedrockInvokeModelStreamWrapper)
-    chunks = []
-    async for chunk in response["body"]:
-        chunks.append(chunk)
-    assert len(chunks) == len(events)
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_async_iteration(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+
+        chunks = [chunk async for chunk in response["body"]]
+        assert b"".join(chunks) == body_content
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_iter_chunks(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+
+        chunks = [chunk async for chunk in response["body"].iter_chunks(16)]
+        assert b"".join(chunks) == body_content
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_iter_lines(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+
+        lines = [line async for line in response["body"].iter_lines()]
+        assert b"".join(lines) == body_content
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_readinto(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    body_content = _anthropic_body()
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=MODEL_ID, body="{}"
+        )
+
+        collected = bytearray()
+        buffer = bytearray(32)
+        while True:
+            read = await response["body"].readinto(buffer)
+            if read == 0:
+                break
+            collected.extend(buffer[:read])
+
+        assert bytes(collected) == body_content
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 15
+
+
+INVOKE_MODEL_STREAM_EVENTS = [
+    {
+        "chunk": {
+            "bytes": json.dumps(
+                {
+                    "type": "message_start",
+                    "message": {
+                        "role": "assistant",
+                        "usage": {
+                            "input_tokens": 20,
+                            "cache_read_input_tokens": 5,
+                        },
+                    },
+                }
+            ).encode()
+        }
+    },
+    {
+        "chunk": {
+            "bytes": json.dumps(
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "text", "text": ""},
+                }
+            ).encode()
+        }
+    },
+    {
+        "chunk": {
+            "bytes": json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "text_delta",
+                        "text": "Async streaming invoke",
+                    },
+                }
+            ).encode()
+        }
+    },
+    {
+        "chunk": {
+            "bytes": json.dumps(
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn"},
+                    "usage": {"output_tokens": 8},
+                }
+            ).encode()
+        }
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_stream_success(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    with _stub(
+        async_bedrock_client,
+        "invoke_model_with_response_stream",
+        {"body": _MockAsyncEventStream(INVOKE_MODEL_STREAM_EVENTS)},
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = (
+            await async_bedrock_client.invoke_model_with_response_stream(
+                modelId=MODEL_ID, body="{}"
+            )
+        )
+
+        assert isinstance(
+            response["body"], AsyncBedrockInvokeModelStreamWrapper
+        )
+        chunks = [chunk async for chunk in response["body"]]
+        assert len(chunks) == len(INVOKE_MODEL_STREAM_EVENTS)
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -516,48 +814,83 @@ async def test_async_invoke_model_stream_success(
 
 
 @pytest.mark.asyncio
-async def test_make_aio_api_call_wrapper_routing(
-    tracer_provider,
+async def test_async_invoke_model_stream_error(
+    async_bedrock_client,
+    instrument_with_content,
     span_exporter,
 ) -> None:
-    handler = TelemetryHandler(tracer_provider=tracer_provider)
-    wrapper = _make_aio_api_call_wrapper(handler)
+    """A stream-side failure raised by the SDK mid-iteration."""
+    events = [
+        {"chunk": {"bytes": b'{"type":"message_start"}'}},
+        {"fail": True},
+    ]
+    with _stub(
+        async_bedrock_client,
+        "invoke_model_with_response_stream",
+        {"body": _FailingAsyncEventStream(events)},
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = (
+            await async_bedrock_client.invoke_model_with_response_stream(
+                modelId=MODEL_ID, body="{}"
+            )
+        )
 
-    client = _bedrock_client()
-
-    async def original_func(op: str, params: dict[str, Any]) -> Any:
-        if op == "Converse":
-            return {
-                "output": {"message": {"role": "assistant", "content": []}},
-                "stopReason": "end_turn",
-            }
-        elif op == "NonBedrockOp":
-            return {"result": "ok"}
-        return {}
-
-    wrapped_fn = wrapper(
-        original_func, client, ("Converse", {"modelId": "m"}), {}
-    )
-    res = await wrapped_fn
-
-    assert "output" in res
-
-    # Non-bedrock service
-    non_bedrock_client = SimpleNamespace(
-        meta=SimpleNamespace(endpoint_url="https://s3.amazonaws.com"),
-        _service_model=SimpleNamespace(service_name="s3"),
-    )
-    wrapped_s3 = wrapper(
-        original_func,
-        non_bedrock_client,
-        ("GetObject", {}),
-        {},
-    )
-    res_s3 = await wrapped_s3
-    assert res_s3 == {}
+        with pytest.raises(RuntimeError, match="Stream read failure"):
+            async for _ in response["body"]:
+                pass
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
+    assert spans[0].attributes[ErrorAttributes.ERROR_TYPE] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_stream_caller_error(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    """A caller-side failure raised inside `async with` before draining."""
+    with _stub(
+        async_bedrock_client,
+        "invoke_model_with_response_stream",
+        {"body": _MockAsyncEventStream(INVOKE_MODEL_STREAM_EVENTS)},
+        modelId=MODEL_ID,
+        body="{}",
+    ):
+        response = (
+            await async_bedrock_client.invoke_model_with_response_stream(
+                modelId=MODEL_ID, body="{}"
+            )
+        )
+
+        with pytest.raises(ValueError, match="caller error"):
+            async with response["body"] as stream:
+                async for _ in stream:
+                    raise ValueError("caller error")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes[ErrorAttributes.ERROR_TYPE] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_async_non_bedrock_service_is_not_instrumented(
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    session = aiobotocore.session.AioSession()
+    async with session.create_client(
+        "s3", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    ) as s3_client:
+        stubber = Stubber(s3_client)
+        stubber.add_response("list_buckets", service_response={"Buckets": []})
+        with stubber:
+            await s3_client.list_buckets()
+
+    assert span_exporter.get_finished_spans() == ()
 
 
 def test_patch_and_unpatch_bedrock(tracer_provider) -> None:
