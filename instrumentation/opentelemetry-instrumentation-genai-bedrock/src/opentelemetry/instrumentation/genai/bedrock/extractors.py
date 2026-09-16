@@ -869,10 +869,10 @@ def extract_embedding_request(
         body.get("encoding_formats"),
     )
     if _is_list(raw_formats):
-        invocation.encoding_formats = [
-            str(fmt) for fmt in raw_formats if fmt is not None
-        ]
-    elif isinstance(raw_formats, str):
+        formats = [str(fmt) for fmt in raw_formats if fmt is not None]
+        if formats:
+            invocation.encoding_formats = formats
+    elif isinstance(raw_formats, str) and raw_formats:
         invocation.encoding_formats = [raw_formats]
 
 

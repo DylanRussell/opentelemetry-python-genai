@@ -991,6 +991,68 @@ def test_invoke_model_cohere_embeddings(
     assert span.attributes[GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS] == 10
 
 
+@pytest.mark.parametrize(
+    "format_field,format_value",
+    [
+        ("embedding_types", []),
+        ("embedding_types", [None]),
+        ("encoding_format", ""),
+    ],
+)
+def test_invoke_model_embeddings_omits_empty_encoding_formats(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+    format_field,
+    format_value,
+) -> None:
+    stubber = Stubber(bedrock_client)
+    request_body = {
+        "texts": ["Hello"],
+        "input_type": "search_document",
+        format_field: format_value,
+    }
+    response_body = {
+        "id": "emb_12345",
+        "embeddings": {"float": [[0.1, 0.2]]},
+        "meta": {"billed_units": {"input_tokens": 10}},
+    }
+    raw_response_bytes = json.dumps(response_body).encode("utf-8")
+
+    stubber.add_response(
+        "invoke_model",
+        service_response={
+            "contentType": "application/json",
+            "body": StreamingBody(
+                io.BytesIO(raw_response_bytes), len(raw_response_bytes)
+            ),
+        },
+        expected_params={
+            "modelId": "cohere.embed-english-v3",
+            "body": json.dumps(request_body),
+        },
+    )
+
+    with stubber:
+        response = bedrock_client.invoke_model(
+            modelId="cohere.embed-english-v3",
+            body=json.dumps(request_body),
+        )
+        assert response["body"].read() == raw_response_bytes
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert (
+        GenAIAttributes.GEN_AI_REQUEST_ENCODING_FORMATS not in span.attributes
+    )
+    # The rest of the embedding attributes are still recorded.
+    assert (
+        span.attributes[GenAIAttributes.GEN_AI_EMBEDDINGS_DIMENSION_COUNT] == 2
+    )
+
+
 def test_invoke_model_embedding_error(
     bedrock_client,
     instrument_with_content,
