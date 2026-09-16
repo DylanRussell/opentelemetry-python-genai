@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -1211,3 +1212,298 @@ def test_agent_continue_run_error(
     span = spans[0]
     assert span.status.status_code == StatusCode.ERROR
     assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_agent_continue_run_with_additional_instructions(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with additional_instructions parameter."""
+    agent = Agent(name="test-add-inst-agent", model=MockModel(id="mock-model"))
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("hello")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_cont_output
+        ):
+            cont_res = agent.continue_run(
+                run_res, additional_instructions="be more concise"
+            )
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 1
+    assert input_messages[0]["role"] == "user"
+    assert input_messages[0]["parts"][0]["content"] == "be more concise"
+
+
+def test_agent_continue_run_with_additional_instructions_camel_case(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with camelCase additionalInstructions alias."""
+    agent = Agent(
+        name="test-camel-inst-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("hello")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_cont_output
+        ):
+            cont_res = agent.continue_run(
+                run_res, additionalInstructions="steer output"
+            )
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 1
+    assert input_messages[0]["role"] == "user"
+    assert input_messages[0]["parts"][0]["content"] == "steer output"
+
+
+def test_agent_continue_run_with_tools_json_string_results(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with tools passed as a JSON string of tool executions."""
+    agent = Agent(
+        name="test-tools-json-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+    tools_payload = json.dumps(
+        [{"tool_call_id": "call_abc", "tool_name": "calc", "result": "42"}]
+    )
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("calculate something")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_cont_output
+        ):
+            cont_res = agent.continue_run(run_res, updated_tools=tools_payload)
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 1
+    assert input_messages[0]["role"] == "tool"
+    assert input_messages[0]["parts"][0]["id"] == "call_abc"
+    assert input_messages[0]["parts"][0]["response"] == "42"
+
+
+def test_agent_continue_run_with_tools_kwarg_json_string(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with tools kwarg directly passed as JSON string."""
+    agent = Agent(
+        name="test-tools-direct-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+    tools_payload = json.dumps(
+        [{"tool_call_id": "call_direct", "tool_name": "calc", "result": "99"}]
+    )
+
+    with (
+        patch.object(Agent, "run", wraps=agent.run),
+        patch("agno.models.base.Model.response", return_value=mock_run_output),
+    ):
+        run_res = agent.run("calculate")
+
+    with patch(
+        "agno.agent._run.continue_run_dispatch", return_value=mock_cont_output
+    ):
+        cont_res = agent.continue_run(run_res, tools=tools_payload)
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 1
+    assert input_messages[0]["role"] == "tool"
+    assert input_messages[0]["parts"][0]["id"] == "call_direct"
+    assert input_messages[0]["parts"][0]["response"] == "99"
+
+
+def test_agent_continue_run_with_tools_json_string_and_additional_instructions(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with both tools JSON string and additional_instructions."""
+    agent = Agent(
+        name="test-tools-hitl-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+    tools_payload = json.dumps(
+        [{"tool_call_id": "call_hitl", "confirmed": True}]
+    )
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("start hitl")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_cont_output
+        ):
+            cont_res = agent.continue_run(
+                run_res,
+                updated_tools=tools_payload,
+                additional_instructions="proceed with caution",
+            )
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 2
+    assert input_messages[0]["role"] == "tool"
+    assert input_messages[0]["parts"][0]["id"] == "call_hitl"
+    assert json.loads(input_messages[0]["parts"][0]["response"]) == {
+        "confirmed": True
+    }
+    assert input_messages[1]["role"] == "user"
+    assert input_messages[1]["parts"][0]["content"] == "proceed with caution"
+
+
+def test_agent_continue_run_with_tools_json_string_tool_definitions(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test Agent with tools initialized as a JSON string of tool definitions."""
+    tool_defs_json = json.dumps(
+        [
+            {
+                "name": "weather_tool",
+                "description": "Get weather info",
+                "parameters": {"type": "object"},
+            }
+        ]
+    )
+    agent = Agent(
+        name="test-tools-def-json-agent",
+        model=MockModel(id="mock-model"),
+        tools=tool_defs_json,
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("initial run")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_cont_output
+        ):
+            cont_res = agent.continue_run(run_res, input="next")
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS in cont_span.attributes
+    tool_defs = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_TOOL_DEFINITIONS]
+    )
+    assert len(tool_defs) == 1
+    assert tool_defs[0]["name"] == "weather_tool"
+    assert tool_defs[0]["description"] == "Get weather info"
+
+
+def test_agent_acontinue_run_with_tools_and_additional_instructions(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.acontinue_run with tools JSON string and additional_instructions."""
+    agent = Agent(
+        name="test-async-tools-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Async initial")
+    mock_cont_output = ModelResponse(content="Async continued")
+    tools_payload = json.dumps(
+        [
+            {
+                "tool_call_id": "call_async_1",
+                "tool_name": "calc",
+                "result": "100",
+            }
+        ]
+    )
+
+    async def _run() -> None:
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_run_output
+        ):
+            run_res = await agent.arun("async hello")
+            assert run_res is not None
+
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_cont_output
+        ):
+            cont_res = await agent.acontinue_run(
+                run_res,
+                updated_tools=tools_payload,
+                additional_instructions="async extra guidance",
+            )
+            assert cont_res is not None
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 2
+    assert input_messages[0]["role"] == "tool"
+    assert input_messages[0]["parts"][0]["id"] == "call_async_1"
+    assert input_messages[0]["parts"][0]["response"] == "100"
+    assert input_messages[1]["role"] == "user"
+    assert input_messages[1]["parts"][0]["content"] == "async extra guidance"
