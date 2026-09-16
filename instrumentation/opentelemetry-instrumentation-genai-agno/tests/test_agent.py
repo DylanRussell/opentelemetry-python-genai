@@ -898,3 +898,316 @@ def test_agent_run_does_not_extract_model_from_run_output(
     assert GenAIAttributes.GEN_AI_REQUEST_MODEL not in span.attributes
     assert GenAIAttributes.GEN_AI_AGENT_ID not in span.attributes
     assert GenAIAttributes.GEN_AI_PROVIDER_NAME not in span.attributes
+
+
+def test_agent_continue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Agent.continue_run emits an invoke_agent span correlated by conversation ID."""
+    agent = Agent(
+        name="test-continue-agent",
+        model=MockModel(id="mock-model"),
+        session_id="session-cont-123",
+    )
+    mock_run_output = ModelResponse(content="Initial output")
+    mock_cont_output = ModelResponse(content="Continued output")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = agent.run("hello")
+        assert run_res is not None
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_cont_output
+    ):
+        cont_res = agent.continue_run(run_res, input="continue instruction")
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+
+    # First run span
+    span1 = spans[0]
+    assert span1.name == "invoke_agent test-continue-agent"
+    assert (
+        span1.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span1.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "session-cont-123"
+    )
+
+    # Continue run span
+    span2 = spans[1]
+    assert span2.name == "invoke_agent test-continue-agent"
+    assert (
+        span2.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_agent"
+    )
+    assert (
+        span2.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "session-cont-123"
+    )
+
+
+def test_agent_acontinue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Agent.acontinue_run emits an invoke_agent span."""
+    agent = Agent(
+        name="test-async-continue-agent",
+        model=MockModel(id="mock-model"),
+        session_id="async-cont-session",
+    )
+    mock_run_output = ModelResponse(content="Initial async output")
+    mock_cont_output = ModelResponse(content="Continued async output")
+
+    async def _run() -> None:
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_run_output
+        ):
+            run_res = await agent.arun("hello async")
+            assert run_res is not None
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_cont_output
+        ):
+            cont_res = await agent.acontinue_run(
+                run_res, input="continue async"
+            )
+            assert cont_res is not None
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+    for span in spans:
+        assert span.name == "invoke_agent test-async-continue-agent"
+        assert (
+            span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+            == "invoke_agent"
+        )
+        assert (
+            span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+            == "async-cont-session"
+        )
+
+
+def test_team_continue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Team.continue_run emits an invoke_agent span."""
+    agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
+    agent2 = Agent(name="m2", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-continue-team",
+        members=[agent1, agent2],
+        model=MockModel(id="mock-model"),
+        session_id="team-cont-session",
+    )
+    mock_run_output = ModelResponse(content="Team initial output")
+    mock_cont_output = ModelResponse(content="Team continued output")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = team.run("team run")
+        assert run_res is not None
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_cont_output
+    ):
+        cont_res = team.continue_run(run_res, input="team continue")
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    # At least team run and team continue_run spans
+    team_spans = [
+        s for s in spans if s.name == "invoke_agent test-continue-team"
+    ]
+    assert len(team_spans) == 2
+    for span in team_spans:
+        assert (
+            span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+            == "team-cont-session"
+        )
+
+
+def test_team_acontinue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Team.acontinue_run emits an invoke_agent span."""
+    agent1 = Agent(name="m1", model=MockModel(id="mock-model"))
+    agent2 = Agent(name="m2", model=MockModel(id="mock-model"))
+    team = Team(
+        name="test-async-continue-team",
+        members=[agent1, agent2],
+        model=MockModel(id="mock-model"),
+        session_id="async-team-cont-session",
+    )
+    mock_run_output = ModelResponse(content="Team initial output")
+    mock_cont_output = ModelResponse(content="Team continued output")
+
+    async def _run() -> None:
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_run_output
+        ):
+            run_res = await team.arun("team arun")
+            assert run_res is not None
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_cont_output
+        ):
+            cont_res = await team.acontinue_run(
+                run_res, input="team acontinue"
+            )
+            assert cont_res is not None
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    team_spans = [
+        s for s in spans if s.name == "invoke_agent test-async-continue-team"
+    ]
+    assert len(team_spans) == 2
+    for span in team_spans:
+        assert (
+            span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+            == "async-team-cont-session"
+        )
+
+
+def test_workflow_continue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Workflow.continue_run emits a workflow span."""
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+    from agno.workflow.workflow import Workflow
+
+    workflow = Workflow(
+        name="test-continue-workflow",
+        steps=[],
+        session_id="wf-session-cont",
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-session-cont",
+        status=RunStatus.paused,
+        paused_step_index=0,
+        content="Workflow continued",
+        step_requirements=[],
+    )
+
+    with (
+        patch.object(Workflow, "get_session", return_value=MagicMock()),
+        patch.object(
+            Workflow, "_continue_execute", return_value=mock_wf_output
+        ),
+    ):
+        res = workflow.continue_run(
+            run_response=mock_wf_output, input="continue wf"
+        )
+        assert res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-continue-workflow"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "wf-session-cont"
+    )
+
+
+def test_workflow_acontinue_run_spans(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that Workflow.acontinue_run emits a workflow span."""
+    from unittest.mock import AsyncMock
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+    from agno.workflow.workflow import Workflow
+
+    workflow = Workflow(
+        name="test-async-continue-workflow",
+        steps=[],
+        session_id="wf-async-session-cont",
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-async-session-cont",
+        status=RunStatus.paused,
+        paused_step_index=0,
+        content="Workflow async continued",
+        step_requirements=[],
+    )
+
+    async def _run() -> None:
+        with (
+            patch.object(
+                Workflow,
+                "aget_session",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                Workflow,
+                "_acontinue_execute",
+                new_callable=AsyncMock,
+                return_value=mock_wf_output,
+            ),
+        ):
+            res = await workflow.acontinue_run(
+                run_response=mock_wf_output, input="continue wf async"
+            )
+            assert res is not None
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow test-async-continue-workflow"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME)
+        == "invoke_workflow"
+    )
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "wf-async-session-cont"
+    )
+
+
+def test_agent_continue_run_error(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that an error in Agent.continue_run records error telemetry."""
+    agent = Agent(
+        name="error-continue-agent", model=MockModel(id="mock-model")
+    )
+
+    with (
+        patch(
+            "agno.agent._run.continue_run_dispatch",
+            side_effect=RuntimeError("continue boom"),
+        ),
+        pytest.raises(RuntimeError, match="continue boom"),
+    ):
+        agent.continue_run(run_id="some-id")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"

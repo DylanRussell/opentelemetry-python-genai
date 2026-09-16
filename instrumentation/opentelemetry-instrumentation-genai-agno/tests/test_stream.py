@@ -774,3 +774,98 @@ def test_workflow_stream_step_completed_event_preserves_final_content(
     )
     assert output_messages is not None
     assert "final workflow output" in output_messages
+
+
+def test_agent_continue_run_stream_spans(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that Agent.continue_run with stream=True emits a properly finalized span."""
+    agent = Agent(
+        name="test-stream-cont-agent",
+        model=MockModel(id="mock-model"),
+        session_id="sess-stream-cont",
+    )
+    mock_run_output = ModelResponse(content="Initial")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = agent.run("initial")
+
+    def fake_stream(*args, **kwargs):
+        yield ModelResponse(content="continued ")
+        yield ModelResponse(content="stream")
+
+    with patch(
+        "agno.models.base.Model.response_stream", side_effect=fake_stream
+    ):
+        stream = agent.continue_run(
+            run_res, input="stream please", stream=True
+        )
+        assert len(span_exporter.get_finished_spans()) == 1
+        chunks = list(stream)
+        assert len(chunks) == 2
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+    span = spans[1]
+    assert span.name == "invoke_agent test-stream-cont-agent"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "sess-stream-cont"
+    )
+    output_messages = span.attributes.get(
+        GenAIAttributes.GEN_AI_OUTPUT_MESSAGES
+    )
+    assert output_messages is not None
+    assert "continued stream" in output_messages
+
+
+def test_agent_acontinue_run_stream_spans(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that Agent.acontinue_run with stream=True emits a properly finalized span."""
+    agent = Agent(
+        name="test-async-stream-cont-agent",
+        model=MockModel(id="mock-model"),
+        session_id="sess-async-stream-cont",
+    )
+    mock_run_output = ModelResponse(content="Initial")
+
+    async def fake_astream(*args, **kwargs):
+        yield ModelResponse(content="async continued ")
+        yield ModelResponse(content="stream")
+
+    async def _run() -> None:
+        with patch(
+            "agno.models.base.Model.aresponse", return_value=mock_run_output
+        ):
+            run_res = await agent.arun("initial async")
+        with patch(
+            "agno.models.base.Model.aresponse_stream", side_effect=fake_astream
+        ):
+            stream = agent.acontinue_run(
+                run_res, input="stream async please", stream=True
+            )
+            chunks = []
+            async for chunk in stream:
+                chunks.append(chunk)
+            assert len(chunks) == 2
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 2
+    span = spans[1]
+    assert span.name == "invoke_agent test-async-stream-cont-agent"
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "sess-async-stream-cont"
+    )
+    output_messages = span.attributes.get(
+        GenAIAttributes.GEN_AI_OUTPUT_MESSAGES
+    )
+    assert output_messages is not None
+    assert "async continued stream" in output_messages
