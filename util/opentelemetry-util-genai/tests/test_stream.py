@@ -6,10 +6,21 @@
 import asyncio
 import inspect
 import timeit
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
+from opentelemetry.trace import get_current_span
+from opentelemetry.trace.status import StatusCode
+from opentelemetry.util.genai._instruments import _Instruments
+from opentelemetry.util.genai._tool_invocation import ToolInvocation
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.stream import (
     AsyncStreamManagerWrapper,
     AsyncStreamWrapper,
@@ -1231,114 +1242,205 @@ def test_async_manager_wrapper_fails_invocation_when_exit_raises_before_enter():
     asyncio.run(exercise())
 
 
-class _FakeToolInvocation:
-    def __init__(self, should_capture_content=True):
-        self.span = patch("opentelemetry.trace.Span").start()
-        self._context_token = object()
-        self.should_capture_content = should_capture_content
-        self.tool_result = None
-        self.stop_count = 0
-        self.failures = []
-
-    def stop(self):
-        self.stop_count += 1
-
-    def fail(self, error):
-        self.failures.append(error)
-
-
 def test_sync_tool_stream_wrapper_lifecycle():
-    with (
-        patch("opentelemetry.util.genai.stream.detach") as mock_detach,
-        patch(
-            "opentelemetry.util.genai.stream.attach", return_value="new-token"
-        ) as mock_attach,
-    ):
-        invocation = _FakeToolInvocation()
-        token = invocation._context_token
-        stream = _FakeSyncStream(chunks=["chunk1", "chunk2"])
-        wrapper = SyncToolStreamWrapper(stream, invocation)
+    invocation, span_exporter = _started_tool_invocation()
+    stream = _FakeSyncStream(chunks=["chunk1", "chunk2"])
+    wrapper = SyncToolStreamWrapper(stream, invocation)
 
-        mock_detach.assert_called_once_with(token)
-        assert invocation._context_token is None
+    assert next(wrapper) == "chunk1"
+    assert next(wrapper) == "chunk2"
 
-        assert next(wrapper) == "chunk1"
-        mock_attach.assert_called_once()
-        assert invocation._context_token == "new-token"
+    with pytest.raises(StopIteration):
+        next(wrapper)
 
-        assert next(wrapper) == "chunk2"
-
-        with pytest.raises(StopIteration):
-            next(wrapper)
-
-        assert invocation.tool_result == "chunk1chunk2"
-        assert invocation.stop_count == 1
+    assert invocation.tool_result == "chunk1chunk2"
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].status.status_code is not StatusCode.ERROR
 
 
 def test_sync_tool_stream_wrapper_error():
-    with (
-        patch("opentelemetry.util.genai.stream.detach"),
-        patch("opentelemetry.util.genai.stream.attach"),
-    ):
-        invocation = _FakeToolInvocation()
-        error = ValueError("tool failed")
-        stream = _FakeSyncStream(error=error)
-        wrapper = SyncToolStreamWrapper(stream, invocation)
+    invocation, span_exporter = _started_tool_invocation()
+    error = ValueError("tool failed")
+    stream = _FakeSyncStream(error=error)
+    wrapper = SyncToolStreamWrapper(stream, invocation)
 
-        with pytest.raises(ValueError, match="tool failed"):
-            next(wrapper)
+    with pytest.raises(ValueError, match="tool failed"):
+        next(wrapper)
 
-        assert invocation.failures == [error]
-        assert invocation.stop_count == 0
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["error.type"] == "ValueError"
 
 
 def test_async_tool_stream_wrapper_lifecycle():
     async def exercise():
-        with (
-            patch("opentelemetry.util.genai.stream.detach") as mock_detach,
-            patch(
-                "opentelemetry.util.genai.stream.attach",
-                return_value="new-token",
-            ) as mock_attach,
-        ):
-            invocation = _FakeToolInvocation()
-            token = invocation._context_token
-            stream = _FakeAsyncStream(chunks=["chunk1", "chunk2"])
-            wrapper = AsyncToolStreamWrapper(stream, invocation)
+        invocation, span_exporter = _started_tool_invocation()
+        stream = _FakeAsyncStream(chunks=["chunk1", "chunk2"])
+        wrapper = AsyncToolStreamWrapper(stream, invocation)
 
-            mock_detach.assert_called_once_with(token)
-            assert invocation._context_token is None
+        assert await wrapper.__anext__() == "chunk1"
+        assert await wrapper.__anext__() == "chunk2"
 
-            assert await wrapper.__anext__() == "chunk1"
-            mock_attach.assert_called_once()
-            assert invocation._context_token == "new-token"
+        with pytest.raises(StopAsyncIteration):
+            await wrapper.__anext__()
 
-            assert await wrapper.__anext__() == "chunk2"
-
-            with pytest.raises(StopAsyncIteration):
-                await wrapper.__anext__()
-
-            assert invocation.tool_result == "chunk1chunk2"
-            assert invocation.stop_count == 1
+        assert invocation.tool_result == "chunk1chunk2"
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].status.status_code is not StatusCode.ERROR
 
     asyncio.run(exercise())
 
 
 def test_async_tool_stream_wrapper_error():
     async def exercise():
-        with (
-            patch("opentelemetry.util.genai.stream.detach"),
-            patch("opentelemetry.util.genai.stream.attach"),
-        ):
-            invocation = _FakeToolInvocation()
-            error = ValueError("async tool failed")
-            stream = _FakeAsyncStream(error=error)
-            wrapper = AsyncToolStreamWrapper(stream, invocation)
+        invocation, span_exporter = _started_tool_invocation()
+        error = ValueError("async tool failed")
+        stream = _FakeAsyncStream(error=error)
+        wrapper = AsyncToolStreamWrapper(stream, invocation)
 
-            with pytest.raises(ValueError, match="async tool failed"):
-                await wrapper.__anext__()
+        with pytest.raises(ValueError, match="async tool failed"):
+            await wrapper.__anext__()
 
-            assert invocation.failures == [error]
-            assert invocation.stop_count == 0
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].attributes["error.type"] == "ValueError"
 
     asyncio.run(exercise())
+
+
+def _started_tool_invocation():
+    """A real, started ToolInvocation plus the exporter its span lands in."""
+    span_exporter = InMemorySpanExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    invocation = ToolInvocation(
+        tracer=tracer_provider.get_tracer(__name__),
+        instruments=_Instruments(MeterProvider().get_meter(__name__)),
+        logger=MagicMock(),
+        completion_hook=MagicMock(spec=CompletionHook),
+        name="streaming_tool",
+    )
+    return invocation, span_exporter
+
+
+def test_sync_tool_stream_wrapper_scopes_context_to_tool_code():
+    caller_span = get_current_span()
+    invocation, span_exporter = _started_tool_invocation()
+    assert get_current_span() is invocation.span
+
+    inside = []
+
+    def tool_body():
+        inside.append(get_current_span())
+        yield "a"
+        inside.append(get_current_span())
+        yield "b"
+
+    wrapper = SyncToolStreamWrapper(tool_body(), invocation)
+    assert get_current_span() is caller_span
+
+    for _ in wrapper:
+        # The caller holds control between chunks.
+        assert get_current_span() is caller_span
+
+    assert get_current_span() is caller_span
+    # ...but the tool's own code runs under the tool span.
+    assert inside == [invocation.span, invocation.span]
+    assert len(span_exporter.get_finished_spans()) == 1
+
+
+def test_async_tool_stream_wrapper_scopes_context_to_tool_code():
+    async def exercise():
+        caller_span = get_current_span()
+        invocation, span_exporter = _started_tool_invocation()
+        assert get_current_span() is invocation.span
+
+        inside = []
+
+        async def tool_body():
+            inside.append(get_current_span())
+            yield "a"
+            inside.append(get_current_span())
+            yield "b"
+
+        wrapper = AsyncToolStreamWrapper(tool_body(), invocation)
+        assert get_current_span() is caller_span
+
+        async for _ in wrapper:
+            # The caller holds control between chunks.
+            assert get_current_span() is caller_span
+
+        assert get_current_span() is caller_span
+        # ...but the tool's own code runs under the tool span.
+        assert inside == [invocation.span, invocation.span]
+        assert len(span_exporter.get_finished_spans()) == 1
+
+    asyncio.run(exercise())
+
+
+def test_sync_tool_stream_wrapper_restores_context_on_error():
+    caller_span = get_current_span()
+    invocation, span_exporter = _started_tool_invocation()
+
+    def tool_body():
+        yield "a"
+        raise ValueError("tool failed")
+
+    wrapper = SyncToolStreamWrapper(tool_body(), invocation)
+    assert next(wrapper) == "a"
+    assert get_current_span() is caller_span
+
+    with pytest.raises(ValueError, match="tool failed"):
+        next(wrapper)
+
+    assert get_current_span() is caller_span
+    assert invocation._context_token is None
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["error.type"] == "ValueError"
+
+
+def test_async_tool_stream_wrapper_restores_context_on_error():
+    async def exercise():
+        caller_span = get_current_span()
+        invocation, span_exporter = _started_tool_invocation()
+
+        async def tool_body():
+            yield "a"
+            raise ValueError("async tool failed")
+
+        wrapper = AsyncToolStreamWrapper(tool_body(), invocation)
+        assert await wrapper.__anext__() == "a"
+        assert get_current_span() is caller_span
+
+        with pytest.raises(ValueError, match="async tool failed"):
+            await wrapper.__anext__()
+
+        assert get_current_span() is caller_span
+        assert invocation._context_token is None
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].attributes["error.type"] == "ValueError"
+
+    asyncio.run(exercise())
+
+
+def test_sync_tool_stream_wrapper_restores_context_when_abandoned_via_close():
+    caller_span = get_current_span()
+    invocation, span_exporter = _started_tool_invocation()
+
+    def tool_body():
+        yield "a"
+        yield "b"
+
+    wrapper = SyncToolStreamWrapper(tool_body(), invocation)
+    assert next(wrapper) == "a"
+    assert get_current_span() is caller_span
+
+    wrapper.close()
+
+    assert get_current_span() is caller_span
+    assert invocation._context_token is None
+    assert len(span_exporter.get_finished_spans()) == 1

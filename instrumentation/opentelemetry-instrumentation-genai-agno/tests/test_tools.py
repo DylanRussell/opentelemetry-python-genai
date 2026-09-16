@@ -653,11 +653,18 @@ def test_base_exception_tool_finishes(
     assert spans[0].attributes["error.type"] == "KeyboardInterrupt"
 
 
-def test_tool_stream_restores_caller_context(instrument_agno) -> None:
+def test_tool_stream_restores_caller_context(
+    instrument_agno, span_exporter
+) -> None:
     from opentelemetry.trace import get_current_span
 
+    inside = []
+
     def streaming_tool() -> Iterator[str]:
+        inside.append(get_current_span())
         yield "chunk"
+        inside.append(get_current_span())
+        yield "chunk2"
 
     caller = get_current_span()
     call = FunctionCall(
@@ -665,15 +672,35 @@ def test_tool_stream_restores_caller_context(instrument_agno) -> None:
     )
     result = call.execute()
     current_after_return = get_current_span()
-    assert list(result.result) == ["chunk"]
+
+    chunks = []
+    for chunk in result.result:
+        chunks.append(chunk)
+        # The caller holds control between chunks.
+        assert get_current_span() is caller
+
+    assert chunks == ["chunk", "chunk2"]
     assert current_after_return is caller
+    assert get_current_span() is caller
+
+    tool_span = span_exporter.get_finished_spans()[0]
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ] * 2
 
 
-def test_async_tool_stream_restores_caller_context(instrument_agno) -> None:
+def test_async_tool_stream_restores_caller_context(
+    instrument_agno, span_exporter
+) -> None:
     from opentelemetry.trace import get_current_span
 
+    inside = []
+
     async def streaming_tool() -> AsyncIterator[str]:
+        inside.append(get_current_span())
         yield "chunk"
+        inside.append(get_current_span())
+        yield "chunk2"
 
     async def _test() -> None:
         caller = get_current_span()
@@ -682,8 +709,20 @@ def test_async_tool_stream_restores_caller_context(instrument_agno) -> None:
         )
         result = await call.aexecute()
         current_after_return = get_current_span()
-        chunks = [c async for c in result.result]
-        assert chunks == ["chunk"]
+
+        chunks = []
+        async for chunk in result.result:
+            chunks.append(chunk)
+            # The caller holds control between chunks.
+            assert get_current_span() is caller
+
+        assert chunks == ["chunk", "chunk2"]
         assert current_after_return is caller
+        assert get_current_span() is caller
 
     asyncio.run(_test())
+
+    tool_span = span_exporter.get_finished_spans()[0]
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ] * 2
