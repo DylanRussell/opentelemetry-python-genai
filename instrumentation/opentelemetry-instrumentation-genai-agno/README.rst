@@ -34,7 +34,7 @@ The instrumentation automatically traces:
 * ``Team.run``, ``Team.arun``, ``Team.continue_run``, and ``Team.acontinue_run``
 * ``Workflow.run``, ``Workflow.arun``, ``Workflow.continue_run``, and ``Workflow.acontinue_run``
 * ``FunctionCall.execute`` and ``FunctionCall.aexecute``
-* ``Knowledge.search`` and ``Knowledge.asearch``
+* ``Knowledge.search``, ``Knowledge.asearch``, ``Knowledge.retrieve``, and ``Knowledge.aretrieve``
 
 Configuration
 -------------

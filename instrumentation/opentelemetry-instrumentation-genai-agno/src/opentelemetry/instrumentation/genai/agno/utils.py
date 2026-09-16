@@ -15,23 +15,30 @@ if TYPE_CHECKING:
 
 from opentelemetry.util.genai.types import (
     FunctionToolDefinition,
+    RetrievalDocument,
     ToolDefinition,
 )
 
 
-def format_retrieval_document(doc: Document) -> dict[str, Any]:
-    """Format an Agno Document into a retrieval document dict."""
-    doc_dict: dict[str, Any] = {"content": doc.content}
-    if doc.id is not None:
-        doc_dict["id"] = str(doc.id)
+def format_retrieval_document(doc: Document) -> RetrievalDocument:
+    """Format an Agno Document into a RetrievalDocument model."""
+    score: float | None = None
     if doc.reranking_score is not None:
         try:
-            doc_dict["score"] = float(doc.reranking_score)
+            score = float(doc.reranking_score)
         except (ValueError, TypeError):
             pass
+
+    metadata: dict[str, Any] | None = None
     if doc.meta_data:
-        doc_dict["metadata"] = doc.meta_data
-    return doc_dict
+        metadata = dict(doc.meta_data)
+
+    return RetrievalDocument(
+        content=doc.content,
+        id=str(doc.id) if doc.id is not None else None,
+        score=score,
+        metadata=metadata,
+    )
 
 
 @runtime_checkable
