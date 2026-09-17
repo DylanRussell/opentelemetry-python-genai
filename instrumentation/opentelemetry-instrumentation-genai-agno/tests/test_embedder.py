@@ -34,6 +34,10 @@ class SimpleEmbedder(Embedder):
         return [0.1, 0.2, 0.3, 0.4, 0.5]
 
 
+class SubSimpleEmbedder(SimpleEmbedder):
+    """Subclass defined before instrumentation that inherits without overriding."""
+
+
 @dataclass
 class UsageEmbedder(Embedder):
     model: str = "text-embedding-usage"
@@ -335,3 +339,84 @@ def test_embedder_init_subclass_calls_original_and_unpatch_restores(
     sub_after = SubTrackedEmbedderAfter()
     sub_after.get_embedding("untraced")
     assert len(span_exporter.get_finished_spans()) == 0
+
+
+def test_embedder_subclass_created_after_instrumentation(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that a new Embedder subclass defined after instrumentation is monkey-patched via __init_subclass__."""
+
+    class DynamicEmbedder(Embedder):
+        id: str = "dynamic-model"
+        provider: str = "custom-provider"
+
+        def get_embedding(self, text: str) -> list[float]:
+            return [0.11, 0.22, 0.33]
+
+        async def async_get_embedding(self, text: str) -> list[float]:
+            return [0.44, 0.55]
+
+    embedder = DynamicEmbedder()
+
+    # Verify sync method emits embedding span
+    vec = embedder.get_embedding("dynamic text")
+    assert vec == [0.11, 0.22, 0.33]
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "embeddings dynamic-model"
+    assert spans[0].attributes.get(GEN_AI_OPERATION_NAME) == "embeddings"
+    assert spans[0].attributes.get(GEN_AI_PROVIDER_NAME) == "custom-provider"
+    assert spans[0].attributes.get(GEN_AI_REQUEST_MODEL) == "dynamic-model"
+    assert spans[0].attributes.get(GEN_AI_EMBEDDINGS_DIMENSION_COUNT) == 3
+    span_exporter.clear()
+
+    # Verify async method emits embedding span
+    async def _test() -> None:
+        async_vec = await embedder.async_get_embedding("dynamic async text")
+        assert async_vec == [0.44, 0.55]
+
+    asyncio.run(_test())
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "embeddings dynamic-model"
+    assert spans[0].attributes.get(GEN_AI_OPERATION_NAME) == "embeddings"
+    assert spans[0].attributes.get(GEN_AI_EMBEDDINGS_DIMENSION_COUNT) == 2
+
+
+def test_embedder_subclass_inheritance_prevents_double_instrumentation(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that a subclass inheriting methods without overriding them does not double-instrument."""
+    # 1. Subclass defined BEFORE instrumentation (discovered via _wrap_subclasses)
+    pre_embedder = SubSimpleEmbedder()
+    vec1 = pre_embedder.get_embedding("hello pre")
+    assert vec1 == [0.1, 0.2, 0.3, 0.4, 0.5]
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "embeddings text-embedding-3-small"
+    assert "get_embedding" not in SubSimpleEmbedder.__dict__
+    span_exporter.clear()
+
+    # 2. Subclass defined AFTER instrumentation (hooked via __init_subclass__)
+    class BaseCustomEmbedder(Embedder):
+        id: str = "base-custom-model"
+
+        def get_embedding(self, text: str) -> list[float]:
+            return [0.1, 0.2]
+
+    class DerivedCustomEmbedder(BaseCustomEmbedder):
+        # Inherits get_embedding without overriding
+        pass
+
+    embedder = DerivedCustomEmbedder()
+    vec2 = embedder.get_embedding("hello post")
+    assert vec2 == [0.1, 0.2]
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "embeddings base-custom-model"
+    assert "get_embedding" not in DerivedCustomEmbedder.__dict__
