@@ -88,8 +88,8 @@ _WORKFLOW_CLASS = "Workflow"
 _AGNO_KNOWLEDGE_MODULE = "agno.knowledge.knowledge"
 _KNOWLEDGE_CLASS = "Knowledge"
 
-_FOREGROUND_WORKFLOW_ACTIVE: contextvars.ContextVar[bool] = (
-    contextvars.ContextVar("_FOREGROUND_WORKFLOW_ACTIVE", default=False)
+_ACTIVE_FOREGROUND_WORKFLOWS: contextvars.ContextVar[frozenset[int]] = (
+    contextvars.ContextVar("_ACTIVE_FOREGROUND_WORKFLOWS", default=frozenset())
 )
 
 # wrapt has no unregister API for post-import hooks; monotonic generations
@@ -670,7 +670,7 @@ def _agent_run(
             is_continue=is_continue,
         )
         user_id = extract_user_id(instance, args, kwargs)
-        if user_id:
+        if user_id is not None:
             invocation.attributes[USER_ID] = user_id
         try:
             result = wrapped(*args, **kwargs)
@@ -732,7 +732,7 @@ def _agent_arun(
                 is_continue=is_continue,
             )
             user_id = extract_user_id(instance, args, kwargs)
-            if user_id:
+            if user_id is not None:
                 invocation.attributes[USER_ID] = user_id
             return AsyncAgnoAgentStreamWrapper(
                 result,
@@ -753,7 +753,7 @@ def _agent_arun(
                     is_continue=is_continue,
                 )
                 user_id = extract_user_id(instance, args, kwargs)
-                if user_id:
+                if user_id is not None:
                     invocation.attributes[USER_ID] = user_id
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -930,7 +930,7 @@ def _workflow_run(
             is_continue=is_continue,
         )
         user_id = extract_user_id(instance, args, kwargs)
-        if user_id:
+        if user_id is not None:
             invocation.attributes[USER_ID] = user_id
         try:
             result = wrapped(*args, **kwargs)
@@ -1004,12 +1004,14 @@ def _workflow_arun(
         if _is_background_requested(wrapped, instance, args, kwargs):
             return wrapped(*args, **kwargs)
 
-        prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
-        _FOREGROUND_WORKFLOW_ACTIVE.set(True)
+        instance_id = id(instance)
+        token = _ACTIVE_FOREGROUND_WORKFLOWS.set(
+            _ACTIVE_FOREGROUND_WORKFLOWS.get() | {instance_id}
+        )
         try:
             result = wrapped(*args, **kwargs)
         except BaseException as error:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+            _ACTIVE_FOREGROUND_WORKFLOWS.reset(token)
             invocation = _start_workflow_invocation(
                 handler,
                 instance,
@@ -1023,6 +1025,7 @@ def _workflow_arun(
             raise
 
         if isinstance(result, AsyncIterator):
+            _ACTIVE_FOREGROUND_WORKFLOWS.reset(token)
             invocation = _start_workflow_invocation(
                 handler,
                 instance,
@@ -1032,13 +1035,12 @@ def _workflow_arun(
                 is_continue=is_continue,
             )
             user_id = extract_user_id(instance, args, kwargs)
-            if user_id:
+            if user_id is not None:
                 invocation.attributes[USER_ID] = user_id
             return AsyncAgnoWorkflowStreamWrapper(
                 result,
                 invocation,
                 capture_content,
-                on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active),
             )
 
         if isinstance(result, Awaitable):
@@ -1054,23 +1056,19 @@ def _workflow_arun(
                     is_continue=is_continue,
                 )
                 user_id = extract_user_id(instance, args, kwargs)
-                if user_id:
+                if user_id is not None:
                     invocation.attributes[USER_ID] = user_id
-                prev = _FOREGROUND_WORKFLOW_ACTIVE.get()
-                _FOREGROUND_WORKFLOW_ACTIVE.set(True)
-                reset_needed = True
+                sub_token = _ACTIVE_FOREGROUND_WORKFLOWS.set(
+                    _ACTIVE_FOREGROUND_WORKFLOWS.get() | {instance_id}
+                )
                 try:
                     awaitable = cast(Awaitable[object], result)
                     response: object = await awaitable
                     if isinstance(response, AsyncIterator):
-                        reset_needed = False
                         return AsyncAgnoWorkflowStreamWrapper(
                             response,
                             invocation,
                             capture_content,
-                            on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
-                                prev
-                            ),
                         )
                     _set_invocation_output(
                         invocation, response, capture_content
@@ -1088,10 +1086,9 @@ def _workflow_arun(
                     invocation.fail(error)
                     raise
                 finally:
-                    if reset_needed:
-                        _FOREGROUND_WORKFLOW_ACTIVE.set(prev)
+                    _ACTIVE_FOREGROUND_WORKFLOWS.reset(sub_token)
 
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+            _ACTIVE_FOREGROUND_WORKFLOWS.reset(token)
             return _await_result()
 
         try:
@@ -1111,7 +1108,7 @@ def _workflow_arun(
             invocation.stop()
             return result
         finally:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+            _ACTIVE_FOREGROUND_WORKFLOWS.reset(token)
 
     return traced_method
 
@@ -1127,7 +1124,7 @@ def _workflow_aexecute(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> WorkflowRunOutput:
-        if _FOREGROUND_WORKFLOW_ACTIVE.get():
+        if id(instance) in _ACTIVE_FOREGROUND_WORKFLOWS.get():
             return await wrapped(*args, **kwargs)
 
         bound_args = _bind_arguments(wrapped, instance, args, kwargs)
@@ -1160,9 +1157,9 @@ def _workflow_aexecute(
 
         workflow_name = getattr(instance, "name", None)
         invocation = handler.workflow(name=workflow_name)
-        if session_id:
+        if session_id is not None:
             invocation.conversation_id = str(session_id)
-        if user_id:
+        if user_id is not None:
             invocation.attributes[USER_ID] = str(user_id)
 
         if capture_content and input_val is not None:
@@ -1175,8 +1172,6 @@ def _workflow_aexecute(
                     )
                 ]
 
-        prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
-        _FOREGROUND_WORKFLOW_ACTIVE.set(True)
         try:
             result = await wrapped(*args, **kwargs)
             _set_invocation_output(invocation, result, capture_content)
@@ -1188,8 +1183,6 @@ def _workflow_aexecute(
         except BaseException as error:
             invocation.fail(error)
             raise
-        finally:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
 
     return cast(Callable[..., Any], traced_method)
 
@@ -1205,7 +1198,7 @@ def _workflow_aexecute_stream(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        if _FOREGROUND_WORKFLOW_ACTIVE.get():
+        if id(instance) in _ACTIVE_FOREGROUND_WORKFLOWS.get():
             return wrapped(*args, **kwargs)
 
         bound_args = _bind_arguments(wrapped, instance, args, kwargs)
@@ -1238,9 +1231,9 @@ def _workflow_aexecute_stream(
 
         workflow_name = getattr(instance, "name", None)
         invocation = handler.workflow(name=workflow_name)
-        if session_id:
+        if session_id is not None:
             invocation.conversation_id = str(session_id)
-        if user_id:
+        if user_id is not None:
             invocation.attributes[USER_ID] = str(user_id)
 
         if capture_content and input_val is not None:
@@ -1253,28 +1246,18 @@ def _workflow_aexecute_stream(
                     )
                 ]
 
-        prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
-        _FOREGROUND_WORKFLOW_ACTIVE.set(True)
-        reset_needed = True
         try:
             result = wrapped(*args, **kwargs)
             if isinstance(result, AsyncIterator):
-                reset_needed = False
                 return AsyncAgnoWorkflowStreamWrapper(
                     result,
                     invocation,
                     capture_content,
-                    on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
-                        prev_active
-                    ),
                 )
             return result
         except BaseException as error:
             invocation.fail(error)
             raise
-        finally:
-            if reset_needed:
-                _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
 
     return traced_method
 
@@ -1290,7 +1273,7 @@ def _workflow_aexecute_workflow_agent(
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        if _FOREGROUND_WORKFLOW_ACTIVE.get():
+        if id(instance) in _ACTIVE_FOREGROUND_WORKFLOWS.get():
             return wrapped(*args, **kwargs)
 
         bound_args = _bind_arguments(wrapped, instance, args, kwargs)
@@ -1298,20 +1281,20 @@ def _workflow_aexecute_workflow_agent(
         run_context = bound_args.get("run_context")
         session_id = (
             str(sid)
-            if (sid := getattr(run_context, "session_id", None))
+            if (sid := getattr(run_context, "session_id", None)) is not None
             else extract_session_id(instance, args, kwargs)
         )
         user_id = (
             str(uid)
-            if (uid := getattr(run_context, "user_id", None))
+            if (uid := getattr(run_context, "user_id", None)) is not None
             else extract_user_id(instance, args, kwargs)
         )
 
         workflow_name = getattr(instance, "name", None)
         invocation = handler.workflow(name=workflow_name)
-        if session_id:
+        if session_id is not None:
             invocation.conversation_id = str(session_id)
-        if user_id:
+        if user_id is not None:
             invocation.attributes[USER_ID] = str(user_id)
 
         if capture_content and user_input is not None:
@@ -1324,12 +1307,9 @@ def _workflow_aexecute_workflow_agent(
                     )
                 ]
 
-        prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
-        _FOREGROUND_WORKFLOW_ACTIVE.set(True)
         try:
             result = wrapped(*args, **kwargs)
         except BaseException as error:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             invocation.fail(error)
             raise
 
@@ -1338,28 +1318,20 @@ def _workflow_aexecute_workflow_agent(
                 result,
                 invocation,
                 capture_content,
-                on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active),
             )
 
         if isinstance(result, Awaitable):
 
             @functools.wraps(wrapped)
             async def _await_result() -> object:
-                prev = _FOREGROUND_WORKFLOW_ACTIVE.get()
-                _FOREGROUND_WORKFLOW_ACTIVE.set(True)
-                reset_needed = True
                 try:
                     awaitable = cast(Awaitable[object], result)
                     response: object = await awaitable
                     if isinstance(response, AsyncIterator):
-                        reset_needed = False
                         return AsyncAgnoWorkflowStreamWrapper(
                             response,
                             invocation,
                             capture_content,
-                            on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
-                                prev
-                            ),
                         )
                     _set_invocation_output(
                         invocation, response, capture_content
@@ -1376,22 +1348,20 @@ def _workflow_aexecute_workflow_agent(
                 except BaseException as error:
                     invocation.fail(error)
                     raise
-                finally:
-                    if reset_needed:
-                        _FOREGROUND_WORKFLOW_ACTIVE.set(prev)
 
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             return _await_result()
 
         try:
+            set_invocation_user_id(invocation, instance, args, kwargs)
             _set_invocation_output(invocation, result, capture_content)
             set_invocation_user_id(
                 invocation, instance, args, kwargs, run_response=result
             )
             invocation.stop()
             return result
-        finally:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+        except BaseException as error:
+            invocation.fail(error)
+            raise
 
     return traced_method
 

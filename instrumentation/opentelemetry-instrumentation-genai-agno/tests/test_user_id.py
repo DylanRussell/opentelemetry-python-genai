@@ -158,3 +158,34 @@ def test_user_and_session_id_non_string_types(
     args = ("input", None, 9999, None, 8888)
     assert extract_user_id(args=args) == "9999"
     assert extract_session_id(args=args) == "8888"
+
+
+def test_user_and_session_id_zero_value(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that numeric zero user_id and session_id are treated as present."""
+    agent = Agent(
+        name="test-user-agent-zero", model=MockModel(id="mock-model")
+    )
+    mock_output = ModelResponse(content="Response")
+
+    with patch("agno.models.base.Model.response", return_value=mock_output):
+        agent.run("hello", user_id=0, session_id=0)
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes.get(USER_ID) == "0"
+    assert spans[0].attributes.get(GEN_AI_CONVERSATION_ID) == "0"
+
+    from opentelemetry.instrumentation.genai.agno.utils import (
+        extract_session_id,
+        extract_user_id,
+    )
+
+    assert extract_user_id(kwargs={"user_id": 0}) == "0"
+    assert extract_session_id(kwargs={"session_id": 0}) == "0"
+
+    args = ("input", None, 0, None, 0)
+    assert extract_user_id(args=args) == "0"
+    assert extract_session_id(args=args) == "0"

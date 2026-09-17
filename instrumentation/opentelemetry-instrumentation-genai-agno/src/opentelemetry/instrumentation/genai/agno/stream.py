@@ -52,11 +52,17 @@ class _AgentStreamMixin:
 
     def _process_chunk(self, chunk: Any) -> None:
         session_id = getattr(chunk, "session_id", None)
-        if session_id and not self._self_agent_invocation.conversation_id:
+        if (
+            session_id is not None
+            and not self._self_agent_invocation.conversation_id
+        ):
             self._self_agent_invocation.conversation_id = str(session_id)
 
         user_id = getattr(chunk, "user_id", None)
-        if user_id and USER_ID not in self._self_agent_invocation.attributes:
+        if (
+            user_id is not None
+            and USER_ID not in self._self_agent_invocation.attributes
+        ):
             self._self_agent_invocation.attributes[USER_ID] = str(user_id)
 
         metrics = getattr(chunk, "metrics", None)
@@ -200,12 +206,15 @@ class _WorkflowStreamMixin:
 
     def _process_chunk(self, chunk: Any) -> None:
         session_id = getattr(chunk, "session_id", None)
-        if session_id and not self._self_workflow_invocation.conversation_id:
+        if (
+            session_id is not None
+            and not self._self_workflow_invocation.conversation_id
+        ):
             self._self_workflow_invocation.conversation_id = str(session_id)
 
         user_id = getattr(chunk, "user_id", None)
         if (
-            user_id
+            user_id is not None
             and USER_ID not in self._self_workflow_invocation.attributes
         ):
             self._self_workflow_invocation.attributes[USER_ID] = str(user_id)
