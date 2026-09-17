@@ -47,6 +47,7 @@ from opentelemetry.util.genai.types import (
     Role,
     TextPart,
 )
+from opentelemetry.util.genai.utils import get_argument
 
 logger = logging.getLogger(__name__)
 
@@ -206,9 +207,14 @@ def _set_invocation_input(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any] | None = None,
 ) -> None:
-    if capture_content and (args or "input" in kwargs):
-        input_val = args[0] if args else kwargs.get("input")
+    if capture_content:
+        input_val = (
+            get_argument("input", wrapped, args, kwargs)
+            if wrapped is not None
+            else (args[0] if args else kwargs.get("input"))
+        )
         if input_val is not None:
             content_str = _extract_input_content(input_val)
             invocation.input_messages = [
@@ -249,10 +255,13 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any] | None = None,
 ) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
     invocation = handler.invoke_local_agent(agent_name=agent_name)
-    _set_invocation_input(invocation, instance, args, kwargs, capture_content)
+    _set_invocation_input(
+        invocation, instance, args, kwargs, capture_content, wrapped=wrapped
+    )
     invocation.tool_definitions = prepare_tool_definitions(
         getattr(instance, "tools", None)
     )
@@ -293,7 +302,7 @@ def _agent_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -326,14 +335,24 @@ def _agent_arun(
             result = wrapped(*args, **kwargs)
         except Exception as error:
             invocation = _start_agent_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             invocation.fail(error)
             raise
 
         if isinstance(result, AsyncIterator):
             invocation = _start_agent_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             return AsyncAgnoAgentStreamWrapper(
                 result, invocation, capture_content
@@ -344,7 +363,12 @@ def _agent_arun(
             @functools.wraps(wrapped)
             async def _await_result() -> object:
                 invocation = _start_agent_invocation(
-                    handler, instance, args, kwargs, capture_content
+                    handler,
+                    instance,
+                    args,
+                    kwargs,
+                    capture_content,
+                    wrapped=wrapped,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -365,7 +389,7 @@ def _agent_arun(
             return _await_result()
 
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()
@@ -422,10 +446,13 @@ def _start_workflow_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any] | None = None,
 ) -> WorkflowInvocation:
     workflow_name = getattr(instance, "name", None)
     invocation = handler.workflow(name=workflow_name)
-    _set_invocation_input(invocation, instance, args, kwargs, capture_content)
+    _set_invocation_input(
+        invocation, instance, args, kwargs, capture_content, wrapped=wrapped
+    )
     return invocation
 
 
@@ -441,7 +468,7 @@ def _workflow_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -476,14 +503,24 @@ def _workflow_arun(
             result = wrapped(*args, **kwargs)
         except Exception as error:
             invocation = _start_workflow_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             invocation.fail(error)
             raise
 
         if isinstance(result, AsyncIterator):
             invocation = _start_workflow_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             return AsyncAgnoWorkflowStreamWrapper(
                 result, invocation, capture_content
@@ -494,7 +531,12 @@ def _workflow_arun(
             @functools.wraps(wrapped)
             async def _await_result() -> object:
                 invocation = _start_workflow_invocation(
-                    handler, instance, args, kwargs, capture_content
+                    handler,
+                    instance,
+                    args,
+                    kwargs,
+                    capture_content,
+                    wrapped=wrapped,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -515,7 +557,7 @@ def _workflow_arun(
             return _await_result()
 
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()

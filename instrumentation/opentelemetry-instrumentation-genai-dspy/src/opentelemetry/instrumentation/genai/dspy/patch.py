@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import inspect
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from copy import copy, deepcopy
@@ -37,6 +36,7 @@ from opentelemetry.util.genai.types import (
     OutputMessage,
     TextPart,
 )
+from opentelemetry.util.genai.utils import bind_arguments, get_argument
 
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
@@ -246,13 +246,7 @@ def _extract_tool_arguments(
 ) -> dict[str, Any] | None:
     func: Any = getattr(instance, "func", None)
     if func is not None and callable(func):
-        try:
-            sig = inspect.signature(func)
-            bound = sig.bind_partial(*args, **kwargs)
-            bound.apply_defaults()
-            return dict(bound.arguments)
-        except (TypeError, ValueError):
-            pass
+        return bind_arguments(func, args, kwargs, apply_defaults=True)
 
     if kwargs and not args:
         return dict(kwargs)
@@ -409,9 +403,14 @@ def _react_aforward(
 
 
 def _extract_retrieval_query(
+    wrapped: Callable[..., Any] | None,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> str | None:
+    if wrapped is not None:
+        val = get_argument("query", wrapped, args, kwargs)
+        if val is not None:
+            return str(val)
     if "query" in kwargs and kwargs["query"] is not None:
         return str(kwargs["query"])
     if args and args[0] is not None:
@@ -421,10 +420,17 @@ def _extract_retrieval_query(
 
 def _extract_retrieval_k(
     instance: Any,
+    wrapped: Callable[..., Any] | None,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> int | None:
-    k = kwargs.get("k")
+    k = (
+        get_argument("k", wrapped, args, kwargs)
+        if wrapped is not None
+        else None
+    )
+    if k is None:
+        k = kwargs.get("k")
     if k is None and len(args) > 1:
         k = args[1]
     if k is None and hasattr(instance, "k"):
@@ -442,6 +448,7 @@ def _start_retrieval_invocation(
     instance: Retrieve,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
+    wrapped: Callable[..., Any] | None = None,
 ) -> RetrievalInvocation:
     rm: Any = getattr(instance, "rm", None)
     if rm is None:
@@ -465,8 +472,8 @@ def _start_retrieval_invocation(
         else None,
     )
 
-    invocation.query_text = _extract_retrieval_query(args, kwargs)
-    invocation.top_k = _extract_retrieval_k(instance, args, kwargs)
+    invocation.query_text = _extract_retrieval_query(wrapped, args, kwargs)
+    invocation.top_k = _extract_retrieval_k(instance, wrapped, args, kwargs)
     return invocation
 
 
@@ -506,7 +513,7 @@ def _retrieve_forward(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs
+            handler, instance, args, kwargs, wrapped=wrapped
         )
         with invocation:
             result = wrapped(*args, **kwargs)
