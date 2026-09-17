@@ -403,36 +403,21 @@ def _react_aforward(
 
 
 def _extract_retrieval_query(
-    wrapped: Callable[..., Any] | None,
+    wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> str | None:
-    if wrapped is not None:
-        val = get_argument("query", wrapped, args, kwargs)
-        if val is not None:
-            return str(val)
-    if "query" in kwargs and kwargs["query"] is not None:
-        return str(kwargs["query"])
-    if args and args[0] is not None:
-        return str(args[0])
-    return None
+    val = get_argument("query", wrapped, args, kwargs)
+    return str(val) if val is not None else None
 
 
 def _extract_retrieval_k(
     instance: Any,
-    wrapped: Callable[..., Any] | None,
+    wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> int | None:
-    k = (
-        get_argument("k", wrapped, args, kwargs)
-        if wrapped is not None
-        else None
-    )
-    if k is None:
-        k = kwargs.get("k")
-    if k is None and len(args) > 1:
-        k = args[1]
+    k = get_argument("k", wrapped, args, kwargs)
     if k is None and hasattr(instance, "k"):
         k = getattr(instance, "k", None)
     if k is not None:
@@ -448,7 +433,7 @@ def _start_retrieval_invocation(
     instance: Retrieve,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-    wrapped: Callable[..., Any] | None = None,
+    wrapped: Callable[..., Any],
 ) -> RetrievalInvocation:
     rm: Any = getattr(instance, "rm", None)
     if rm is None:
@@ -513,7 +498,7 @@ def _retrieve_forward(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs, wrapped=wrapped
+            handler, instance, args, kwargs, wrapped
         )
         with invocation:
             result = wrapped(*args, **kwargs)

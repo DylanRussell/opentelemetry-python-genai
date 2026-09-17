@@ -207,14 +207,10 @@ def _set_invocation_input(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-    wrapped: Callable[..., Any] | None = None,
+    wrapped: Callable[..., Any],
 ) -> None:
     if capture_content:
-        input_val = (
-            get_argument("input", wrapped, args, kwargs)
-            if wrapped is not None
-            else (args[0] if args else kwargs.get("input"))
-        )
+        input_val = get_argument("input", wrapped, args, kwargs)
         if input_val is not None:
             content_str = _extract_input_content(input_val)
             invocation.input_messages = [
@@ -255,12 +251,12 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-    wrapped: Callable[..., Any] | None = None,
+    wrapped: Callable[..., Any],
 ) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
     invocation = handler.invoke_local_agent(agent_name=agent_name)
     _set_invocation_input(
-        invocation, instance, args, kwargs, capture_content, wrapped=wrapped
+        invocation, instance, args, kwargs, capture_content, wrapped
     )
     invocation.tool_definitions = prepare_tool_definitions(
         getattr(instance, "tools", None)
@@ -446,12 +442,12 @@ def _start_workflow_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
-    wrapped: Callable[..., Any] | None = None,
+    wrapped: Callable[..., Any],
 ) -> WorkflowInvocation:
     workflow_name = getattr(instance, "name", None)
     invocation = handler.workflow(name=workflow_name)
     _set_invocation_input(
-        invocation, instance, args, kwargs, capture_content, wrapped=wrapped
+        invocation, instance, args, kwargs, capture_content, wrapped
     )
     return invocation
 
