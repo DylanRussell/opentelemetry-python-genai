@@ -330,12 +330,7 @@ def extract_user_id(
     """Extract user_id from call arguments, instance, or response."""
     if kwargs and (user_id := kwargs.get("user_id")):
         return str(user_id)
-    if (
-        args
-        and len(args) > 2
-        and args[2] is not None
-        and isinstance(args[2], str)
-    ):
+    if args and len(args) > 2 and args[2] is not None:
         return str(args[2])
     if instance:
         if user_id := getattr(instance, "user_id", None):
@@ -356,12 +351,7 @@ def extract_session_id(
     """Extract session_id from call arguments, instance, or response."""
     if kwargs and (session_id := kwargs.get("session_id")):
         return str(session_id)
-    if (
-        args
-        and len(args) > 4
-        and args[4] is not None
-        and isinstance(args[4], str)
-    ):
+    if args and len(args) > 4 and args[4] is not None:
         return str(args[4])
     if instance and (session_id := getattr(instance, "session_id", None)):
         return str(session_id)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextvars
 import functools
+import inspect
 import json
 import logging
 import sys
@@ -954,15 +955,18 @@ def _workflow_run(
 
 
 def _is_background_requested(
-    args: tuple[Any, ...], kwargs: dict[str, Any]
+    wrapped: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
 ) -> bool:
     if "background" in kwargs:
         return bool(kwargs["background"])
-    if len(args) > 12 and args[12]:
-        return True
-    if len(args) > 11 and args[11]:
-        return True
-    return False
+    try:
+        sig = inspect.signature(wrapped)
+        bound = sig.bind_partial(*args, **kwargs)
+        return bool(bound.arguments.get("background", False))
+    except Exception:
+        return False
 
 
 def _workflow_arun(
@@ -981,7 +985,7 @@ def _workflow_arun(
         # If background execution is requested, skip wrapping here.
         # Agno returns a pending placeholder immediately and runs execution
         # in a background task via _aexecute / _aexecute_stream.
-        if _is_background_requested(args, kwargs):
+        if _is_background_requested(wrapped, args, kwargs):
             return wrapped(*args, **kwargs)
 
         prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
@@ -1003,7 +1007,6 @@ def _workflow_arun(
             raise
 
         if isinstance(result, AsyncIterator):
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             invocation = _start_workflow_invocation(
                 handler,
                 instance,
@@ -1019,6 +1022,7 @@ def _workflow_arun(
                 result,
                 invocation,
                 capture_content,
+                on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active),
             )
 
         if isinstance(result, Awaitable):
@@ -1038,14 +1042,19 @@ def _workflow_arun(
                     invocation.attributes[USER_ID] = user_id
                 prev = _FOREGROUND_WORKFLOW_ACTIVE.get()
                 _FOREGROUND_WORKFLOW_ACTIVE.set(True)
+                reset_needed = True
                 try:
                     awaitable = cast(Awaitable[object], result)
                     response: object = await awaitable
                     if isinstance(response, AsyncIterator):
+                        reset_needed = False
                         return AsyncAgnoWorkflowStreamWrapper(
                             response,
                             invocation,
                             capture_content,
+                            on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
+                                prev
+                            ),
                         )
                     _set_invocation_output(
                         invocation, response, capture_content
@@ -1063,7 +1072,8 @@ def _workflow_arun(
                     invocation.fail(error)
                     raise
                 finally:
-                    _FOREGROUND_WORKFLOW_ACTIVE.set(prev)
+                    if reset_needed:
+                        _FOREGROUND_WORKFLOW_ACTIVE.set(prev)
 
             _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             return _await_result()
@@ -1105,37 +1115,43 @@ def _workflow_aexecute(
             return await wrapped(*args, **kwargs)
 
         run_resp = kwargs.get("workflow_run_response")
-        session_obj = kwargs.get("session")
+        session_obj = kwargs.get("session") or (
+            args[0]
+            if len(args) > 0 and hasattr(args[0], "session_id")
+            else None
+        )
+        session_id_val = (
+            kwargs.get("session_id")
+            or (
+                args[0]
+                if len(args) > 0
+                and not hasattr(args[0], "session_id")
+                and args[0] is not None
+                else None
+            )
+            or getattr(run_resp, "session_id", None)
+            or getattr(session_obj, "session_id", None)
+        )
         session_id = (
             str(session_id_val)
-            if (
-                session_id_val := (
-                    kwargs.get("session_id")
-                    or (
-                        args[0]
-                        if len(args) > 0 and isinstance(args[0], str)
-                        else None
-                    )
-                    or getattr(run_resp, "session_id", None)
-                    or getattr(session_obj, "session_id", None)
-                )
-            )
+            if session_id_val is not None
             else extract_session_id(instance, args, kwargs)
+        )
+        user_id_val = (
+            kwargs.get("user_id")
+            or (
+                args[1]
+                if len(args) > 1
+                and not hasattr(args[1], "input")
+                and args[1] is not None
+                else None
+            )
+            or getattr(run_resp, "user_id", None)
+            or getattr(session_obj, "user_id", None)
         )
         user_id = (
             str(user_id_val)
-            if (
-                user_id_val := (
-                    kwargs.get("user_id")
-                    or (
-                        args[1]
-                        if len(args) > 1 and isinstance(args[1], str)
-                        else None
-                    )
-                    or getattr(run_resp, "user_id", None)
-                    or getattr(session_obj, "user_id", None)
-                )
-            )
+            if user_id_val is not None
             else extract_user_id(instance, args, kwargs)
         )
         exec_input = (
@@ -1198,34 +1214,36 @@ def _workflow_aexecute_stream(
             return wrapped(*args, **kwargs)
 
         run_resp = kwargs.get("workflow_run_response")
+        session_id_val = (
+            kwargs.get("session_id")
+            or (
+                args[0]
+                if len(args) > 0
+                and not hasattr(args[0], "session_id")
+                and args[0] is not None
+                else None
+            )
+            or getattr(run_resp, "session_id", None)
+        )
         session_id = (
             str(session_id_val)
-            if (
-                session_id_val := (
-                    kwargs.get("session_id")
-                    or (
-                        args[0]
-                        if len(args) > 0 and isinstance(args[0], str)
-                        else None
-                    )
-                    or getattr(run_resp, "session_id", None)
-                )
-            )
+            if session_id_val is not None
             else extract_session_id(instance, args, kwargs)
+        )
+        user_id_val = (
+            kwargs.get("user_id")
+            or (
+                args[1]
+                if len(args) > 1
+                and not hasattr(args[1], "input")
+                and args[1] is not None
+                else None
+            )
+            or getattr(run_resp, "user_id", None)
         )
         user_id = (
             str(user_id_val)
-            if (
-                user_id_val := (
-                    kwargs.get("user_id")
-                    or (
-                        args[1]
-                        if len(args) > 1 and isinstance(args[1], str)
-                        else None
-                    )
-                    or getattr(run_resp, "user_id", None)
-                )
-            )
+            if user_id_val is not None
             else extract_user_id(instance, args, kwargs)
         )
         exec_input = (
@@ -1256,20 +1274,26 @@ def _workflow_aexecute_stream(
 
         prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
         _FOREGROUND_WORKFLOW_ACTIVE.set(True)
+        reset_needed = True
         try:
             result = wrapped(*args, **kwargs)
             if isinstance(result, AsyncIterator):
+                reset_needed = False
                 return AsyncAgnoWorkflowStreamWrapper(
                     result,
                     invocation,
                     capture_content,
+                    on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
+                        prev_active
+                    ),
                 )
             return result
         except BaseException as error:
             invocation.fail(error)
             raise
         finally:
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+            if reset_needed:
+                _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
 
     return traced_method
 
@@ -1332,25 +1356,32 @@ def _workflow_aexecute_workflow_agent(
             raise
 
         if isinstance(result, AsyncIterator):
-            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             return AsyncAgnoWorkflowStreamWrapper(
                 result,
                 invocation,
                 capture_content,
+                on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active),
             )
 
         if isinstance(result, Awaitable):
 
             @functools.wraps(wrapped)
             async def _await_result() -> object:
+                prev = _FOREGROUND_WORKFLOW_ACTIVE.get()
+                _FOREGROUND_WORKFLOW_ACTIVE.set(True)
+                reset_needed = True
                 try:
                     awaitable = cast(Awaitable[object], result)
                     response: object = await awaitable
                     if isinstance(response, AsyncIterator):
+                        reset_needed = False
                         return AsyncAgnoWorkflowStreamWrapper(
                             response,
                             invocation,
                             capture_content,
+                            on_close=lambda: _FOREGROUND_WORKFLOW_ACTIVE.set(
+                                prev
+                            ),
                         )
                     _set_invocation_output(
                         invocation, response, capture_content
@@ -1368,8 +1399,10 @@ def _workflow_aexecute_workflow_agent(
                     invocation.fail(error)
                     raise
                 finally:
-                    _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
+                    if reset_needed:
+                        _FOREGROUND_WORKFLOW_ACTIVE.set(prev)
 
+            _FOREGROUND_WORKFLOW_ACTIVE.set(prev_active)
             return _await_result()
 
         try:

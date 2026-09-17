@@ -27,6 +27,16 @@ from opentelemetry.semconv._incubating.attributes.user_attributes import (
 from opentelemetry.trace.status import StatusCode
 
 
+async def _wait_for_background_tasks(timeout: float = 5.0) -> None:
+    current = asyncio.current_task()
+    pending = [t for t in asyncio.all_tasks() if t is not current]
+    if pending:
+        await asyncio.wait_for(
+            asyncio.gather(*pending, return_exceptions=True),
+            timeout=timeout,
+        )
+
+
 def test_workflow_background_execution_non_streaming(
     instrument_agno_content_capture,
     span_exporter,
@@ -51,13 +61,9 @@ def test_workflow_background_execution_non_streaming(
         assert len(span_exporter.get_finished_spans()) == 0
 
         # Wait for background task execution to complete
-        for _ in range(50):
-            if placeholder.status == RunStatus.completed:
-                break
-            await asyncio.sleep(0.02)
+        await _wait_for_background_tasks()
 
         assert placeholder.status == RunStatus.completed
-        await asyncio.sleep(0.05)
 
     asyncio.run(_test())
 
@@ -90,12 +96,9 @@ def test_workflow_background_execution_identity(
             user_id="bg-user-999",
             session_id="bg-sess-888",
         )
-        for _ in range(50):
-            if placeholder.status == RunStatus.completed:
-                break
-            await asyncio.sleep(0.02)
+        assert placeholder.status == RunStatus.pending
+        await _wait_for_background_tasks()
         assert placeholder.status == RunStatus.completed
-        await asyncio.sleep(0.05)
 
     asyncio.run(_test())
 
@@ -128,12 +131,9 @@ def test_workflow_background_execution_child_parentage(
 
     async def _test() -> None:
         placeholder = await workflow.arun("start parent test", background=True)
-        for _ in range(50):
-            if placeholder.status == RunStatus.completed:
-                break
-            await asyncio.sleep(0.02)
+        assert placeholder.status == RunStatus.pending
+        await _wait_for_background_tasks()
         assert placeholder.status == RunStatus.completed
-        await asyncio.sleep(0.05)
 
     asyncio.run(_test())
 
@@ -177,12 +177,9 @@ def test_workflow_background_execution_error(
 
     async def _test() -> None:
         placeholder = await workflow.arun("fail test", background=True)
-        for _ in range(50):
-            if placeholder.status in (RunStatus.error, RunStatus.completed):
-                break
-            await asyncio.sleep(0.02)
+        assert placeholder.status == RunStatus.pending
+        await _wait_for_background_tasks()
         assert placeholder.status == RunStatus.error
-        await asyncio.sleep(0.05)
 
     asyncio.run(_test())
 
