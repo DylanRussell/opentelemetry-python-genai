@@ -95,9 +95,6 @@ _SUPPRESS_EMBEDDING: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_SUPPRESS_EMBEDDING", default=False
 )
 _patched_embedder_classes: set[type[Any]] = set()
-_embedder_init_subclass_saved: bool = False
-_had_orig_embedder_init_subclass: bool = False
-_orig_embedder_init_subclass: Any = None
 
 
 _KNOWN_EMBEDDERS: tuple[tuple[str, str], ...] = (
@@ -323,30 +320,9 @@ def patch_agent(handler: TelemetryHandler) -> None:
 
         _wrap_subclasses(Embedder)
 
-        global \
-            _embedder_init_subclass_saved, \
-            _had_orig_embedder_init_subclass, \
-            _orig_embedder_init_subclass
-        if not _embedder_init_subclass_saved:
-            _had_orig_embedder_init_subclass = (
-                "__init_subclass__" in Embedder.__dict__
-            )
-            _orig_embedder_init_subclass = Embedder.__dict__.get(
-                "__init_subclass__"
-            )
-            _embedder_init_subclass_saved = True
-
-        orig_init_subclass = _orig_embedder_init_subclass
-
         # Wrap new embedder classes created during runtime
         def _traced_init_subclass(cls: type[Embedder], **kwargs: Any) -> None:
-            if orig_init_subclass is not None:
-                func = getattr(
-                    orig_init_subclass, "__func__", orig_init_subclass
-                )
-                func(cls, **kwargs)
-            else:
-                super(Embedder, cls).__init_subclass__(**kwargs)
+            super(Embedder, cls).__init_subclass__(**kwargs)
             if _is_instrumented:
                 _wrap_embedder_class(cls, handler)
 
@@ -372,28 +348,8 @@ def unpatch_agent() -> None:
     try:
         from agno.knowledge.embedder.base import Embedder
 
-        global \
-            _embedder_init_subclass_saved, \
-            _had_orig_embedder_init_subclass, \
-            _orig_embedder_init_subclass
-        if _embedder_init_subclass_saved:
-            if (
-                _had_orig_embedder_init_subclass
-                and _orig_embedder_init_subclass is not None
-            ):
-                setattr(
-                    Embedder,
-                    "__init_subclass__",
-                    _orig_embedder_init_subclass,
-                )
-            elif (
-                hasattr(Embedder, "__init_subclass__")
-                and "__init_subclass__" in Embedder.__dict__
-            ):
-                delattr(Embedder, "__init_subclass__")
-            _embedder_init_subclass_saved = False
-            _orig_embedder_init_subclass = None
-            _had_orig_embedder_init_subclass = False
+        if "__init_subclass__" in Embedder.__dict__:
+            delattr(Embedder, "__init_subclass__")
     except Exception:
         pass
 
