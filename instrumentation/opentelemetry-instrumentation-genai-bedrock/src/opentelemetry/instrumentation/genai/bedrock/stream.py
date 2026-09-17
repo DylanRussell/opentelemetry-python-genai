@@ -8,9 +8,16 @@ from collections.abc import AsyncIterator
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
+<<<<<<< HEAD
 _logger = getLogger(__name__)
 
 from opentelemetry.util.genai.invocation import InferenceInvocation
+=======
+from opentelemetry.util.genai.invocation import (
+    EmbeddingInvocation,
+    InferenceInvocation,
+)
+>>>>>>> 6434bd45 ([`opentelemetry-instrumentation-genai-bedrock`] Instrument embedding models (#722))
 from opentelemetry.util.genai.stream import (
     AsyncStreamWrapper,
     SyncStreamWrapper,
@@ -30,6 +37,7 @@ from .extractors import (
     _is_list,
     _parse_body,
     _safe_int,
+    extract_embedding_response,
     extract_invoke_model_response,
     map_finish_reason,
 )
@@ -539,7 +547,7 @@ class AsyncBedrockInvokeModelStreamWrapper(
 class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
     """Wrapper for aiobotocore's AioStreamingBody that handles telemetry."""
 
-    _self_invocation: InferenceInvocation
+    _self_invocation: InferenceInvocation | EmbeddingInvocation
     _self_response: dict[str, Any]
     _self_capture_content: bool
     _self_chunks: list[bytes]
@@ -551,7 +559,7 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
     def __init__(
         self,
         body: Any,
-        invocation: InferenceInvocation,
+        invocation: InferenceInvocation | EmbeddingInvocation,
         response: dict[str, Any],
         *,
         capture_content: bool = True,
@@ -585,12 +593,19 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
         self._self_finalized = True
         self._self_chunks.clear()
         try:
-            extract_invoke_model_response(
-                self._self_response,
-                full_bytes,
-                self._self_invocation,
-                capture_content=self._self_capture_content,
-            )
+            if isinstance(self._self_invocation, EmbeddingInvocation):
+                extract_embedding_response(
+                    self._self_response,
+                    full_bytes,
+                    self._self_invocation,
+                )
+            else:
+                extract_invoke_model_response(
+                    self._self_response,
+                    full_bytes,
+                    self._self_invocation,
+                    capture_content=self._self_capture_content,
+                )
         except Exception:
             _logger.debug(
                 "Error extracting Bedrock invoke_model response",
