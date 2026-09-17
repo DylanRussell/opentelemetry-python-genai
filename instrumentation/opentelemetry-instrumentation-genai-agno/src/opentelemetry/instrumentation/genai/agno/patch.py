@@ -954,19 +954,35 @@ def _workflow_run(
     return traced_method
 
 
+@functools.lru_cache(maxsize=64)
+def _get_signature(func: Any) -> inspect.Signature:
+    return inspect.signature(func)
+
+
+def _bind_arguments(
+    wrapped: Callable[..., Any],
+    instance: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        sig = _get_signature(wrapped)
+        bound = sig.bind_partial(instance, *args, **kwargs)
+        return bound.arguments
+    except Exception:
+        return dict(kwargs)
+
+
 def _is_background_requested(
     wrapped: Callable[..., Any],
+    instance: Any,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> bool:
     if "background" in kwargs:
         return bool(kwargs["background"])
-    try:
-        sig = inspect.signature(wrapped)
-        bound = sig.bind_partial(*args, **kwargs)
-        return bool(bound.arguments.get("background", False))
-    except Exception:
-        return False
+    bound = _bind_arguments(wrapped, instance, args, kwargs)
+    return bool(bound.get("background", False))
 
 
 def _workflow_arun(
@@ -985,7 +1001,7 @@ def _workflow_arun(
         # If background execution is requested, skip wrapping here.
         # Agno returns a pending placeholder immediately and runs execution
         # in a background task via _aexecute / _aexecute_stream.
-        if _is_background_requested(wrapped, args, kwargs):
+        if _is_background_requested(wrapped, instance, args, kwargs):
             return wrapped(*args, **kwargs)
 
         prev_active = _FOREGROUND_WORKFLOW_ACTIVE.get()
@@ -1114,21 +1130,11 @@ def _workflow_aexecute(
         if _FOREGROUND_WORKFLOW_ACTIVE.get():
             return await wrapped(*args, **kwargs)
 
-        run_resp = kwargs.get("workflow_run_response")
-        session_obj = kwargs.get("session") or (
-            args[0]
-            if len(args) > 0 and hasattr(args[0], "session_id")
-            else None
-        )
+        bound_args = _bind_arguments(wrapped, instance, args, kwargs)
+        run_resp = bound_args.get("workflow_run_response")
+        session_obj = bound_args.get("session")
         session_id_val = (
-            kwargs.get("session_id")
-            or (
-                args[0]
-                if len(args) > 0
-                and not hasattr(args[0], "session_id")
-                and args[0] is not None
-                else None
-            )
+            bound_args.get("session_id")
             or getattr(run_resp, "session_id", None)
             or getattr(session_obj, "session_id", None)
         )
@@ -1138,14 +1144,7 @@ def _workflow_aexecute(
             else extract_session_id(instance, args, kwargs)
         )
         user_id_val = (
-            kwargs.get("user_id")
-            or (
-                args[1]
-                if len(args) > 1
-                and not hasattr(args[1], "input")
-                and args[1] is not None
-                else None
-            )
+            bound_args.get("user_id")
             or getattr(run_resp, "user_id", None)
             or getattr(session_obj, "user_id", None)
         )
@@ -1154,11 +1153,7 @@ def _workflow_aexecute(
             if user_id_val is not None
             else extract_user_id(instance, args, kwargs)
         )
-        exec_input = (
-            kwargs.get("execution_input")
-            or (args[2] if len(args) > 2 else None)
-            or (args[1] if len(args) > 1 else None)
-        )
+        exec_input = bound_args.get("execution_input")
         input_val = getattr(exec_input, "input", None) or getattr(
             run_resp, "input", None
         )
@@ -1213,17 +1208,13 @@ def _workflow_aexecute_stream(
         if _FOREGROUND_WORKFLOW_ACTIVE.get():
             return wrapped(*args, **kwargs)
 
-        run_resp = kwargs.get("workflow_run_response")
+        bound_args = _bind_arguments(wrapped, instance, args, kwargs)
+        run_resp = bound_args.get("workflow_run_response")
+        session_obj = bound_args.get("session")
         session_id_val = (
-            kwargs.get("session_id")
-            or (
-                args[0]
-                if len(args) > 0
-                and not hasattr(args[0], "session_id")
-                and args[0] is not None
-                else None
-            )
+            bound_args.get("session_id")
             or getattr(run_resp, "session_id", None)
+            or getattr(session_obj, "session_id", None)
         )
         session_id = (
             str(session_id_val)
@@ -1231,26 +1222,16 @@ def _workflow_aexecute_stream(
             else extract_session_id(instance, args, kwargs)
         )
         user_id_val = (
-            kwargs.get("user_id")
-            or (
-                args[1]
-                if len(args) > 1
-                and not hasattr(args[1], "input")
-                and args[1] is not None
-                else None
-            )
+            bound_args.get("user_id")
             or getattr(run_resp, "user_id", None)
+            or getattr(session_obj, "user_id", None)
         )
         user_id = (
             str(user_id_val)
             if user_id_val is not None
             else extract_user_id(instance, args, kwargs)
         )
-        exec_input = (
-            kwargs.get("execution_input")
-            or (args[2] if len(args) > 2 else None)
-            or (args[1] if len(args) > 1 else None)
-        )
+        exec_input = bound_args.get("execution_input")
         input_val = getattr(exec_input, "input", None) or getattr(
             run_resp, "input", None
         )
@@ -1312,12 +1293,9 @@ def _workflow_aexecute_workflow_agent(
         if _FOREGROUND_WORKFLOW_ACTIVE.get():
             return wrapped(*args, **kwargs)
 
-        user_input = kwargs.get("user_input") or (
-            args[0] if len(args) > 0 else None
-        )
-        run_context = kwargs.get("run_context") or (
-            args[1] if len(args) > 1 else None
-        )
+        bound_args = _bind_arguments(wrapped, instance, args, kwargs)
+        user_input = bound_args.get("user_input")
+        run_context = bound_args.get("run_context")
         session_id = (
             str(sid)
             if (sid := getattr(run_context, "session_id", None))
