@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from agno.knowledge.embedder.base import Embedder
@@ -236,6 +237,21 @@ def test_embedder_error_handling(
     assert span.attributes.get(ERROR_TYPE) == "ValueError"
 
 
+@dataclass
+class ZeroUsageEmbedder(Embedder):
+    model: str = "zero-tokens-model"
+
+    def get_embedding_and_usage(
+        self, text: str
+    ) -> tuple[list[float], dict[str, int]]:
+        return [0.1, 0.2], {"prompt_tokens": 0, "total_tokens": 12}
+
+    async def async_get_embedding_and_usage(
+        self, text: str
+    ) -> tuple[list[float], dict[str, int]]:
+        return [0.3, 0.4], {"prompt_tokens": 0, "total_tokens": 10}
+
+
 def test_embedder_uninstrument_restores_untraced_behavior(
     instrument_agno,
     span_exporter,
@@ -249,4 +265,73 @@ def test_embedder_uninstrument_restores_untraced_behavior(
     span_exporter.clear()
 
     embedder.get_embedding("untraced")
+    assert len(span_exporter.get_finished_spans()) == 0
+
+
+def test_embedder_zero_input_tokens_usage(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that 0 prompt_tokens is recorded as 0 and not overridden by total_tokens."""
+    embedder = ZeroUsageEmbedder()
+    _, usage = embedder.get_embedding_and_usage("zero text")
+    assert usage.get("prompt_tokens") == 0
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes.get(GEN_AI_USAGE_INPUT_TOKENS) == 0
+
+    span_exporter.clear()
+
+    async def _test() -> None:
+        await embedder.async_get_embedding_and_usage("zero text async")
+
+    asyncio.run(_test())
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes.get(GEN_AI_USAGE_INPUT_TOKENS) == 0
+
+
+def test_embedder_init_subclass_calls_original_and_unpatch_restores(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that custom base __init_subclass__ logic is called and restored on uninstrument."""
+    called_with: list[tuple[type[Any], str | None]] = []
+
+    class TrackedBaseEmbedder(Embedder):
+        def __init_subclass__(
+            cls, custom_arg: str | None = None, **kwargs: Any
+        ) -> None:
+            super().__init_subclass__(**kwargs)
+            called_with.append((cls, custom_arg))
+
+    class SubTrackedEmbedder(TrackedBaseEmbedder, custom_arg="value"):
+        def get_embedding(self, text: str) -> list[float]:
+            return [0.1]
+
+    # Verify original __init_subclass__ was called with subclass and kwargs
+    assert len(called_with) == 1
+    assert called_with[0] == (SubTrackedEmbedder, "value")
+
+    # Verify newly created subclass was instrumented
+    sub = SubTrackedEmbedder()
+    sub.get_embedding("traced")
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span_exporter.clear()
+
+    # Uninstrument and verify restoration
+    instrument_agno.uninstrument()
+    called_with.clear()
+
+    class SubTrackedEmbedderAfter(TrackedBaseEmbedder, custom_arg="after"):
+        def get_embedding(self, text: str) -> list[float]:
+            return [0.2]
+
+    assert len(called_with) == 1
+    assert called_with[0] == (SubTrackedEmbedderAfter, "after")
+
+    sub_after = SubTrackedEmbedderAfter()
+    sub_after.get_embedding("untraced")
     assert len(span_exporter.get_finished_spans()) == 0
