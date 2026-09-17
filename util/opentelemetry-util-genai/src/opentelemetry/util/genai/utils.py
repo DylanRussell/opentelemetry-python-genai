@@ -189,7 +189,7 @@ _signature_cache: dict[tuple[object, bool], inspect.Signature] = {}
 _inspect_signature = inspect.signature
 
 
-def get_signature(func: Callable[..., Any]) -> inspect.Signature:
+def _get_signature(func: Callable[..., Any]) -> inspect.Signature:
     """Return the cached inspect.Signature for a callable.
 
     For bound methods, keying on the underlying function prevents cache churn
@@ -218,7 +218,7 @@ def bind_arguments(
 ) -> dict[str, Any]:
     """Bind positional and keyword arguments to func's parameters by name."""
     try:
-        sig = get_signature(func)
+        sig = _get_signature(func)
         bound = sig.bind_partial(*args, **kwargs)
         if apply_defaults:
             bound.apply_defaults()

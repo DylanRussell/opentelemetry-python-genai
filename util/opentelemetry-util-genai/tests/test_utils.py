@@ -54,12 +54,12 @@ from opentelemetry.util.genai.types import (
     UriPart,
 )
 from opentelemetry.util.genai.utils import (
+    _get_signature,
     bind_arguments,
     decode_base64,
     gen_ai_json_dumps,
     get_argument,
     get_content_capturing_mode,
-    get_signature,
     image_from_url,
     should_capture_content_on_spans,
     should_emit_event,
@@ -1664,11 +1664,11 @@ class TestArgumentBinding(unittest.TestCase):
         s1 = Service()
         s2 = Service()
 
-        sig1 = get_signature(s1.execute)
-        sig2 = get_signature(s2.execute)
+        sig1 = _get_signature(s1.execute)
+        sig2 = _get_signature(s2.execute)
         self.assertIs(sig1, sig2)
         self.assertNotIn("self", sig1.parameters)
 
-        sig_unbound = get_signature(Service.execute)
+        sig_unbound = _get_signature(Service.execute)
         self.assertIn("self", sig_unbound.parameters)
         self.assertIsNot(sig1, sig_unbound)
