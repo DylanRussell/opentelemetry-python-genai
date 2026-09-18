@@ -1674,43 +1674,6 @@ class TestArgumentBinding(unittest.TestCase):
         self.assertIsNot(sig1, sig_unbound)
 
     def test_get_signature_cache_eviction(self):
-        from collections import OrderedDict
-
-        from opentelemetry.util.genai import utils
-
-        with (
-            patch.object(utils, "_signature_cache", OrderedDict()),
-            patch.object(utils, "_SIGNATURE_CACHE_MAX_SIZE", 2),
-        ):
-
-            def f1(a: int):
-                pass
-
-            def f2(b: int):
-                pass
-
-            def f3(c: int):
-                pass
-
-            _get_signature(f1)
-            _get_signature(f2)
-            self.assertIn((f1, False), utils._signature_cache)
-            self.assertIn((f2, False), utils._signature_cache)
-
-            # Accessing f3 should evict f1 (the oldest)
-            _get_signature(f3)
-            self.assertNotIn((f1, False), utils._signature_cache)
-            self.assertIn((f2, False), utils._signature_cache)
-            self.assertIn((f3, False), utils._signature_cache)
-
-            # Accessing f2 moves it to MRU; adding f1 then evicts f3
-            _get_signature(f2)
-            _get_signature(f1)
-            self.assertIn((f2, False), utils._signature_cache)
-            self.assertIn((f1, False), utils._signature_cache)
-            self.assertNotIn((f3, False), utils._signature_cache)
-
-    def test_get_signature_cache_eviction_dict(self):
         from opentelemetry.util.genai import utils
 
         with (
