@@ -9,6 +9,7 @@ import logging
 import os
 import urllib.parse
 from base64 import b64decode, b64encode
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any
@@ -185,11 +186,14 @@ gen_ai_json_dumps = partial(
 bytes, datetimes, etc. for GenAI observability."""
 
 
-_signature_cache: dict[tuple[object, bool], inspect.Signature] = {}
+_SIGNATURE_CACHE_MAX_SIZE = 1024
+_signature_cache: OrderedDict[tuple[object, bool], inspect.Signature] = (
+    OrderedDict()
+)
 _inspect_signature = inspect.signature
 
 
-def _get_signature(func: Callable[..., Any]) -> inspect.Signature:
+def _get_signature(func: Callable[..., object]) -> inspect.Signature:
     """Return the cached inspect.Signature for a callable.
 
     For bound methods, keying on the underlying function prevents cache churn
@@ -201,21 +205,25 @@ def _get_signature(func: Callable[..., Any]) -> inspect.Signature:
     key: object = (underlying, is_bound)
     try:
         sig = _signature_cache.get(key)
-        if sig is None:
-            sig = _inspect_signature(func)
-            _signature_cache[key] = sig
+        if sig is not None:
+            _signature_cache.move_to_end(key)
+            return sig
+        sig = _inspect_signature(func)
+        _signature_cache[key] = sig
+        if len(_signature_cache) > _SIGNATURE_CACHE_MAX_SIZE:
+            _signature_cache.popitem(last=False)
         return sig
     except TypeError:
         return _inspect_signature(func)
 
 
 def bind_arguments(
-    func: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Any],
+    func: Callable[..., object],
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
     *,
     apply_defaults: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Bind positional and keyword arguments to func's parameters by name."""
     try:
         sig = _get_signature(func)
@@ -229,9 +237,9 @@ def bind_arguments(
 
 def get_argument(
     name: str,
-    func: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Any],
+    func: Callable[..., object],
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
     default: Any = None,
     *,
     apply_defaults: bool = False,
