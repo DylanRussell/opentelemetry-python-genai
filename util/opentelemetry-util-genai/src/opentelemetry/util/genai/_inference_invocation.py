@@ -188,7 +188,6 @@ class InferenceInvocation(GenAIInvocation):
         # _invalidate_metric_attributes whenever an input changes.
         self._cached_metric_attributes: dict[str, AttributeValue] | None = None
 
-        self.already_started = get_inference_attributes() is not None
         self._start(self._get_start_attributes())
 
     def set_input_tokens(self, entries: ModalityTokens | None) -> None:
@@ -403,7 +402,7 @@ class InferenceInvocation(GenAIInvocation):
 
     def _finish_already_started(self) -> None:
         existing_attrs = get_inference_attributes()
-        # Guaranteed to be present since already_started was checked in __init__;
+        # Guaranteed to be present since _already_started was checked in __init__;
         # this check is a defensive safeguard.
         if existing_attrs is not None:
             attrs = self._get_start_attributes()
@@ -629,7 +628,7 @@ class LLMInvocation:
     @property
     def already_started(self) -> bool:
         return (
-            self._inference_invocation.already_started
+            self._inference_invocation._already_started
             if self._inference_invocation is not None
             else False
         )

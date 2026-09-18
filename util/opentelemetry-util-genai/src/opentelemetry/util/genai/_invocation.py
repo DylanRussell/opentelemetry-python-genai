@@ -20,6 +20,7 @@ from opentelemetry.context import (
     attach,
     detach,
     get_current,
+    get_value,
     set_value,
 )
 from opentelemetry.semconv._incubating.attributes import (
@@ -78,10 +79,8 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
 
     Subclasses opting into context deduplication should:
     1. Set ``_context_attributes_key`` to their type-specific context key.
-    2. In ``__init__``, check ``get_value(self._context_attributes_key)``; if present,
-       set ``self.already_started = True``.
-    3. Implement ``_finish_already_started`` to populate the context dict with inner attributes.
-    4. In ``_apply_finish``, read the context dict from ``self._span_context`` to merge downstream attributes.
+    2. Implement ``_finish_already_started`` to populate the context dict with inner attributes.
+    3. In ``_apply_finish``, read the context dict from ``self._span_context`` to merge downstream attributes.
     """
 
     def __init__(
@@ -124,10 +123,14 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._span_context: Context
         self._span_name: str = span_name
         self._span_kind: SpanKind = span_kind
-        # Remains None when already_started is True since no new context is attached.
+        # Remains None when _already_started is True since no new context is attached.
         self._context_token: ContextToken | None = None
         self._monotonic_start_s: float
-        self.already_started: bool = False
+        self._already_started: bool = (
+            get_value(self._context_attributes_key) is not None
+            if self._context_attributes_key is not None
+            else False
+        )
         self._finished: bool = False
         # Streaming state, set when the invocation is handed to a stream
         # wrapper. ``_request_stream`` marks the request as streamed
@@ -140,7 +143,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     @property
     def should_capture_content(self) -> bool:
         """Return True when message content should be captured for this invocation."""
-        if self.already_started:
+        if self._already_started:
             return False
         return self._content_capturing_mode in (
             ContentCapturingMode.SPAN_ONLY,
@@ -150,7 +153,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
 
     @property
     def _should_capture_content_on_span(self) -> bool:
-        if self.already_started:
+        if self._already_started:
             return False
         return self._content_capturing_mode in (
             ContentCapturingMode.SPAN_ONLY,
@@ -173,7 +176,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             attributes: Initial span attributes available for sampling decisions.
             context: An optional OpenTelemetry Context to parent the span.
         """
-        if self.already_started:
+        if self._already_started:
             self.span = get_current_span()
             self._span_context = get_current()
         else:
@@ -226,7 +229,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         if is_first_chunk:
             self._ttfc_seconds = delta
 
-        if self.already_started:
+        if self._already_started:
             return
 
         attributes = self._get_metric_attributes()
@@ -312,11 +315,11 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             return
         self._finished = True
 
-        if self.already_started:
+        if self._already_started:
             self._finish_already_started()
             return
 
-        # Context token can only be None if already_started is true
+        # Context token can only be None if _already_started is true
         # or finish was already called (both of which we verify above)
         # so this condition should never be true; it's just a safeguard.
         if self._context_token is None:

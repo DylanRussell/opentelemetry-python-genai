@@ -110,7 +110,7 @@ def test_sync_stream_wrapper_processes_chunks_and_stops():
 
 def test_sync_stream_wrapper_skips_chunk_accumulation_when_already_started():
     invocation = MagicMock()
-    invocation.already_started = True
+    invocation._already_started = True
     stream = _FakeSyncStream(chunks=["chunk1", "chunk2"])
     wrapper = _TestSyncStreamWrapper(stream, invocation=invocation)
 
@@ -315,7 +315,7 @@ def test_async_stream_wrapper_processes_chunks_and_stops():
 def test_async_stream_wrapper_skips_chunk_accumulation_when_already_started():
     async def exercise():
         invocation = MagicMock()
-        invocation.already_started = True
+        invocation._already_started = True
         stream = _FakeAsyncStream(chunks=["chunk1", "chunk2"])
         wrapper = _TestAsyncStreamWrapper(stream, invocation=invocation)
 

@@ -195,7 +195,7 @@ class SyncStreamWrapper(
         # Inner stream wrappers skip chunk accumulation to avoid duplicate
         # message buffering in memory.
         if invocation is None or not getattr(
-            invocation, "already_started", False
+            invocation, "_already_started", False
         ):
             self._process_chunk(chunk)
         # Record after _process_chunk so response.model is on the metrics.
@@ -360,7 +360,7 @@ class AsyncStreamWrapper(
         # Inner stream wrappers skip chunk accumulation to avoid duplicate
         # message buffering in memory.
         if invocation is None or not getattr(
-            invocation, "already_started", False
+            invocation, "_already_started", False
         ):
             self._process_chunk(chunk)
         # Record after _process_chunk so response.model is on the metrics.

@@ -102,7 +102,7 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
-            self.assertFalse(invocation.already_started)
+            self.assertFalse(invocation._already_started)
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
@@ -122,7 +122,7 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
-            self.assertFalse(invocation.already_started)
+            self.assertFalse(invocation._already_started)
             invocation.input_tokens = 10
             # did not call publish_to_context()
 
@@ -148,7 +148,7 @@ class TestInferenceContext(TestBase):
             with self.handler.inference(
                 "openai", request_model="gpt-4o-mini"
             ) as inf_inv:
-                self.assertFalse(inf_inv.already_started)
+                self.assertFalse(inf_inv._already_started)
                 self.assertIsNotNone(get_inference_attributes())
 
             self.assertIsNone(get_inference_attributes())
@@ -171,7 +171,7 @@ class TestInferenceContext(TestBase):
             with handler.inference(
                 "openai", request_model="gpt-4o"
             ) as root_inv:
-                self.assertFalse(root_inv.already_started)
+                self.assertFalse(root_inv._already_started)
 
                 with handler.inference(
                     "openai",
@@ -179,7 +179,7 @@ class TestInferenceContext(TestBase):
                     server_address="api.openai.com",
                     server_port=443,
                 ) as nested_inv:
-                    self.assertTrue(nested_inv.already_started)
+                    self.assertTrue(nested_inv._already_started)
                     self.assertIs(nested_inv.span, root_inv.span)
                     self.assertEqual(nested_inv.context, root_inv.context)
                     self.assertGreater(nested_inv._monotonic_start_s, 0.0)
@@ -344,7 +344,7 @@ class TestInferenceContext(TestBase):
                 with self.handler.inference(
                     "downstream", request_model="gpt-4o"
                 ) as nested_inv:
-                    self.assertTrue(nested_inv.already_started)
+                    self.assertTrue(nested_inv._already_started)
                     raise ValueError("downstream network failure")
 
             self.assertEqual(
@@ -397,9 +397,9 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "upstream", request_model="gpt-4o"
         ) as root_inv:
-            self.assertFalse(root_inv.already_started)
+            self.assertFalse(root_inv._already_started)
             with self.handler.inference("downstream") as nested_inv:
-                self.assertTrue(nested_inv.already_started)
+                self.assertTrue(nested_inv._already_started)
                 nested_inv.record_stream_chunk()
                 nested_inv.record_stream_chunk()
                 self.assertIsNotNone(nested_inv._ttfc_seconds)
@@ -536,7 +536,7 @@ class TestInferenceContext(TestBase):
                 server_address="api.example.com",
                 server_port=443,
             ) as inner:
-                self.assertTrue(inner.already_started)
+                self.assertTrue(inner._already_started)
                 # Overwrite shared fields downstream
                 inner.temperature = 0.9
                 inner.input_tokens = 100
@@ -606,14 +606,14 @@ class TestInferenceContext(TestBase):
 
     def test_multiple_inner_invocations_overwrite_context(self) -> None:
         with self.handler.inference("root-provider") as root:
-            self.assertFalse(root.already_started)
+            self.assertFalse(root._already_started)
             self.assertEqual(get_inference_attributes(), {})
 
             with self.handler.inference(
                 "inner1-provider",
                 request_model="model-1",
             ) as inner1:
-                self.assertTrue(inner1.already_started)
+                self.assertTrue(inner1._already_started)
                 inner1.input_tokens = 10
                 inner1.output_tokens = 20
                 inner1.response_model_name = "resp-model-1"
@@ -631,7 +631,7 @@ class TestInferenceContext(TestBase):
                 "inner2-provider",
                 request_model="model-2",
             ) as inner2:
-                self.assertTrue(inner2.already_started)
+                self.assertTrue(inner2._already_started)
                 inner2.input_tokens = 30
                 inner2.output_tokens = 40
                 inner2.response_model_name = "resp-model-2"
