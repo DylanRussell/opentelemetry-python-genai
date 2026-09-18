@@ -10,7 +10,7 @@ import os
 import urllib.parse
 from base64 import b64decode, b64encode
 from collections import OrderedDict
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, MutableMapping
 from functools import partial
 from typing import Any
 
@@ -187,7 +187,7 @@ bytes, datetimes, etc. for GenAI observability."""
 
 
 _SIGNATURE_CACHE_MAX_SIZE = 1024
-_signature_cache: OrderedDict[tuple[object, bool], inspect.Signature] = (
+_signature_cache: MutableMapping[tuple[object, bool], inspect.Signature] = (
     OrderedDict()
 )
 _inspect_signature = inspect.signature
@@ -206,12 +206,18 @@ def _get_signature(func: Callable[..., object]) -> inspect.Signature:
     try:
         sig = _signature_cache.get(key)
         if sig is not None:
-            _signature_cache.move_to_end(key)
+            if isinstance(_signature_cache, OrderedDict):
+                _signature_cache.move_to_end(key)
+            else:
+                _signature_cache[key] = _signature_cache.pop(key)
             return sig
         sig = _inspect_signature(func)
         _signature_cache[key] = sig
         if len(_signature_cache) > _SIGNATURE_CACHE_MAX_SIZE:
-            _signature_cache.popitem(last=False)
+            if isinstance(_signature_cache, OrderedDict):
+                _signature_cache.popitem(last=False)
+            else:
+                del _signature_cache[next(iter(_signature_cache))]
         return sig
     except TypeError:
         return _inspect_signature(func)

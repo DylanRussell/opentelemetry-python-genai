@@ -9,6 +9,7 @@ import json
 import pathlib
 import tempfile
 import weakref
+from collections import OrderedDict
 from collections.abc import Generator
 from types import GeneratorType, SimpleNamespace
 from typing import Any
@@ -667,7 +668,7 @@ def signature_calls(monkeypatch) -> list[str]:
         calls.append(getattr(callable_, "__qualname__", repr(callable_)))
         return original_signature(callable_)
 
-    monkeypatch.setattr(util_genai_utils, "_signature_cache", {})
+    monkeypatch.setattr(util_genai_utils, "_signature_cache", OrderedDict())
     monkeypatch.setattr(util_genai_utils, "_inspect_signature", _signature)
     return calls
 
