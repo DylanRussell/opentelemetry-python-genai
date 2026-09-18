@@ -181,6 +181,8 @@ class TestInferenceContext(TestBase):
                 ) as nested_inv:
                     self.assertTrue(nested_inv.already_started)
                     self.assertIs(nested_inv.span, root_inv.span)
+                    self.assertEqual(nested_inv.context, root_inv.context)
+                    self.assertGreater(nested_inv._monotonic_start_s, 0.0)
                     self.assertTrue(nested_inv.span.is_recording())
                     self.assertFalse(nested_inv.should_capture_content)
                     nested_inv.input_tokens = 15
@@ -400,15 +402,24 @@ class TestInferenceContext(TestBase):
                 self.assertTrue(nested_inv.already_started)
                 nested_inv.record_stream_chunk()
                 nested_inv.record_stream_chunk()
-                self.assertIsNone(nested_inv._ttfc_seconds)
-                self.assertIsNone(nested_inv._request_stream)
-
-            root_inv.record_stream_chunk()
-            self.assertIsNotNone(root_inv._ttfc_seconds)
-            self.assertTrue(root_inv._request_stream)
+                self.assertIsNotNone(nested_inv._ttfc_seconds)
+                self.assertTrue(nested_inv._request_stream)
 
         spans = self.span_exporter.get_finished_spans()
         self.assertEqual(len(spans), 1)
+        self.assertTrue(spans[0].attributes.get(GenAI.GEN_AI_REQUEST_STREAM))
+        self.assertEqual(
+            spans[0].attributes.get(GenAI.GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK),
+            nested_inv._ttfc_seconds,
+        )
+
+        metrics = self._harvest_metrics()
+        self.assertNotIn(
+            "gen_ai.client.operation.time_to_first_chunk", metrics
+        )
+        self.assertNotIn(
+            "gen_ai.client.operation.time_per_output_chunk", metrics
+        )
 
     def test_llm_invocation_already_started(self) -> None:
         from opentelemetry.util.genai._inference_invocation import (

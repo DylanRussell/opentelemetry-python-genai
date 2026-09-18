@@ -20,7 +20,6 @@ from opentelemetry.trace import (
     Span,
     SpanKind,
     Tracer,
-    get_current_span,
 )
 from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
@@ -190,9 +189,6 @@ class InferenceInvocation(GenAIInvocation):
         self._cached_metric_attributes: dict[str, AttributeValue] | None = None
 
         self.already_started = get_inference_attributes() is not None
-        if self.already_started:
-            self.span = get_current_span()
-
         self._start(self._get_start_attributes())
 
     def set_input_tokens(self, entries: ModalityTokens | None) -> None:
@@ -249,18 +245,6 @@ class InferenceInvocation(GenAIInvocation):
             )
             if field_name is not None:
                 setattr(self, field_name, token_count)
-
-    @property
-    def should_capture_content(self) -> bool:
-        if self.already_started:
-            return False
-        return super().should_capture_content
-
-    @property
-    def _should_capture_content_on_span(self) -> bool:
-        if self.already_started:
-            return False
-        return super()._should_capture_content_on_span
 
     @property
     def cache_creation_input_tokens(self) -> int | None:
@@ -417,7 +401,7 @@ class InferenceInvocation(GenAIInvocation):
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
 
-    def _finish_already_started(self, error: Error | None = None) -> None:
+    def _finish_already_started(self) -> None:
         # Error attributes are not recorded on inner finish to isolate errors;
         # the outer invocation records them only if the error escapes unhandled.
         existing_attrs = get_inference_attributes()
