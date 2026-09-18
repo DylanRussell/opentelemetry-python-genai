@@ -402,9 +402,9 @@ class InferenceInvocation(GenAIInvocation):
         return attrs
 
     def _finish_already_started(self) -> None:
-        # Error attributes are not recorded on inner finish to isolate errors;
-        # the outer invocation records them only if the error escapes unhandled.
         existing_attrs = get_inference_attributes()
+        # Guaranteed to be present since already_started was checked in __init__;
+        # this check is a defensive safeguard.
         if existing_attrs is not None:
             attrs = self._get_start_attributes()
             attrs.update(self._get_attributes())
@@ -465,6 +465,8 @@ class InferenceInvocation(GenAIInvocation):
         if error is not None:
             self._apply_error_attributes(error)
         ctx_attrs = get_inference_attributes(self._span_context) or {}
+        # Exclude start attributes already set on the span at creation time so
+        # downstream context does not overwrite root values.
         start_keys = set(self._get_start_attributes())
         attributes = {
             k: v for k, v in ctx_attrs.items() if k not in start_keys
@@ -473,6 +475,8 @@ class InferenceInvocation(GenAIInvocation):
         attributes.update(self._get_message_attributes(for_span=True))
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
+        # Invalidate metric attributes cached during streaming chunks so
+        # _record_client_metrics picks up downstream context enrichment.
         self._invalidate_metric_attributes()
         self._record_client_metrics()
         log_record = self._maybe_create_event()

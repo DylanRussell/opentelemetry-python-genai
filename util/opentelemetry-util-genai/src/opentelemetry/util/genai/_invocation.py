@@ -316,7 +316,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             self._finish_already_started()
             return
 
-
         # Context token can only be None if already_started is true
         # or finish was already called (both of which we verify above)
         # so this condition should never be true; it's just a safeguard.
