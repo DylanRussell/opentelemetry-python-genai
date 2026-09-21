@@ -392,11 +392,10 @@ class _ModelStreamMixin:
     _self_invocation: InferenceInvocation
     _self_assistant_message: Message | None
     _self_stream_data: MessageData | None
-    _self_capture_content: bool
     _self_accumulated_chunks: list[str]
 
     def _process_chunk(self, chunk: ModelResponse) -> None:
-        if self._self_capture_content:
+        if self._self_invocation.should_capture_content:
             content = getattr(chunk, "content", None)
             if content is not None:
                 formatted = format_content(content)
@@ -495,7 +494,7 @@ class _ModelStreamMixin:
         )
         self._self_invocation.finish_reasons = finish_reasons
 
-        if self._self_capture_content:
+        if self._self_invocation.should_capture_content:
             if self._self_assistant_message is not None and (
                 getattr(self._self_assistant_message, "content", None)
                 or getattr(self._self_assistant_message, "tool_calls", None)
@@ -541,12 +540,10 @@ class AgnoModelStreamWrapper(_ModelStreamMixin, SyncStreamWrapper[Any]):
         invocation: InferenceInvocation,
         assistant_message: Message | None = None,
         stream_data: MessageData | None = None,
-        capture_content: bool = False,
     ) -> None:
         super().__init__(stream, invocation=invocation)
         self._self_assistant_message = assistant_message
         self._self_stream_data = stream_data
-        self._self_capture_content = capture_content
         self._self_accumulated_chunks = []
 
 
@@ -559,10 +556,8 @@ class AsyncAgnoModelStreamWrapper(_ModelStreamMixin, AsyncStreamWrapper[Any]):
         invocation: InferenceInvocation,
         assistant_message: Message | None = None,
         stream_data: MessageData | None = None,
-        capture_content: bool = False,
     ) -> None:
         super().__init__(stream, invocation=invocation)
         self._self_assistant_message = assistant_message
         self._self_stream_data = stream_data
-        self._self_capture_content = capture_content
         self._self_accumulated_chunks = []

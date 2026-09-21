@@ -1838,8 +1838,6 @@ def _start_retrieval_invocation(
 def _knowledge_search(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., Sequence[Document] | None],
         instance: Knowledge,
@@ -1855,7 +1853,7 @@ def _knowledge_search(
             invocation.fail(error)
             raise
 
-        if capture_content and result is not None:
+        if invocation.should_capture_content and result is not None:
             invocation.documents = [
                 format_retrieval_document(doc) for doc in result
             ]
@@ -1868,8 +1866,6 @@ def _knowledge_search(
 def _knowledge_asearch(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     async def traced_method(
         wrapped: Callable[..., Awaitable[Sequence[Document] | None]],
         instance: Knowledge,
@@ -1885,7 +1881,7 @@ def _knowledge_asearch(
             invocation.fail(error)
             raise
 
-        if capture_content and result is not None:
+        if invocation.should_capture_content and result is not None:
             invocation.documents = [
                 format_retrieval_document(doc) for doc in result
             ]
@@ -2021,8 +2017,7 @@ def _start_model_inference(
     if tools:
         invocation.tool_definitions = prepare_tool_definitions(tools)
 
-    capture_content = handler.should_capture_content()
-    if capture_content and messages:
+    if invocation.should_capture_content and messages:
         invocation.input_messages = format_model_input_messages(messages)
 
     set_invocation_user_id(
@@ -2048,7 +2043,6 @@ def _populate_model_response_telemetry(
     invocation: InferenceInvocation,
     assistant_message: Message | None,
     model_response: ModelResponse | None,
-    capture_content: bool,
 ) -> None:
     """Populate final response telemetry on an InferenceInvocation."""
     provider_data = None
@@ -2110,7 +2104,7 @@ def _populate_model_response_telemetry(
     )
     invocation.finish_reasons = finish_reasons
 
-    if capture_content:
+    if invocation.should_capture_content:
         if assistant_message is not None and (
             getattr(assistant_message, "content", None)
             or getattr(assistant_message, "tool_calls", None)
@@ -2141,8 +2135,6 @@ def _populate_model_response_telemetry(
 def _model_process_response(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., Any],
         instance: Model,
@@ -2162,7 +2154,6 @@ def _model_process_response(
             invocation,
             assistant_message=assistant_message,
             model_response=cast("ModelResponse | None", model_response),
-            capture_content=capture_content,
         )
         invocation.stop()
         return result
@@ -2173,8 +2164,6 @@ def _model_process_response(
 def _model_aprocess_response(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     async def traced_method(
         wrapped: Callable[..., Awaitable[Any]],
         instance: Model,
@@ -2194,7 +2183,6 @@ def _model_aprocess_response(
             invocation,
             assistant_message=assistant_message,
             model_response=cast("ModelResponse | None", model_response),
-            capture_content=capture_content,
         )
         invocation.stop()
         return result
@@ -2205,8 +2193,6 @@ def _model_aprocess_response(
 def _model_process_response_stream(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., Any],
         instance: Model,
@@ -2227,7 +2213,6 @@ def _model_process_response_stream(
             invocation=invocation,
             assistant_message=assistant_message,
             stream_data=cast("MessageData | None", stream_data),
-            capture_content=capture_content,
         )
 
     return traced_method
@@ -2236,8 +2221,6 @@ def _model_process_response_stream(
 def _model_aprocess_response_stream(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., Any],
         instance: Model,
@@ -2258,7 +2241,6 @@ def _model_aprocess_response_stream(
             invocation=invocation,
             assistant_message=assistant_message,
             stream_data=cast("MessageData | None", stream_data),
-            capture_content=capture_content,
         )
 
     return traced_method
