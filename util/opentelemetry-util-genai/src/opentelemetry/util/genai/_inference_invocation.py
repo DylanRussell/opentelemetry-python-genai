@@ -3,16 +3,17 @@
 
 from __future__ import annotations
 
+import timeit
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Any, Final
 
 from opentelemetry._logs import Logger, LogRecord
+from opentelemetry.context import Context, get_current
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
 from opentelemetry.semconv.attributes import (
-    error_attributes,
     server_attributes,
 )
 from opentelemetry.trace import (
@@ -20,13 +21,18 @@ from opentelemetry.trace import (
     Span,
     SpanKind,
     Tracer,
+    get_current_span,
 )
 from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
+    METRIC_ATTRIBUTES_KEY,
+    SPANEVENT_ATTRIBUTES_KEY,
+    InferenceAttributes,
     get_inference_attributes,
 )
 from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
+    ContextToken,
     Error,
     GenAIInvocation,
     get_content_attributes,
@@ -47,16 +53,6 @@ from opentelemetry.util.genai.utils import (
     _should_emit_event,
 )
 from opentelemetry.util.types import AttributeValue
-
-_METRIC_SEMCONV_KEYS = (
-    GenAI.GEN_AI_OPERATION_NAME,
-    GenAI.GEN_AI_PROVIDER_NAME,
-    GenAI.GEN_AI_REQUEST_MODEL,
-    GenAI.GEN_AI_RESPONSE_MODEL,
-    server_attributes.SERVER_ADDRESS,
-    server_attributes.SERVER_PORT,
-    error_attributes.ERROR_TYPE,
-)
 
 _GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS: Final = (
     "gen_ai.usage.cache_write.input_tokens"
@@ -99,6 +95,24 @@ _GEN_AI_CONVERSATION_COMPACTED: Final = "gen_ai.conversation.compacted"
 _GEN_AI_PROMPT_VERSION: Final = "gen_ai.prompt.version"
 
 
+def _get_context_spanevent_attributes(
+    ctx_data: InferenceAttributes | None,
+) -> Mapping[str, AttributeValue]:
+    if ctx_data is None:
+        return {}
+    attrs = ctx_data.get(SPANEVENT_ATTRIBUTES_KEY)
+    return attrs if attrs is not None else {}
+
+
+def _get_context_metric_attributes(
+    ctx_data: InferenceAttributes | None,
+) -> Mapping[str, AttributeValue]:
+    if ctx_data is None:
+        return {}
+    attrs = ctx_data.get(METRIC_ATTRIBUTES_KEY)
+    return attrs if attrs is not None else {}
+
+
 class InferenceInvocation(GenAIInvocation):
     """Represents a single LLM chat/completion call.
 
@@ -106,6 +120,14 @@ class InferenceInvocation(GenAIInvocation):
     """
 
     _context_attributes_key = INFERENCE_ATTRIBUTES_KEY
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> InferenceInvocation:
+        if (
+            cls is InferenceInvocation
+            and get_inference_attributes() is not None
+        ):
+            return object.__new__(SuppressedInferenceInvocation)
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -396,18 +418,6 @@ class InferenceInvocation(GenAIInvocation):
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
 
-    def _finish_already_started(self) -> None:
-        existing_attrs = get_inference_attributes()
-        # Guaranteed to be present since _already_started was checked in __init__;
-        # this check is a defensive safeguard.
-        if existing_attrs is not None:
-            attrs = dict(self._start_attributes)
-            attrs.update(self._get_attributes())
-            attrs.update(self.attributes)
-            # Message attributes are excluded because spans and events format
-            # content differently and evaluate capture rules independently.
-            existing_attrs.update(attrs)
-
     def _invalidate_metric_attributes(self) -> None:
         """Drop the cached metric attributes so the next read rebuilds them.
 
@@ -416,18 +426,24 @@ class InferenceInvocation(GenAIInvocation):
         """
         self._cached_metric_attributes = None
 
+    def _get_own_metric_attributes(self) -> dict[str, AttributeValue]:
+        attrs = dict(self._start_attributes)
+        if self._response_model_name is not None:
+            attrs[GenAI.GEN_AI_RESPONSE_MODEL] = self._response_model_name
+        attrs.update(self.metric_attributes)
+        return attrs
+
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # Cached because this is rebuilt once per streaming chunk. Any mutation
         # of its inputs must call _invalidate_metric_attributes.
         if self._cached_metric_attributes is None:
-            attrs = dict(self._start_attributes)
-            if self._response_model_name is not None:
-                attrs[GenAI.GEN_AI_RESPONSE_MODEL] = self._response_model_name
-            attrs.update(self.metric_attributes)
-            ctx_attrs = get_inference_attributes(self._span_context) or {}
-            for key in _METRIC_SEMCONV_KEYS:
-                if key not in attrs and key in ctx_attrs:
-                    attrs[key] = ctx_attrs[key]
+            attrs = self._get_own_metric_attributes()
+            ctx_data = get_inference_attributes(self._span_context)
+            if ctx_data is not None:
+                ctx_attrs = _get_context_metric_attributes(ctx_data)
+                for key, val in ctx_attrs.items():
+                    if key not in attrs:
+                        attrs[key] = val
             self._cached_metric_attributes = attrs
         return self._cached_metric_attributes
 
@@ -438,10 +454,11 @@ class InferenceInvocation(GenAIInvocation):
 
     def _get_metric_token_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
-        ctx_attrs = get_inference_attributes(self._span_context) or {}
+        ctx_data = get_inference_attributes(self._span_context)
+        spanevent_attrs = _get_context_spanevent_attributes(ctx_data)
         input_tokens = self.input_tokens
         if input_tokens is None:
-            ctx_input = ctx_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS)
+            ctx_input = spanevent_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS)
             if isinstance(ctx_input, int):
                 input_tokens = ctx_input
         if input_tokens is not None:
@@ -449,7 +466,7 @@ class InferenceInvocation(GenAIInvocation):
 
         output_tokens = self.output_tokens
         if output_tokens is None:
-            ctx_output = ctx_attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS)
+            ctx_output = spanevent_attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS)
             if isinstance(ctx_output, int):
                 output_tokens = ctx_output
         if output_tokens is not None:
@@ -459,12 +476,13 @@ class InferenceInvocation(GenAIInvocation):
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        ctx_attrs = get_inference_attributes(self._span_context) or {}
+        ctx_data = get_inference_attributes(self._span_context)
+        spanevent_attrs = _get_context_spanevent_attributes(ctx_data)
         # Exclude start attributes already set on the span at creation time so
         # downstream context does not overwrite root values.
         start_keys = set(self._start_attributes)
         attributes = {
-            k: v for k, v in ctx_attrs.items() if k not in start_keys
+            k: v for k, v in spanevent_attrs.items() if k not in start_keys
         }
         attributes.update(self._get_attributes())
         attributes.update(self._get_message_attributes(for_span=True))
@@ -494,8 +512,9 @@ class InferenceInvocation(GenAIInvocation):
         if not self._emit_event:
             return None
 
-        ctx_attrs = get_inference_attributes(self._span_context) or {}
-        attributes = dict(ctx_attrs)
+        ctx_data = get_inference_attributes(self._span_context)
+        spanevent_attrs = _get_context_spanevent_attributes(ctx_data)
+        attributes = dict(spanevent_attrs)
         attributes.update(self._start_attributes)
         attributes.update(self._get_attributes())
         attributes.update(self._get_message_attributes(for_span=False))
@@ -505,6 +524,149 @@ class InferenceInvocation(GenAIInvocation):
             attributes=attributes,
             context=self._span_context,
         )
+
+
+class SuppressedInferenceInvocation(InferenceInvocation):
+    """Represents an inference invocation running inside an active inference context.
+
+    Suppresses span creation, metrics, and events. On stop or fail, publishes its
+    attributes to the active inference context.
+    """
+
+    def __init__(
+        self,
+        tracer: Tracer,
+        instruments: _Instruments,
+        logger: Logger,
+        completion_hook: CompletionHook,
+        provider: str,
+        *,
+        request_model: str | None = None,
+        server_address: str | None = None,
+        server_port: int | None = None,
+        operation_name: str | None = None,
+        error_type_resolver: ErrorTypeResolver | None = None,
+        content_capturing_mode: ContentCapturingMode | None = None,
+    ) -> None:
+        self._tracer = tracer
+        self._instruments = instruments
+        self._logger = logger
+        self._completion_hook = completion_hook
+        self._error_type_resolver = error_type_resolver
+        self._operation_name = (
+            operation_name or GenAI.GenAiOperationNameValues.CHAT.value
+        )
+        self._content_capturing_mode = ContentCapturingMode.NO_CONTENT
+        self.attributes: dict[str, AttributeValue] = {}
+        self.metric_attributes: dict[str, AttributeValue] = {}
+        self.span: Span = get_current_span()
+        self._span_context: Context = get_current()
+        self._context_token: ContextToken | None = None
+        self._finished: bool = False
+        self._monotonic_start_s: float = timeit.default_timer()
+        self._request_stream: bool | None = None
+        self._ttfc_seconds: float | None = None
+        self._stream_last_chunk_at: float | None = None
+
+        self._provider = provider
+        self._request_model = request_model
+        self._server_address = server_address
+        self._server_port = server_port
+        self._start_attributes: dict[str, AttributeValue] = {
+            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
+            GenAI.GEN_AI_PROVIDER_NAME: provider,
+        }
+        if request_model is not None:
+            self._start_attributes[GenAI.GEN_AI_REQUEST_MODEL] = request_model
+        if server_address is not None:
+            self._start_attributes[server_attributes.SERVER_ADDRESS] = (
+                server_address
+            )
+        if server_port is not None:
+            self._start_attributes[server_attributes.SERVER_PORT] = server_port
+
+        self.conversation_id: str | None = None
+        self._emit_event: bool = False
+        self.input_messages: list[InputMessage] = []
+        self.output_messages: list[OutputMessage] = []
+        self.system_instruction: (
+            list[SystemInstructionPart] | list[MessagePart]
+        ) = []
+        self._response_model_name: str | None = None
+        self.response_id: str | None = None
+        self.finish_reasons: list[str] | None = None
+        self.input_tokens: int | None = None
+        self.output_tokens: int | None = None
+        self.thinking_tokens: int | None = None
+        self.temperature: float | None = None
+        self.top_p: float | None = None
+        self.frequency_penalty: float | None = None
+        self.presence_penalty: float | None = None
+        self.max_tokens: int | None = None
+        self.stop_sequences: list[str] | None = None
+        self.seed: int | None = None
+        self.cache_write_input_tokens: int | None = None
+        self.cache_read_input_tokens: int | None = None
+        self.text_input_tokens: int | None = None
+        self.image_input_tokens: int | None = None
+        self.audio_input_tokens: int | None = None
+        self.text_output_tokens: int | None = None
+        self.image_output_tokens: int | None = None
+        self.audio_output_tokens: int | None = None
+        self.text_cache_read_input_tokens: int | None = None
+        self.image_cache_read_input_tokens: int | None = None
+        self.audio_cache_read_input_tokens: int | None = None
+        self.reasoning_level: str | None = None
+        self.previous_response_id: str | None = None
+        self.conversation_compacted: bool | None = None
+        self.prompt_name: str | None = None
+        self.prompt_version: str | None = None
+        self.prompt_variables: Mapping[str, object] | None = None
+        self.tool_definitions: list[ToolDefinition] | None = None
+        self.top_k: int | None = None
+        self.request_choice_count: int | None = None
+        self.output_type: str | None = None
+        self._cached_metric_attributes: dict[str, AttributeValue] | None = None
+
+    @property
+    def should_capture_content(self) -> bool:
+        return False
+
+    @property
+    def _should_capture_content_on_span(self) -> bool:
+        return False
+
+    def _on_stream_chunk(self, chunk_at: float) -> None:
+        last_chunk_at = (
+            self._stream_last_chunk_at
+            if self._stream_last_chunk_at is not None
+            else self._monotonic_start_s
+        )
+        self._stream_last_chunk_at = chunk_at
+        delta = max(chunk_at - last_chunk_at, 0.0)
+        if self._ttfc_seconds is None:
+            self._ttfc_seconds = delta
+
+    def _finish(self, error: Error | None = None) -> None:
+        if self._finished:
+            return
+        self._finished = True
+
+        ctx_data = get_inference_attributes()
+        if ctx_data is not None:
+            attrs = dict(self._start_attributes)
+            attrs.update(self._get_attributes())
+            attrs.update(self.attributes)
+            spanevent_attrs = ctx_data.get(SPANEVENT_ATTRIBUTES_KEY)
+            if spanevent_attrs is not None:
+                spanevent_attrs.update(attrs)
+
+            metric_attrs = ctx_data.get(METRIC_ATTRIBUTES_KEY)
+            if metric_attrs is not None:
+                metric_attrs.update(self._get_own_metric_attributes())
+
+    def _apply_finish(self, error: Error | None = None) -> None:
+        pass
 
 
 @dataclass

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Final, cast
+from typing import Any, Final, TypedDict, cast
 
 from opentelemetry.context import Context, get_value, set_value
 from opentelemetry.util.types import AttributeValue
@@ -15,15 +15,27 @@ INFERENCE_ATTRIBUTES_KEY: Final[str] = (
 )
 _INFERENCE_ATTRIBUTES_KEY = INFERENCE_ATTRIBUTES_KEY
 
+SPANEVENT_ATTRIBUTES_KEY: Final[str] = "spanevent_attributes"
+METRIC_ATTRIBUTES_KEY: Final[str] = "metric_attributes"
+
+
+class InferenceAttributes(TypedDict):
+    spanevent_attributes: dict[str, AttributeValue]
+    metric_attributes: dict[str, AttributeValue]
+
+
 __all__ = [
     "INFERENCE_ATTRIBUTES_KEY",
+    "METRIC_ATTRIBUTES_KEY",
+    "SPANEVENT_ATTRIBUTES_KEY",
+    "InferenceAttributes",
     "get_inference_attributes",
     "set_inference_attributes",
 ]
 
 
 def set_inference_attributes(
-    attributes: dict[str, AttributeValue],
+    attributes: InferenceAttributes | dict[str, Any],
     context: Context | None = None,
 ) -> Context:
     """Return a Context with the given inference attributes dictionary attached.
@@ -40,7 +52,7 @@ def set_inference_attributes(
 
 def get_inference_attributes(
     context: Context | None = None,
-) -> dict[str, AttributeValue] | None:
+) -> InferenceAttributes | None:
     """Return the active inference attributes dictionary from context, if any.
 
     Args:
@@ -51,5 +63,5 @@ def get_inference_attributes(
     """
     attrs = get_value(_INFERENCE_ATTRIBUTES_KEY, context=context)
     if isinstance(attrs, dict):
-        return cast(dict[str, AttributeValue], attrs)
+        return cast(InferenceAttributes, attrs)
     return None

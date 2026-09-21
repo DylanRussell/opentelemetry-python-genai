@@ -18,6 +18,10 @@ from typing import (
     cast,
 )
 
+from opentelemetry.util.genai._inference_invocation import (
+    SuppressedInferenceInvocation,
+)
+
 if TYPE_CHECKING:
     from opentelemetry.util.genai.types import Error
 
@@ -202,8 +206,8 @@ class SyncStreamWrapper(
         chunk_at = timeit.default_timer() if invocation is not None else None
         # Inner stream wrappers skip chunk accumulation to avoid duplicate
         # message buffering in memory.
-        if invocation is None or not getattr(
-            invocation, "_already_started", False
+        if invocation is None or not isinstance(
+            invocation, SuppressedInferenceInvocation
         ):
             self._process_chunk(chunk)
         # Record after _process_chunk so response.model is on the metrics.
@@ -365,8 +369,8 @@ class AsyncStreamWrapper(
         chunk_at = timeit.default_timer() if invocation is not None else None
         # Inner stream wrappers skip chunk accumulation to avoid duplicate
         # message buffering in memory.
-        if invocation is None or not getattr(
-            invocation, "_already_started", False
+        if invocation is None or not isinstance(
+            invocation, SuppressedInferenceInvocation
         ):
             self._process_chunk(chunk)
         # Record after _process_chunk so response.model is on the metrics.

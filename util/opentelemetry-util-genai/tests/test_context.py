@@ -27,10 +27,16 @@ from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace.status import StatusCode
 from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
+    METRIC_ATTRIBUTES_KEY,
+    SPANEVENT_ATTRIBUTES_KEY,
     get_inference_attributes,
     set_inference_attributes,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
+from opentelemetry.util.genai.invocation import (
+    InferenceInvocation,
+    SuppressedInferenceInvocation,
+)
 from opentelemetry.util.types import AttributeValue
 
 
@@ -102,19 +108,32 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
-            self.assertFalse(invocation._already_started)
+            self.assertIsInstance(invocation, InferenceInvocation)
+            self.assertNotIsInstance(invocation, SuppressedInferenceInvocation)
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            # Outer adds an empty object on the context
-            self.assertEqual(attrs, {})
+            # Outer adds an empty object on the context with 2 keys
+            self.assertEqual(
+                attrs,
+                {
+                    SPANEVENT_ATTRIBUTES_KEY: {},
+                    METRIC_ATTRIBUTES_KEY: {},
+                },
+            )
 
             # Setting fields on outer does not mutate context object
             invocation.input_tokens = 42
             invocation.output_tokens = 84
             invocation.temperature = 0.7
             invocation.response_model_name = "gpt-4o-mini-2024-07-18"
-            self.assertEqual(attrs, {})
+            self.assertEqual(
+                attrs,
+                {
+                    SPANEVENT_ATTRIBUTES_KEY: {},
+                    METRIC_ATTRIBUTES_KEY: {},
+                },
+            )
 
         self.assertIsNone(get_inference_attributes())
 
@@ -122,7 +141,7 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
-            self.assertFalse(invocation._already_started)
+            self.assertNotIsInstance(invocation, SuppressedInferenceInvocation)
             invocation.input_tokens = 10
             # did not call publish_to_context()
 
@@ -148,7 +167,9 @@ class TestInferenceContext(TestBase):
             with self.handler.inference(
                 "openai", request_model="gpt-4o-mini"
             ) as inf_inv:
-                self.assertFalse(inf_inv._already_started)
+                self.assertNotIsInstance(
+                    inf_inv, SuppressedInferenceInvocation
+                )
                 self.assertIsNotNone(get_inference_attributes())
 
             self.assertIsNone(get_inference_attributes())
@@ -171,7 +192,9 @@ class TestInferenceContext(TestBase):
             with handler.inference(
                 "openai", request_model="gpt-4o"
             ) as root_inv:
-                self.assertFalse(root_inv._already_started)
+                self.assertNotIsInstance(
+                    root_inv, SuppressedInferenceInvocation
+                )
 
                 with handler.inference(
                     "openai",
@@ -179,7 +202,9 @@ class TestInferenceContext(TestBase):
                     server_address="api.openai.com",
                     server_port=443,
                 ) as nested_inv:
-                    self.assertTrue(nested_inv._already_started)
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
                     self.assertIs(nested_inv.span, root_inv.span)
                     self.assertEqual(nested_inv.context, root_inv.context)
                     self.assertGreater(nested_inv._monotonic_start_s, 0.0)
@@ -189,23 +214,53 @@ class TestInferenceContext(TestBase):
                     nested_inv.output_tokens = 25
                     nested_inv.response_model_name = "gpt-4o-2024-08-06"
                     nested_inv.attributes["custom.downstream"] = "enriched"
+                    nested_inv.metric_attributes[
+                        "custom.metric_downstream"
+                    ] = "m_enriched"
 
                 # While still in root context, context attributes contain downstream enrichment
                 attrs = get_inference_attributes()
                 self.assertIsNotNone(attrs)
                 assert attrs is not None
+                spanevent_attrs = attrs[SPANEVENT_ATTRIBUTES_KEY]
+                metric_attrs = attrs[METRIC_ATTRIBUTES_KEY]
                 self.assertEqual(
-                    attrs.get(server_attributes.SERVER_ADDRESS),
+                    spanevent_attrs.get(server_attributes.SERVER_ADDRESS),
                     "api.openai.com",
                 )
-                self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 443)
                 self.assertEqual(
-                    attrs.get("gen_ai.response.model"),
+                    spanevent_attrs.get(server_attributes.SERVER_PORT), 443
+                )
+                self.assertEqual(
+                    spanevent_attrs.get("gen_ai.response.model"),
                     "gpt-4o-2024-08-06",
                 )
-                self.assertEqual(attrs.get("gen_ai.usage.input_tokens"), 15)
-                self.assertEqual(attrs.get("gen_ai.usage.output_tokens"), 25)
-                self.assertEqual(attrs.get("custom.downstream"), "enriched")
+                self.assertEqual(
+                    spanevent_attrs.get("gen_ai.usage.input_tokens"), 15
+                )
+                self.assertEqual(
+                    spanevent_attrs.get("gen_ai.usage.output_tokens"), 25
+                )
+                self.assertEqual(
+                    spanevent_attrs.get("custom.downstream"), "enriched"
+                )
+                self.assertEqual(
+                    metric_attrs.get("custom.metric_downstream"), "m_enriched"
+                )
+                self.assertEqual(
+                    metric_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                    "gpt-4o-2024-08-06",
+                )
+                self.assertEqual(
+                    metric_attrs.get(server_attributes.SERVER_ADDRESS),
+                    "api.openai.com",
+                )
+                self.assertEqual(
+                    metric_attrs.get(server_attributes.SERVER_PORT),
+                    443,
+                )
+                self.assertNotIn("custom.downstream", metric_attrs)
+                self.assertNotIn(GenAI.GEN_AI_USAGE_INPUT_TOKENS, metric_attrs)
 
                 # After nested exit, span is NOT ended yet (still recording)
                 self.assertTrue(root_inv.span.is_recording())
@@ -289,6 +344,10 @@ class TestInferenceContext(TestBase):
                 duration_point.attributes.get(GenAI.GEN_AI_RESPONSE_MODEL),
                 "gpt-4o-2024-08-06",
             )
+            self.assertEqual(
+                duration_point.attributes.get("custom.metric_downstream"),
+                "m_enriched",
+            )
             # High-cardinality attributes must NOT leak onto metrics
             self.assertNotIn("custom.downstream", duration_point.attributes)
             self.assertNotIn(
@@ -344,7 +403,9 @@ class TestInferenceContext(TestBase):
                 with self.handler.inference(
                     "downstream", request_model="gpt-4o"
                 ) as nested_inv:
-                    self.assertTrue(nested_inv._already_started)
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
                     raise ValueError("downstream network failure")
 
             self.assertEqual(
@@ -358,7 +419,12 @@ class TestInferenceContext(TestBase):
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            self.assertNotIn(error_attributes.ERROR_TYPE, attrs)
+            self.assertNotIn(
+                error_attributes.ERROR_TYPE, attrs[SPANEVENT_ATTRIBUTES_KEY]
+            )
+            self.assertNotIn(
+                error_attributes.ERROR_TYPE, attrs[METRIC_ATTRIBUTES_KEY]
+            )
 
         # After root finishes normally, 1 span is ended without error attributes
         spans = self.span_exporter.get_finished_spans()
@@ -397,9 +463,11 @@ class TestInferenceContext(TestBase):
         with self.handler.inference(
             "upstream", request_model="gpt-4o"
         ) as root_inv:
-            self.assertFalse(root_inv._already_started)
+            self.assertNotIsInstance(root_inv, SuppressedInferenceInvocation)
             with self.handler.inference("downstream") as nested_inv:
-                self.assertTrue(nested_inv._already_started)
+                self.assertIsInstance(
+                    nested_inv, SuppressedInferenceInvocation
+                )
                 nested_inv.record_stream_chunk()
                 nested_inv.record_stream_chunk()
                 self.assertIsNotNone(nested_inv._ttfc_seconds)
@@ -421,7 +489,7 @@ class TestInferenceContext(TestBase):
             "gen_ai.client.operation.time_per_output_chunk", metrics
         )
 
-    def test_llm_invocation_already_started(self) -> None:
+    def test_llm_invocation_suppressed(self) -> None:
         from opentelemetry.util.genai._inference_invocation import (
             LLMInvocation,
         )
@@ -431,7 +499,10 @@ class TestInferenceContext(TestBase):
             self.handler.start_llm(nested_inv)
             self.assertTrue(nested_inv.span.is_recording())
             assert nested_inv._inference_invocation is not None
-            self.assertTrue(nested_inv._inference_invocation._already_started)
+            self.assertIsInstance(
+                nested_inv._inference_invocation,
+                SuppressedInferenceInvocation,
+            )
             self.assertFalse(
                 nested_inv._inference_invocation.should_capture_content
             )
@@ -440,8 +511,11 @@ class TestInferenceContext(TestBase):
             attrs = get_inference_attributes()
             self.assertIsNotNone(attrs)
             assert attrs is not None
-            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "nested")
-            self.assertEqual(attrs.get("custom.llm"), "val")
+            spanevent_attrs = attrs[SPANEVENT_ATTRIBUTES_KEY]
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "nested"
+            )
+            self.assertEqual(spanevent_attrs.get("custom.llm"), "val")
 
     def test_metric_enrichment_precedence_and_error(self) -> None:
         with self.assertRaises(ValueError):
@@ -536,7 +610,7 @@ class TestInferenceContext(TestBase):
                 server_address="api.example.com",
                 server_port=443,
             ) as inner:
-                self.assertTrue(inner._already_started)
+                self.assertIsInstance(inner, SuppressedInferenceInvocation)
                 # Overwrite shared fields downstream
                 inner.temperature = 0.9
                 inner.input_tokens = 100
@@ -548,8 +622,13 @@ class TestInferenceContext(TestBase):
             # While still in root context, context reflects downstream writes
             attrs = get_inference_attributes()
             assert attrs is not None
-            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_TEMPERATURE), 0.9)
-            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 100)
+            spanevent_attrs = attrs[SPANEVENT_ATTRIBUTES_KEY]
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_REQUEST_TEMPERATURE), 0.9
+            )
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 100
+            )
 
         # After root finish: Option 1 root precedence applies
         spans = self.span_exporter.get_finished_spans()
@@ -606,14 +685,20 @@ class TestInferenceContext(TestBase):
 
     def test_multiple_inner_invocations_overwrite_context(self) -> None:
         with self.handler.inference("root-provider") as root:
-            self.assertFalse(root._already_started)
-            self.assertEqual(get_inference_attributes(), {})
+            self.assertNotIsInstance(root, SuppressedInferenceInvocation)
+            self.assertEqual(
+                get_inference_attributes(),
+                {
+                    SPANEVENT_ATTRIBUTES_KEY: {},
+                    METRIC_ATTRIBUTES_KEY: {},
+                },
+            )
 
             with self.handler.inference(
                 "inner1-provider",
                 request_model="model-1",
             ) as inner1:
-                self.assertTrue(inner1._already_started)
+                self.assertIsInstance(inner1, SuppressedInferenceInvocation)
                 inner1.input_tokens = 10
                 inner1.output_tokens = 20
                 inner1.response_model_name = "resp-model-1"
@@ -621,17 +706,30 @@ class TestInferenceContext(TestBase):
             # After inner1 finishes, context has inner1's attributes
             attrs = get_inference_attributes()
             assert attrs is not None
-            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-1")
-            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 10)
+            spanevent_attrs = attrs[SPANEVENT_ATTRIBUTES_KEY]
             self.assertEqual(
-                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-1"
+                spanevent_attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-1"
+            )
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 10
+            )
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                "resp-model-1",
+            )
+            metric_attrs = attrs[METRIC_ATTRIBUTES_KEY]
+            self.assertEqual(
+                metric_attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-1"
+            )
+            self.assertEqual(
+                metric_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-1"
             )
 
             with self.handler.inference(
                 "inner2-provider",
                 request_model="model-2",
             ) as inner2:
-                self.assertTrue(inner2._already_started)
+                self.assertIsInstance(inner2, SuppressedInferenceInvocation)
                 inner2.input_tokens = 30
                 inner2.output_tokens = 40
                 inner2.response_model_name = "resp-model-2"
@@ -639,10 +737,23 @@ class TestInferenceContext(TestBase):
             # After inner2 finishes, inner2 overwrites inner1
             attrs = get_inference_attributes()
             assert attrs is not None
-            self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-2")
-            self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 30)
+            spanevent_attrs = attrs[SPANEVENT_ATTRIBUTES_KEY]
             self.assertEqual(
-                attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-2"
+                spanevent_attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-2"
+            )
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 30
+            )
+            self.assertEqual(
+                spanevent_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL),
+                "resp-model-2",
+            )
+            metric_attrs = attrs[METRIC_ATTRIBUTES_KEY]
+            self.assertEqual(
+                metric_attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "model-2"
+            )
+            self.assertEqual(
+                metric_attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "resp-model-2"
             )
 
         # After root finishes, root reconciles with context (inner2's values)
@@ -669,3 +780,33 @@ class TestInferenceContext(TestBase):
             root_span.attributes.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS),
             40,
         )
+
+    def test_nested_custom_metric_attributes_propagated(self) -> None:
+        with self.handler.inference(
+            "proxy", request_model="gpt-4o"
+        ) as root_inv:
+            root_inv.metric_attributes["root.metric"] = "root_val"
+            with self.handler.inference(
+                "downstream", request_model="gpt-4o"
+            ) as inner_inv:
+                self.assertIsInstance(inner_inv, SuppressedInferenceInvocation)
+                inner_inv.metric_attributes["inner.metric"] = "inner_val"
+                inner_inv.metric_attributes["root.metric"] = "inner_shadowed"
+
+            attrs = get_inference_attributes()
+            assert attrs is not None
+            self.assertEqual(
+                attrs[METRIC_ATTRIBUTES_KEY]["inner.metric"], "inner_val"
+            )
+            self.assertEqual(
+                attrs[METRIC_ATTRIBUTES_KEY]["root.metric"], "inner_shadowed"
+            )
+
+        metrics = self._harvest_metrics()
+        duration_points = metrics["gen_ai.client.operation.duration"]
+        self.assertEqual(len(duration_points), 1)
+        point = duration_points[0]
+        # Root metric attribute takes precedence over inner metric attribute
+        self.assertEqual(point.attributes.get("root.metric"), "root_val")
+        # Inner metric attribute not on root is propagated
+        self.assertEqual(point.attributes.get("inner.metric"), "inner_val")
