@@ -155,18 +155,16 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     def activate(self) -> Iterator[None]:
         """Make this invocation's span the current span inside the block.
 
-        Restores the previous context on exit. A no-op when the span is
-        already current, so a nested block leaves the outermost one to restore
-        it, and a no-op once the invocation has finished.
+        Restores the previous context on exit. A no-op once the invocation has finished.
         """
-        if self._finished or self._context_token is not None:
+        if self._finished:
             yield
             return
-        self._context_token = attach(self._span_context)
+        token = attach(self.context)
         try:
             yield
         finally:
-            self.suspend()
+            detach(token)
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         """Return low-cardinality attributes for metric recording."""

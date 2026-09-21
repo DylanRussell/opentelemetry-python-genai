@@ -757,4 +757,3 @@ def test_async_tool_stream_restores_caller_context(
     assert [s.get_span_context().span_id for s in inside] == [
         tool_span.context.span_id
     ] * 2
-

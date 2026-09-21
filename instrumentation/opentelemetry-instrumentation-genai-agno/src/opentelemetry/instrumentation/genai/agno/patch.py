@@ -33,10 +33,8 @@ from wrapt import register_post_import_hook, wrap_function_wrapper
 
 from opentelemetry.instrumentation.genai.agno.stream import (
     AgnoAgentStreamWrapper,
-    AgnoToolStreamWrapper,
     AgnoWorkflowStreamWrapper,
     AsyncAgnoAgentStreamWrapper,
-    AsyncAgnoToolStreamWrapper,
     AsyncAgnoWorkflowStreamWrapper,
 )
 from opentelemetry.instrumentation.genai.agno.utils import (
@@ -55,6 +53,10 @@ from opentelemetry.util.genai.invocation import (
     RetrievalInvocation,
     ToolInvocation,
     WorkflowInvocation,
+)
+from opentelemetry.util.genai.stream import (
+    AsyncToolStreamWrapper,
+    SyncToolStreamWrapper,
 )
 from opentelemetry.util.genai.types import (
     Error,
@@ -261,9 +263,8 @@ def _extract_arguments_str(args_val: Any) -> str:
 def _set_tool_invocation_input(
     invocation: ToolInvocation,
     instance: FunctionCall,
-    capture_content: bool,
 ) -> None:
-    if capture_content:
+    if invocation.should_capture_content:
         arguments = instance.arguments
         if arguments is not None:
             invocation.arguments = _extract_arguments_str(arguments)
@@ -285,11 +286,10 @@ def _fail_tool_invocation(
 def _set_tool_invocation_output(
     invocation: ToolInvocation,
     result: FunctionExecutionResult,
-    capture_content: bool,
 ) -> None:
     if result.status == "failure":
         return
-    if capture_content:
+    if invocation.should_capture_content:
         invocation.tool_result = _extract_output_content(result)
 
 
@@ -371,7 +371,6 @@ def _start_agent_invocation(
 def _start_tool_invocation(
     handler: TelemetryHandler,
     instance: FunctionCall,
-    capture_content: bool,
 ) -> ToolInvocation:
     function_obj = instance.function
     tool_name = getattr(function_obj, "name", None) or "tool"
@@ -386,7 +385,7 @@ def _start_tool_invocation(
         invocation.tool_call_id = str(tool_call_id)
     if tool_desc:
         invocation.tool_description = str(tool_desc)
-    _set_tool_invocation_input(invocation, instance, capture_content)
+    _set_tool_invocation_input(invocation, instance)
     return invocation
 
 
@@ -487,7 +486,6 @@ def _handle_tool_result(
     invocation: ToolInvocation,
     instance: FunctionCall,
     result: FunctionExecutionResult,
-    capture_content: bool,
 ) -> FunctionExecutionResult:
     if result.status == "failure":
         _fail_tool_invocation(invocation, result)
@@ -496,20 +494,18 @@ def _handle_tool_result(
     tool_res = result.result
     wrapped_stream: Any = None
     if isinstance(tool_res, AsyncIterator):
-        wrapped_stream = AsyncAgnoToolStreamWrapper(
-            cast(Any, tool_res), invocation, capture_content
+        wrapped_stream = AsyncToolStreamWrapper(
+            cast(Any, tool_res), invocation
         )
     elif isinstance(tool_res, Iterator):
-        wrapped_stream = AgnoToolStreamWrapper(
-            cast(Any, tool_res), invocation, capture_content
-        )
+        wrapped_stream = SyncToolStreamWrapper(cast(Any, tool_res), invocation)
 
     if wrapped_stream is not None:
         result.result = wrapped_stream
         instance.result = wrapped_stream
         return result
 
-    _set_tool_invocation_output(invocation, result, capture_content)
+    _set_tool_invocation_output(invocation, result)
     invocation.stop()
     return result
 
@@ -517,23 +513,19 @@ def _handle_tool_result(
 def _tool_call_execute(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., FunctionExecutionResult],
         instance: FunctionCall,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> FunctionExecutionResult:
-        invocation = _start_tool_invocation(handler, instance, capture_content)
+        invocation = _start_tool_invocation(handler, instance)
         try:
             result = wrapped(*args, **kwargs)
         except BaseException as error:
             invocation.fail(error)
             raise
-        return _handle_tool_result(
-            invocation, instance, result, capture_content
-        )
+        return _handle_tool_result(invocation, instance, result)
 
     return traced_method
 
@@ -541,23 +533,19 @@ def _tool_call_execute(
 def _tool_call_aexecute(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     async def traced_method(
         wrapped: Callable[..., Awaitable[FunctionExecutionResult]],
         instance: FunctionCall,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> FunctionExecutionResult:
-        invocation = _start_tool_invocation(handler, instance, capture_content)
+        invocation = _start_tool_invocation(handler, instance)
         try:
             result = await wrapped(*args, **kwargs)
         except BaseException as error:
             invocation.fail(error)
             raise
-        return _handle_tool_result(
-            invocation, instance, result, capture_content
-        )
+        return _handle_tool_result(invocation, instance, result)
 
     return cast(Callable[..., Any], traced_method)
 
@@ -743,8 +731,6 @@ def _start_retrieval_invocation(
 def _knowledge_search(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     def traced_method(
         wrapped: Callable[..., Sequence[Document] | None],
         instance: Knowledge,
@@ -760,7 +746,7 @@ def _knowledge_search(
             invocation.fail(error)
             raise
 
-        if capture_content and result is not None:
+        if invocation.should_capture_content and result is not None:
             invocation.documents = [
                 format_retrieval_document(doc) for doc in result
             ]
@@ -773,8 +759,6 @@ def _knowledge_search(
 def _knowledge_asearch(
     handler: TelemetryHandler,
 ) -> Callable[..., Any]:
-    capture_content = handler.should_capture_content()
-
     async def traced_method(
         wrapped: Callable[..., Awaitable[Sequence[Document] | None]],
         instance: Knowledge,
@@ -790,7 +774,7 @@ def _knowledge_asearch(
             invocation.fail(error)
             raise
 
-        if capture_content and result is not None:
+        if invocation.should_capture_content and result is not None:
             invocation.documents = [
                 format_retrieval_document(doc) for doc in result
             ]
