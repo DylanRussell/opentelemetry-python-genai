@@ -61,6 +61,8 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     prepare_tool_definitions,
     resolve_embedder_provider,
     resolve_model_provider,
+    safe_float,
+    safe_int,
     set_invocation_user_id,
 )
 from opentelemetry.instrumentation.utils import unwrap
@@ -1826,12 +1828,7 @@ def _start_retrieval_invocation(
     else:
         max_results = instance.max_results
 
-    if max_results is not None:
-        try:
-            invocation.top_k = int(max_results)
-        except (ValueError, TypeError):
-            pass
-
+    invocation.top_k = safe_int(max_results)
     return invocation
 
 
@@ -1941,7 +1938,7 @@ def _start_model_inference(
         try:
             parsed = urllib.parse.urlparse(str(base_url))
             server_address = parsed.hostname
-            server_port = parsed.port
+            server_port = safe_int(parsed.port)
         except Exception:
             pass
 
@@ -1954,49 +1951,19 @@ def _start_model_inference(
         server_port=server_port,
     )
 
-    temp = getattr(instance, "temperature", None)
-    if temp is not None:
-        try:
-            invocation.temperature = float(temp)
-        except (ValueError, TypeError):
-            pass
-
-    top_p = getattr(instance, "top_p", None)
-    if top_p is not None:
-        try:
-            invocation.top_p = float(top_p)
-        except (ValueError, TypeError):
-            pass
-
-    top_k = getattr(instance, "top_k", None)
-    if top_k is not None:
-        try:
-            invocation.top_k = int(top_k)
-        except (ValueError, TypeError):
-            pass
-
-    max_tokens = getattr(instance, "max_tokens", None) or getattr(
-        instance, "max_completion_tokens", None
+    invocation.temperature = safe_float(getattr(instance, "temperature", None))
+    invocation.top_p = safe_float(getattr(instance, "top_p", None))
+    invocation.top_k = safe_int(getattr(instance, "top_k", None))
+    invocation.max_tokens = safe_int(
+        getattr(instance, "max_tokens", None)
+        or getattr(instance, "max_completion_tokens", None)
     )
-    if max_tokens is not None:
-        try:
-            invocation.max_tokens = int(max_tokens)
-        except (ValueError, TypeError):
-            pass
-
-    freq_penalty = getattr(instance, "frequency_penalty", None)
-    if freq_penalty is not None:
-        try:
-            invocation.frequency_penalty = float(freq_penalty)
-        except (ValueError, TypeError):
-            pass
-
-    pres_penalty = getattr(instance, "presence_penalty", None)
-    if pres_penalty is not None:
-        try:
-            invocation.presence_penalty = float(pres_penalty)
-        except (ValueError, TypeError):
-            pass
+    invocation.frequency_penalty = safe_float(
+        getattr(instance, "frequency_penalty", None)
+    )
+    invocation.presence_penalty = safe_float(
+        getattr(instance, "presence_penalty", None)
+    )
 
     stop = getattr(instance, "stop_sequences", None) or getattr(
         instance, "stop", None
@@ -2007,12 +1974,7 @@ def _start_model_inference(
         stop_seqs = cast(Sequence[object], stop)
         invocation.stop_sequences = [str(s) for s in stop_seqs]
 
-    seed = getattr(instance, "seed", None)
-    if seed is not None:
-        try:
-            invocation.seed = int(seed)
-        except (ValueError, TypeError):
-            pass
+    invocation.seed = safe_int(getattr(instance, "seed", None))
 
     if tools:
         invocation.tool_definitions = prepare_tool_definitions(tools)
@@ -2060,44 +2022,37 @@ def _populate_model_response_telemetry(
                 cast(object, provider_dict["model"])
             )
 
-    metrics = None
+    source_metrics = None
     if assistant_message is not None:
-        metrics = getattr(assistant_message, "metrics", None)
-    if metrics is None and model_response is not None:
-        metrics = getattr(model_response, "response_usage", None)
+        source_metrics = getattr(assistant_message, "metrics", None)
+    if source_metrics is None and model_response is not None:
+        source_metrics = getattr(
+            model_response, "response_usage", model_response
+        )
 
-    if metrics is not None:
-        in_tok = getattr(metrics, "input_tokens", None)
-        if in_tok is not None:
-            invocation.input_tokens = in_tok
-        out_tok = getattr(metrics, "output_tokens", None)
-        if out_tok is not None:
-            invocation.output_tokens = out_tok
-        cache_read = getattr(metrics, "cache_read_tokens", None)
-        if cache_read is not None:
-            invocation.cache_read_input_tokens = cache_read
-        cache_write = getattr(metrics, "cache_write_tokens", None)
-        if cache_write is not None:
-            invocation.cache_write_input_tokens = cache_write
-        reasoning = getattr(metrics, "reasoning_tokens", None)
-        if reasoning is not None:
-            invocation.thinking_tokens = reasoning
-    elif model_response is not None:
-        in_tok = getattr(model_response, "input_tokens", None)
-        if in_tok is not None:
-            invocation.input_tokens = in_tok
-        out_tok = getattr(model_response, "output_tokens", None)
-        if out_tok is not None:
-            invocation.output_tokens = out_tok
-        cache_read = getattr(model_response, "cache_read_tokens", None)
-        if cache_read is not None:
-            invocation.cache_read_input_tokens = cache_read
-        cache_write = getattr(model_response, "cache_write_tokens", None)
-        if cache_write is not None:
-            invocation.cache_write_input_tokens = cache_write
-        reasoning = getattr(model_response, "reasoning_tokens", None)
-        if reasoning is not None:
-            invocation.thinking_tokens = reasoning
+    if source_metrics is not None:
+        if (
+            tok := safe_int(getattr(source_metrics, "input_tokens", None))
+        ) is not None:
+            invocation.input_tokens = tok
+        if (
+            tok := safe_int(getattr(source_metrics, "output_tokens", None))
+        ) is not None:
+            invocation.output_tokens = tok
+        if (
+            tok := safe_int(getattr(source_metrics, "cache_read_tokens", None))
+        ) is not None:
+            invocation.cache_read_input_tokens = tok
+        if (
+            tok := safe_int(
+                getattr(source_metrics, "cache_write_tokens", None)
+            )
+        ) is not None:
+            invocation.cache_write_input_tokens = tok
+        if (
+            tok := safe_int(getattr(source_metrics, "reasoning_tokens", None))
+        ) is not None:
+            invocation.thinking_tokens = tok
 
     finish_reasons = extract_model_finish_reasons(
         assistant_message, model_response

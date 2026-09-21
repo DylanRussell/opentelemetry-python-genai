@@ -35,15 +35,28 @@ from opentelemetry.util.genai.types import (
 )
 
 
+def safe_int(val: Any) -> int | None:
+    """Safely convert a value to int or return None."""
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_float(val: Any) -> float | None:
+    """Safely convert a value to float or return None."""
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def format_retrieval_document(doc: Document) -> RetrievalDocument:
     """Format an Agno Document into a RetrievalDocument model."""
-    score: float | None = None
-    if doc.reranking_score is not None:
-        try:
-            score = float(doc.reranking_score)
-        except (ValueError, TypeError):
-            pass
-
     metadata: dict[str, Any] | None = None
     if doc.meta_data:
         metadata = dict(doc.meta_data)
@@ -51,7 +64,7 @@ def format_retrieval_document(doc: Document) -> RetrievalDocument:
     return RetrievalDocument(
         content=doc.content,
         id=str(doc.id) if doc.id is not None else None,
-        score=score,
+        score=safe_float(doc.reranking_score),
         metadata=metadata,
     )
 

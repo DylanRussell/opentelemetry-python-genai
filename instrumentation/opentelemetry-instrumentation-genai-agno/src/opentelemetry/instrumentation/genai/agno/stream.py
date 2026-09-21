@@ -23,6 +23,7 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     extract_model_finish_reasons,
     format_content,
     format_model_output_message,
+    safe_int,
 )
 from opentelemetry.semconv._incubating.attributes.user_attributes import (
     USER_ID,
@@ -421,8 +422,8 @@ class _ModelStreamMixin:
         if usage is not None:
             self._record_metrics(usage)
         else:
-            in_tok = getattr(chunk, "input_tokens", None)
-            out_tok = getattr(chunk, "output_tokens", None)
+            in_tok = safe_int(getattr(chunk, "input_tokens", None))
+            out_tok = safe_int(getattr(chunk, "output_tokens", None))
             if (
                 in_tok is not None
                 and self._self_invocation.input_tokens is None
@@ -437,21 +438,26 @@ class _ModelStreamMixin:
     def _record_metrics(self, metrics: Any) -> None:
         if metrics is None:
             return
-        in_tok = getattr(metrics, "input_tokens", None)
-        if in_tok is not None:
-            self._self_invocation.input_tokens = in_tok
-        out_tok = getattr(metrics, "output_tokens", None)
-        if out_tok is not None:
-            self._self_invocation.output_tokens = out_tok
-        cache_read = getattr(metrics, "cache_read_tokens", None)
-        if cache_read is not None:
-            self._self_invocation.cache_read_input_tokens = cache_read
-        cache_write = getattr(metrics, "cache_write_tokens", None)
-        if cache_write is not None:
-            self._self_invocation.cache_write_input_tokens = cache_write
-        reasoning = getattr(metrics, "reasoning_tokens", None)
-        if reasoning is not None:
-            self._self_invocation.thinking_tokens = reasoning
+        if (
+            tok := safe_int(getattr(metrics, "input_tokens", None))
+        ) is not None:
+            self._self_invocation.input_tokens = tok
+        if (
+            tok := safe_int(getattr(metrics, "output_tokens", None))
+        ) is not None:
+            self._self_invocation.output_tokens = tok
+        if (
+            tok := safe_int(getattr(metrics, "cache_read_tokens", None))
+        ) is not None:
+            self._self_invocation.cache_read_input_tokens = tok
+        if (
+            tok := safe_int(getattr(metrics, "cache_write_tokens", None))
+        ) is not None:
+            self._self_invocation.cache_write_input_tokens = tok
+        if (
+            tok := safe_int(getattr(metrics, "reasoning_tokens", None))
+        ) is not None:
+            self._self_invocation.thinking_tokens = tok
 
     def _finalize_telemetry(self, error: BaseException | None = None) -> None:
         metrics = getattr(self._self_assistant_message, "metrics", None)
