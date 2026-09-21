@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
+from unittest.mock import MagicMock
 
-from agno.knowledge.embedder.base import Embedder
+from agno.knowledge.embedder.openai import OpenAIEmbedder
 
 from opentelemetry.instrumentation.genai.agno import AgnoInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
@@ -19,20 +19,6 @@ from opentelemetry.test_util_genai.conformance import (
     Scenario,
 )
 from opentelemetry.test_util_genai.instrumentor import instrument
-
-
-@dataclass
-class ConformanceEmbedder(Embedder):
-    id: str = "text-embedding-3-small"
-    provider: str = "openai"
-
-    def get_embedding_and_usage(
-        self, text: str
-    ) -> tuple[list[float], dict[str, Any]]:
-        return [0.1, 0.2, 0.3, 0.4], {
-            "input_tokens": 8,
-            "model": "text-embedding-3-small",
-        }
 
 
 class EmbeddingScenario(Scenario):
@@ -56,6 +42,16 @@ class EmbeddingScenario(Scenario):
         logger_provider: LoggerProvider,
         vcr: Any,
     ) -> None:
+        mock_entry = MagicMock(embedding=[0.1, 0.2, 0.3, 0.4])
+        mock_usage = MagicMock()
+        mock_usage.model_dump.return_value = {
+            "input_tokens": 8,
+            "model": "text-embedding-3-small",
+        }
+        mock_resp = MagicMock(data=[mock_entry], usage=mock_usage)
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = mock_resp
+
         with instrument(
             AgnoInstrumentor(),
             tracer_provider=tracer_provider,
@@ -63,7 +59,11 @@ class EmbeddingScenario(Scenario):
             meter_provider=meter_provider,
             content_capture="SPAN_ONLY",
         ):
-            embedder = ConformanceEmbedder()
+            embedder = OpenAIEmbedder(
+                api_key="fake",
+                id="text-embedding-3-small",
+                openai_client=mock_client,
+            )
             embedder.get_embedding_and_usage(
                 "conformance test embedding input"
             )

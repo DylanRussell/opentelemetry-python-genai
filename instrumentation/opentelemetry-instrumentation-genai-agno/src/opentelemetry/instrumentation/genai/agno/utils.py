@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from agno.knowledge.document.base import Document
 
+from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
+    GenAiProviderNameValues,
+)
 from opentelemetry.util.genai.types import (
     FunctionToolDefinition,
     RetrievalDocument,
@@ -381,3 +385,147 @@ def set_invocation_user_id(
     user_id = extract_user_id(instance, args, kwargs, run_response)
     if user_id is not None:
         invocation.attributes[USER_ID] = user_id
+
+
+_UNKNOWN_PROVIDER = "unknown"
+
+# Mapping of raw provider identifiers to GenAI semantic conventions standard values.
+_KNOWN_PROVIDERS: dict[str, str] = {
+    "openai": GenAiProviderNameValues.OPENAI.value,
+    "azure": GenAiProviderNameValues.AZURE_AI_OPENAI.value,
+    "azure_openai": GenAiProviderNameValues.AZURE_AI_OPENAI.value,
+    "azure-openai": GenAiProviderNameValues.AZURE_AI_OPENAI.value,
+    "azure_ai": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "azure_ai_inference": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "azure-ai-inference": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "aws_bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "aws-bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "amazon_bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "anthropic": GenAiProviderNameValues.ANTHROPIC.value,
+    "cohere": GenAiProviderNameValues.COHERE.value,
+    "google": GenAiProviderNameValues.GCP_GEMINI.value,
+    "gemini": GenAiProviderNameValues.GCP_GEMINI.value,
+    "google_generativeai": GenAiProviderNameValues.GCP_GEMINI.value,
+    "vertex_ai": GenAiProviderNameValues.GCP_VERTEX_AI.value,
+    "vertexai": GenAiProviderNameValues.GCP_VERTEX_AI.value,
+    "google_vertexai": GenAiProviderNameValues.GCP_VERTEX_AI.value,
+    "gcp_vertex_ai": GenAiProviderNameValues.GCP_VERTEX_AI.value,
+    "mistral": GenAiProviderNameValues.MISTRAL_AI.value,
+    "mistralai": GenAiProviderNameValues.MISTRAL_AI.value,
+    "mistral_ai": GenAiProviderNameValues.MISTRAL_AI.value,
+    "groq": GenAiProviderNameValues.GROQ.value,
+    "deepseek": GenAiProviderNameValues.DEEPSEEK.value,
+    "watsonx": GenAiProviderNameValues.IBM_WATSONX_AI.value,
+    "ibm_watsonx_ai": GenAiProviderNameValues.IBM_WATSONX_AI.value,
+    "perplexity": GenAiProviderNameValues.PERPLEXITY.value,
+    "xai": GenAiProviderNameValues.X_AI.value,
+    "x_ai": GenAiProviderNameValues.X_AI.value,
+    "ollama": "ollama",
+    "fireworks": "fireworks",
+    "together": "together",
+    "voyage": "voyageai",
+    "voyageai": "voyageai",
+    "voyage_ai": "voyageai",
+    "fastembed": "fastembed",
+    "sentence_transformer": "sentence_transformer",
+    "sentence_transformers": "sentence_transformer",
+    "sentence-transformers": "sentence_transformer",
+    "huggingface": "huggingface",
+    "langdb": "langdb",
+    "nebius": "nebius",
+    "vllm": "vllm",
+    "jina": "jina",
+}
+
+# Mapping of known embedder class names to provider values.
+_CLASS_NAME_TO_PROVIDER: dict[str, str] = {
+    "OpenAIEmbedder": GenAiProviderNameValues.OPENAI.value,
+    "AzureOpenAIEmbedder": GenAiProviderNameValues.AZURE_AI_OPENAI.value,
+    "AwsBedrockEmbedder": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "CohereEmbedder": GenAiProviderNameValues.COHERE.value,
+    "MistralEmbedder": GenAiProviderNameValues.MISTRAL_AI.value,
+    "OllamaEmbedder": "ollama",
+    "FireworksEmbedder": "fireworks",
+    "TogetherEmbedder": "together",
+    "VoyageAIEmbedder": "voyageai",
+    "FastEmbedEmbedder": "fastembed",
+    "SentenceTransformerEmbedder": "sentence_transformer",
+    "HuggingfaceCustomEmbedder": "huggingface",
+    "LangDBEmbedder": "langdb",
+    "NebiusEmbedder": "nebius",
+    "VLLMEmbedder": "vllm",
+    "JinaEmbedder": "jina",
+}
+
+
+def resolve_embedder_provider(embedder: Any) -> str:
+    """Resolve the ``gen_ai.provider.name`` value for an Agno embedder instance."""
+    # 1. Explicit provider attribute on the embedder
+    provider_attr = getattr(embedder, "provider", None)
+    if provider_attr is not None:
+        if isinstance(provider_attr, str):
+            p_name = provider_attr.strip().lower()
+            if p_name in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[p_name]
+            if p_name and p_name != "none":
+                return p_name
+        else:
+            cls_name = provider_attr.__class__.__name__.lower()
+            if "provider" in cls_name and cls_name != "provider":
+                p_name = cls_name.removesuffix("provider")
+                if p_name in _KNOWN_PROVIDERS:
+                    return _KNOWN_PROVIDERS[p_name]
+                if p_name:
+                    return p_name
+
+    # 2. Check the embedder class hierarchy (most derived first)
+    for cls in type(embedder).__mro__:
+        cls_name = cls.__name__
+        if cls_name in ("GeminiEmbedder", "GoogleEmbedder"):
+            if getattr(embedder, "vertexai", False) or (
+                os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+                == "true"
+            ):
+                return GenAiProviderNameValues.GCP_VERTEX_AI.value
+            return GenAiProviderNameValues.GCP_GEMINI.value
+        if cls_name == "OpenAILikeEmbedder":
+            # OpenAILikeEmbedder is an adapter for arbitrary OpenAI-compatible endpoints.
+            # It inherits from OpenAIEmbedder, so stop MRO traversal to avoid attributing it to OpenAI.
+            break
+        if cls_name in _CLASS_NAME_TO_PROVIDER:
+            return _CLASS_NAME_TO_PROVIDER[cls_name]
+        if cls_name == "Embedder":
+            # Base class reached without matching a known embedder
+            break
+
+    # 3. Check module name if in agno.knowledge.embedder.<submodule>
+    module = getattr(embedder, "__module__", "")
+    if "agno.knowledge.embedder." in module:
+        sub = module.split("agno.knowledge.embedder.")[-1].split(".")[0]
+        if sub not in ("base", "openai_like"):
+            if sub == "google":
+                if getattr(embedder, "vertexai", False) or (
+                    os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+                    == "true"
+                ):
+                    return GenAiProviderNameValues.GCP_VERTEX_AI.value
+                return GenAiProviderNameValues.GCP_GEMINI.value
+            if sub in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[sub]
+
+    # 4. Check model/id prefix if it has provider/model format
+    model = (
+        getattr(embedder, "id", None)
+        or getattr(embedder, "model", None)
+        or getattr(embedder, "name", None)
+    )
+    if model is not None and isinstance(model, str):
+        model_str = model.strip()
+        if "/" in model_str:
+            prefix = model_str.split("/")[0].strip().lower()
+            if prefix in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[prefix]
+
+    # 5. Unresolved - fallback to unknown
+    return _UNKNOWN_PROVIDER

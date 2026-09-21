@@ -50,6 +50,7 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     format_content,
     format_retrieval_document,
     prepare_tool_definitions,
+    resolve_embedder_provider,
     set_invocation_user_id,
 )
 from opentelemetry.instrumentation.utils import unwrap
@@ -94,18 +95,13 @@ _ACTIVE_FOREGROUND_WORKFLOWS: contextvars.ContextVar[frozenset[int]] = (
 _SUPPRESS_EMBEDDING: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_SUPPRESS_EMBEDDING", default=False
 )
-_patched_embedder_classes: set[type[Any]] = set()
-_embedder_init_subclass_saved: bool = False
-_had_orig_embedder_init_subclass: bool = False
-_orig_embedder_init_subclass: Any = None
-
-
 _KNOWN_EMBEDDERS: tuple[tuple[str, str], ...] = (
     ("agno.knowledge.embedder.base", "Embedder"),
     ("agno.knowledge.embedder.openai", "OpenAIEmbedder"),
     ("agno.knowledge.embedder.azure_openai", "AzureOpenAIEmbedder"),
     ("agno.knowledge.embedder.aws_bedrock", "AwsBedrockEmbedder"),
     ("agno.knowledge.embedder.google", "GoogleEmbedder"),
+    ("agno.knowledge.embedder.google", "GeminiEmbedder"),
     ("agno.knowledge.embedder.ollama", "OllamaEmbedder"),
     ("agno.knowledge.embedder.mistral", "MistralEmbedder"),
     ("agno.knowledge.embedder.cohere", "CohereEmbedder"),
@@ -312,50 +308,6 @@ def patch_agent(handler: TelemetryHandler) -> None:
             current_generation,
         )
 
-    try:
-        from agno.knowledge.embedder.base import Embedder
-
-        # Wrap all existing custom embedder classes
-        def _wrap_subclasses(base_cls: type[Any]) -> None:
-            for sub in base_cls.__subclasses__():
-                _wrap_embedder_class(sub, handler)
-                _wrap_subclasses(sub)
-
-        _wrap_subclasses(Embedder)
-
-        global \
-            _embedder_init_subclass_saved, \
-            _had_orig_embedder_init_subclass, \
-            _orig_embedder_init_subclass
-        if not _embedder_init_subclass_saved:
-            _had_orig_embedder_init_subclass = (
-                "__init_subclass__" in Embedder.__dict__
-            )
-            _orig_embedder_init_subclass = Embedder.__dict__.get(
-                "__init_subclass__"
-            )
-            _embedder_init_subclass_saved = True
-
-        orig_init_subclass = _orig_embedder_init_subclass
-
-        # Wrap new embedder classes created during runtime
-        def _traced_init_subclass(cls: type[Embedder], **kwargs: Any) -> None:
-            if orig_init_subclass is not None:
-                func = getattr(
-                    orig_init_subclass, "__func__", orig_init_subclass
-                )
-                func(cls, **kwargs)
-            else:
-                super(Embedder, cls).__init_subclass__(**kwargs)
-            if _is_instrumented:
-                _wrap_embedder_class(cls, handler)
-
-        setattr(
-            Embedder, "__init_subclass__", classmethod(_traced_init_subclass)
-        )
-    except Exception:
-        pass
-
 
 def unpatch_agent() -> None:
     """Remove patches from Agno class methods."""
@@ -368,44 +320,6 @@ def unpatch_agent() -> None:
             unwrap(target, attr)
         except (AttributeError, ValueError):
             pass
-
-    try:
-        from agno.knowledge.embedder.base import Embedder
-
-        global \
-            _embedder_init_subclass_saved, \
-            _had_orig_embedder_init_subclass, \
-            _orig_embedder_init_subclass
-        if _embedder_init_subclass_saved:
-            if (
-                _had_orig_embedder_init_subclass
-                and _orig_embedder_init_subclass is not None
-            ):
-                setattr(
-                    Embedder,
-                    "__init_subclass__",
-                    _orig_embedder_init_subclass,
-                )
-            elif (
-                hasattr(Embedder, "__init_subclass__")
-                and "__init_subclass__" in Embedder.__dict__
-            ):
-                delattr(Embedder, "__init_subclass__")
-            _embedder_init_subclass_saved = False
-            _orig_embedder_init_subclass = None
-            _had_orig_embedder_init_subclass = False
-    except Exception:
-        pass
-
-    for cls in list(_patched_embedder_classes):
-        for attr in (
-            "get_embedding",
-            "get_embedding_and_usage",
-            "async_get_embedding",
-            "async_get_embedding_and_usage",
-        ):
-            _safe_unwrap(cls, attr)
-    _patched_embedder_classes.clear()
 
     for mod_name, cls_name in _KNOWN_EMBEDDERS:
         if mod_name in sys.modules:
@@ -470,20 +384,7 @@ def unpatch_agent() -> None:
             pass
 
 
-def _extract_embedder_provider(embedder: Any) -> str:
-    if hasattr(embedder, "provider") and embedder.provider:
-        return str(embedder.provider).lower()
-    module = getattr(embedder, "__module__", "")
-    if "agno.knowledge.embedder." in module:
-        sub = module.split("agno.knowledge.embedder.")[-1].split(".")[0]
-        if sub == "azure_openai":
-            return "azure.ai.openai"
-        if sub == "aws_bedrock":
-            return "aws.bedrock"
-        return sub.lower()
-    cls_name = embedder.__class__.__name__
-    cls_name = cls_name.removesuffix("Embedder")
-    return cls_name.lower() or "agno"
+_extract_embedder_provider = resolve_embedder_provider
 
 
 def _extract_embedder_model(embedder: Any) -> str | None:
@@ -504,34 +405,6 @@ def _extract_embedder_input_tokens(usage: dict[str, Any]) -> int | None:
             except (ValueError, TypeError):
                 return None
     return None
-
-
-def _wrap_embedder_class(
-    cls: type[Any],
-    handler: TelemetryHandler,
-) -> None:
-    for method_name, wrapper_fn in (
-        ("get_embedding", _embedder_get_embedding(handler)),
-        (
-            "get_embedding_and_usage",
-            _embedder_get_embedding_and_usage(handler),
-        ),
-        ("async_get_embedding", _embedder_async_get_embedding(handler)),
-        (
-            "async_get_embedding_and_usage",
-            _embedder_async_get_embedding_and_usage(handler),
-        ),
-    ):
-        if hasattr(cls, method_name):
-            target = getattr(cls, method_name)
-            if not hasattr(target, "__wrapped__"):
-                try:
-                    wrap_function_wrapper(
-                        cast(Any, cls), method_name, wrapper_fn
-                    )
-                    _patched_embedder_classes.add(cls)
-                except Exception:
-                    pass
 
 
 def _embedder_get_embedding(
