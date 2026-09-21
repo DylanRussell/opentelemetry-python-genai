@@ -33,7 +33,10 @@ from opentelemetry.util.genai._invocation import (
     GenAIInvocation,
     get_content_attributes,
 )
-from opentelemetry.util.genai.completion_hook import CompletionHook
+from opentelemetry.util.genai.completion_hook import (
+    CompletionHook,
+    _NoOpCompletionHook,
+)
 from opentelemetry.util.genai.types import (
     ErrorTypeResolver,
     InputMessage,
@@ -542,7 +545,7 @@ class SuppressedInferenceInvocation(InferenceInvocation):
             tracer,
             instruments,
             logger,
-            completion_hook,
+            _NoOpCompletionHook(),
             provider,
             request_model=request_model,
             server_address=server_address,
@@ -552,14 +555,6 @@ class SuppressedInferenceInvocation(InferenceInvocation):
             content_capturing_mode=ContentCapturingMode.NO_CONTENT,
             start_span=False,
         )
-
-    @property
-    def should_capture_content(self) -> bool:
-        return False
-
-    @property
-    def _should_capture_content_on_span(self) -> bool:
-        return False
 
     def _on_stream_chunk(self, chunk_at: float) -> None:
         last_chunk_at = (
