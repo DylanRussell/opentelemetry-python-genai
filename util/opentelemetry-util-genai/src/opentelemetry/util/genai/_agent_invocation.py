@@ -57,12 +57,21 @@ class AgentInvocation(GenAIInvocation, ABC):
         completion_hook: CompletionHook,
         *,
         span_kind: SpanKind,
-        start_attributes: dict[str, AttributeValue],
+        start_attributes: dict[str, AttributeValue] | None = None,
         request_model: str | None = None,
         agent_name: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
         _operation_name = GenAI.GenAiOperationNameValues.INVOKE_AGENT.value
+        if start_attributes is None:
+            start_attributes = {
+                k: v
+                for k, v in (
+                    (GenAI.GEN_AI_REQUEST_MODEL, request_model),
+                    (GenAI.GEN_AI_AGENT_NAME, agent_name),
+                )
+                if v is not None
+            }
         super().__init__(
             tracer,
             instruments,
@@ -200,18 +209,6 @@ class LocalAgentInvocation(AgentInvocation):
         agent_name: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
-        start_attributes: dict[str, AttributeValue] = {
-            k: v
-            for k, v in (
-                (
-                    GenAI.GEN_AI_OPERATION_NAME,
-                    GenAI.GenAiOperationNameValues.INVOKE_AGENT.value,
-                ),
-                (GenAI.GEN_AI_REQUEST_MODEL, request_model),
-                (GenAI.GEN_AI_AGENT_NAME, agent_name),
-            )
-            if v is not None
-        }
         super().__init__(
             tracer,
             instruments,
@@ -220,7 +217,6 @@ class LocalAgentInvocation(AgentInvocation):
             span_kind=SpanKind.INTERNAL,
             request_model=request_model,
             agent_name=agent_name,
-            start_attributes=start_attributes,
             content_capturing_mode=content_capturing_mode,
         )
 
@@ -271,10 +267,6 @@ class RemoteAgentInvocation(AgentInvocation):
         start_attributes: dict[str, AttributeValue] = {
             k: v
             for k, v in (
-                (
-                    GenAI.GEN_AI_OPERATION_NAME,
-                    GenAI.GenAiOperationNameValues.INVOKE_AGENT.value,
-                ),
                 (GenAI.GEN_AI_REQUEST_MODEL, request_model),
                 (GenAI.GEN_AI_AGENT_NAME, agent_name),
                 (server_attributes.SERVER_ADDRESS, server_address),

@@ -81,7 +81,6 @@ class ToolInvocation(GenAIInvocation):
         start_attributes: dict[str, AttributeValue] = {
             k: v
             for k, v in (
-                (GenAI.GEN_AI_OPERATION_NAME, _operation_name),
                 (GenAI.GEN_AI_TOOL_NAME, name),
                 (GenAI.GEN_AI_TOOL_TYPE, tool_type),
             )

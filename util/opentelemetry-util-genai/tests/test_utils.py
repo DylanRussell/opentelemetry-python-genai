@@ -605,7 +605,7 @@ class TestTelemetryHandler(unittest.TestCase):
     def test_inference_conversation_id_on_span_but_not_metrics(self):
         """conversation id is high cardinality, so it must stay off metrics.
 
-        `_get_metric_attributes()` builds on `start_attributes`, so
+        `_get_metric_attributes()` builds on `_start_attributes`, so
         setting it at span creation would make it a dimension on the duration
         and token histograms.
         """
@@ -728,7 +728,7 @@ class TestTelemetryHandler(unittest.TestCase):
         assert captured_attributes[server_attributes.SERVER_PORT] == 443
 
     def test_start_attributes_initialized_in_init(self):
-        """Verify that start attributes are initialized upon construction and accessible on invocation."""
+        """Verify that start attributes are initialized upon construction."""
         invocation = self.telemetry_handler.inference(
             "test-provider", request_model="test-model"
         )
@@ -736,11 +736,15 @@ class TestTelemetryHandler(unittest.TestCase):
         assert invocation.context is not None
 
         assert (
-            invocation.start_attributes[GenAI.GEN_AI_PROVIDER_NAME]
+            invocation._start_attributes[GenAI.GEN_AI_OPERATION_NAME]
+            == GenAI.GenAiOperationNameValues.CHAT.value
+        )
+        assert (
+            invocation._start_attributes[GenAI.GEN_AI_PROVIDER_NAME]
             == "test-provider"
         )
         assert (
-            invocation.start_attributes[GenAI.GEN_AI_REQUEST_MODEL]
+            invocation._start_attributes[GenAI.GEN_AI_REQUEST_MODEL]
             == "test-model"
         )
         invocation.stop()

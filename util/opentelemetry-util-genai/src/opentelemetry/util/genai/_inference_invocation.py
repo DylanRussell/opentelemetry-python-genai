@@ -104,7 +104,6 @@ class InferenceInvocation(GenAIInvocation):
         start_attributes: dict[str, AttributeValue] = {
             k: v
             for k, v in (
-                (GenAI.GEN_AI_OPERATION_NAME, operation_name),
                 (GenAI.GEN_AI_REQUEST_MODEL, request_model),
                 (GenAI.GEN_AI_PROVIDER_NAME, provider),
                 (server_attributes.SERVER_ADDRESS, server_address),
@@ -126,10 +125,6 @@ class InferenceInvocation(GenAIInvocation):
             start_attributes=start_attributes,
             content_capturing_mode=content_capturing_mode,
         )
-        self._provider: str = provider
-        self._request_model: str | None = request_model
-        self._server_address: str | None = server_address
-        self._server_port: int | None = server_port
         self.conversation_id: str | None = None
         self._emit_event: bool = _should_emit_event(
             self._content_capturing_mode
@@ -389,7 +384,7 @@ class InferenceInvocation(GenAIInvocation):
         # Cached because this is rebuilt once per streaming chunk. Any mutation
         # of its inputs must call _invalidate_metric_attributes.
         if self._cached_metric_attributes is None:
-            attrs = dict(self.start_attributes)
+            attrs = dict(self._start_attributes)
             if self._response_model_name is not None:
                 attrs[GenAI.GEN_AI_RESPONSE_MODEL] = self._response_model_name
             attrs.update(self.metric_attributes)
@@ -439,7 +434,7 @@ class InferenceInvocation(GenAIInvocation):
         if not self._emit_event:
             return None
 
-        attributes = dict(self.start_attributes)
+        attributes = dict(self._start_attributes)
         attributes.update(self._get_attributes())
         attributes.update(self._get_message_attributes(for_span=False))
         attributes.update(self.attributes)

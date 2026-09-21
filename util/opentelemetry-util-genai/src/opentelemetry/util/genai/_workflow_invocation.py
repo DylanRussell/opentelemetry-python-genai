@@ -49,14 +49,9 @@ class WorkflowInvocation(GenAIInvocation):
     ) -> None:
         """Use handler.workflow(name) rather than calling this directly."""
         _operation_name = GenAI.GenAiOperationNameValues.INVOKE_WORKFLOW.value
-        start_attributes: dict[str, AttributeValue] = {
-            k: v
-            for k, v in (
-                (GenAI.GEN_AI_OPERATION_NAME, _operation_name),
-                (GenAI.GEN_AI_WORKFLOW_NAME, name),
-            )
-            if v is not None
-        }
+        start_attributes: dict[str, AttributeValue] = (
+            {GenAI.GEN_AI_WORKFLOW_NAME: name} if name is not None else {}
+        )
 
         super().__init__(
             tracer,

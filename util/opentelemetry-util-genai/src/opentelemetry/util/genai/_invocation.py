@@ -73,7 +73,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         metric_attributes: dict[str, AttributeValue] | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
         *,
-        start_attributes: dict[str, AttributeValue],
+        start_attributes: dict[str, AttributeValue] | None = None,
         context: Context | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
@@ -96,12 +96,14 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             {} if metric_attributes is None else metric_attributes
         )
         """Additional attributes to set on metrics. Must be low cardinality. Not set on spans or events."""
-        self.start_attributes: dict[str, AttributeValue] = start_attributes
-        """Attributes set on the span at creation time, available for sampling decisions."""
+        self._start_attributes: dict[str, AttributeValue] = {
+            GenAI.GEN_AI_OPERATION_NAME: operation_name,
+            **(start_attributes or {}),
+        }
         self.span: Span = self._tracer.start_span(
             name=span_name,
             kind=span_kind,
-            attributes=self.start_attributes,
+            attributes=self._start_attributes,
             context=context,
         )
         self._span_context: Context = set_span_in_context(self.span)

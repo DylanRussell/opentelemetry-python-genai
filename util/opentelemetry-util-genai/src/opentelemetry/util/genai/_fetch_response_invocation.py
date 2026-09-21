@@ -95,7 +95,6 @@ class FetchResponseInvocation(GenAIInvocation):
         start_attributes: dict[str, AttributeValue] = {
             k: v
             for k, v in (
-                (GenAI.GEN_AI_OPERATION_NAME, _FETCH_RESPONSE_OPERATION_NAME),
                 (GenAI.GEN_AI_PROVIDER_NAME, provider),
                 (GenAI.GEN_AI_RESPONSE_ID, response_id),
                 (GenAI.GEN_AI_REQUEST_STREAM, request_stream),

@@ -40,7 +40,6 @@ class EmbeddingInvocation(GenAIInvocation):
         start_attributes: dict[str, AttributeValue] = {
             k: v
             for k, v in (
-                (GenAI.GEN_AI_OPERATION_NAME, _operation_name),
                 (GenAI.GEN_AI_REQUEST_MODEL, request_model),
                 (GenAI.GEN_AI_PROVIDER_NAME, provider),
                 (server_attributes.SERVER_ADDRESS, server_address),
