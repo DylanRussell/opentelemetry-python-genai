@@ -77,7 +77,7 @@ def wrap_agent_run(
     """Wrapper for ``Agent.run()`` producing an ``invoke_agent`` span."""
     # Agent.run() is a generator function; calling it never raises.
     result = wrapped(*args, **kwargs)
-    messages = get_argument("messages", wrapped, args, kwargs, default=[])
+    messages: Any = get_argument("messages", wrapped, args, kwargs, default=[])
     invocation = create_agent_invocation(handler, instance, messages)
     return _AgentRunStreamWrapper(
         result, invocation, handler.should_capture_content()
@@ -95,14 +95,14 @@ def wrap_agent_call_tool(
     tool_name = str(
         get_argument("tool_name", wrapped, args, kwargs, default="")
     )
-    tool_args = get_argument("tool_args", wrapped, args, kwargs)
+    tool_args: Any = get_argument("tool_args", wrapped, args, kwargs)
     tool = getattr(instance, "function_map", {}).get(tool_name)
 
     invocation = handler.tool(
         tool_name,
         tool_type="function",
     )
-    messages_arg = get_argument("messages", wrapped, args, kwargs)
+    messages_arg: Any = get_argument("messages", wrapped, args, kwargs)
     invocation.tool_call_id = find_tool_call_id(messages_arg, tool_name)
     invocation.tool_description = getattr(tool, "description", None)
     if invocation.should_capture_content and tool_args is not None:

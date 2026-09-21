@@ -10,7 +10,7 @@ import os
 import urllib.parse
 from base64 import b64decode, b64encode
 from collections.abc import Callable, Mapping
-from functools import partial
+from functools import lru_cache, partial
 from typing import Any
 
 from opentelemetry.util.genai.environment_variables import (
@@ -186,32 +186,39 @@ bytes, datetimes, etc. for GenAI observability."""
 
 
 _SIGNATURE_CACHE_MAX_SIZE = 1024
-_signature_cache: dict[tuple[object, bool], inspect.Signature] = {}
 _inspect_signature = inspect.signature
 
 
-def _get_signature(func: Callable[..., object]) -> inspect.Signature:
-    """Return the cached inspect.Signature for a callable.
+@lru_cache(maxsize=_SIGNATURE_CACHE_MAX_SIZE)
+def _cached_signature(
+    fn: Callable[..., object], drop_first: bool
+) -> inspect.Signature:
+    sig = _inspect_signature(fn)
+    if drop_first:
+        params = list(sig.parameters.values())[1:]
+        sig = sig.replace(parameters=params)
+    return sig
 
-    For bound methods, keying on the underlying function prevents cache churn
-    across instances, while distinguishing bound methods from unbound functions
-    to prevent parameter signature mismatch.
+
+def _get_signature(func: Callable[..., object]) -> inspect.Signature:
+    """Return the inspect.Signature for a callable, caching long-lived definitions.
+
+    Bound methods are new objects on every attribute access, so key on the
+    underlying function. Only long-lived definitions are cached; per-call
+    closures and callable instances would otherwise be pinned in the cache.
     """
-    is_bound = getattr(func, "__self__", None) is not None
-    underlying = getattr(func, "__func__", None) or func
-    key: object = (underlying, is_bound)
     try:
-        sig = _signature_cache.get(key)
-        if sig is not None:
-            _signature_cache[key] = _signature_cache.pop(key)
-            return sig
-        sig = _inspect_signature(func)
-        _signature_cache[key] = sig
-        if len(_signature_cache) > _SIGNATURE_CACHE_MAX_SIZE:
-            del _signature_cache[next(iter(_signature_cache))]
-        return sig
+        underlying = getattr(func, "__func__", None)
+        if (
+            underlying is not None
+            and getattr(func, "__self__", None) is not None
+        ):
+            return _cached_signature(underlying, True)
+        if inspect.isfunction(func) and "<locals>" not in func.__qualname__:
+            return _cached_signature(func, False)
     except TypeError:
-        return _inspect_signature(func)
+        pass
+    return _inspect_signature(func)
 
 
 def bind_arguments(
@@ -237,10 +244,10 @@ def get_argument(
     func: Callable[..., object],
     args: tuple[object, ...],
     kwargs: Mapping[str, object],
-    default: Any = None,
+    default: object = None,
     *,
     apply_defaults: bool = False,
-) -> Any:
+) -> object:
     """Extract a named argument from kwargs or args via signature binding."""
     if name in kwargs:
         return kwargs[name]

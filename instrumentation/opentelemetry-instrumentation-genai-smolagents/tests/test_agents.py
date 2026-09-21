@@ -657,9 +657,10 @@ def test_interrupted_agent_recording_ends_the_span(
 
 
 @pytest.fixture
-def signature_calls(monkeypatch) -> list[str]:
+def signature_calls(monkeypatch) -> Generator[list[str], None, None]:
     from opentelemetry.util.genai import utils as util_genai_utils
 
+    util_genai_utils._cached_signature.cache_clear()
     original_signature = inspect.signature
     calls: list[str] = []
 
@@ -667,9 +668,9 @@ def signature_calls(monkeypatch) -> list[str]:
         calls.append(getattr(callable_, "__qualname__", repr(callable_)))
         return original_signature(callable_)
 
-    monkeypatch.setattr(util_genai_utils, "_signature_cache", {})
     monkeypatch.setattr(util_genai_utils, "_inspect_signature", _signature)
-    return calls
+    yield calls
+    util_genai_utils._cached_signature.cache_clear()
 
 
 def test_agent_run_caches_the_signature(
@@ -696,7 +697,7 @@ def test_the_signature_cache_does_not_grow_per_agent(
         agent.run(f"Question {index}")
 
     assert signature_calls == ["MultiStepAgent.run"]
-    assert len(util_genai_utils._signature_cache) == 1
+    assert util_genai_utils._cached_signature.cache_info().currsize == 1
 
 
 def test_the_signature_cache_does_not_retain_agents(

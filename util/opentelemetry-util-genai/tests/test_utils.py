@@ -1673,40 +1673,55 @@ class TestArgumentBinding(unittest.TestCase):
         self.assertIn("self", sig_unbound.parameters)
         self.assertIsNot(sig1, sig_unbound)
 
-    def test_get_signature_cache_eviction(self):
-        from opentelemetry.util.genai import utils
+        sig_fn1 = _get_signature(decode_base64)
+        sig_fn2 = _get_signature(decode_base64)
+        self.assertIs(sig_fn1, sig_fn2)
 
-        with (
-            patch.object(utils, "_signature_cache", {}),
-            patch.object(utils, "_SIGNATURE_CACHE_MAX_SIZE", 2),
-        ):
+    def test_get_signature_local_function_not_cached(self):
+        from opentelemetry.util.genai.utils import _cached_signature
 
-            def f1(a: int):
-                pass
+        def local_fn(x: int):
+            pass
 
-            def f2(b: int):
-                pass
+        info_before = _cached_signature.cache_info()
+        sig1 = _get_signature(local_fn)
+        sig2 = _get_signature(local_fn)
+        info_after = _cached_signature.cache_info()
+        self.assertEqual(info_before.misses, info_after.misses)
+        self.assertEqual(info_before.hits, info_after.hits)
+        self.assertEqual(sig1, sig2)
 
-            def f3(c: int):
-                pass
+    def test_cached_signature_lru_eviction(self):
+        from functools import lru_cache
 
-            _get_signature(f1)
-            _get_signature(f2)
-            self.assertIn((f1, False), utils._signature_cache)
-            self.assertIn((f2, False), utils._signature_cache)
+        from opentelemetry.util.genai.utils import _cached_signature
 
-            # Accessing f3 should evict f1 (the oldest)
-            _get_signature(f3)
-            self.assertNotIn((f1, False), utils._signature_cache)
-            self.assertIn((f2, False), utils._signature_cache)
-            self.assertIn((f3, False), utils._signature_cache)
+        cached_fn = lru_cache(maxsize=2)(_cached_signature.__wrapped__)
 
-            # Accessing f2 moves it to MRU; adding f1 then evicts f3
-            _get_signature(f2)
-            _get_signature(f1)
-            self.assertIn((f2, False), utils._signature_cache)
-            self.assertIn((f1, False), utils._signature_cache)
-            self.assertNotIn((f3, False), utils._signature_cache)
+        def f1(a: int):
+            pass
+
+        def f2(b: int):
+            pass
+
+        def f3(c: int):
+            pass
+
+        cached_fn(f1, False)
+        cached_fn(f2, False)
+        self.assertEqual(cached_fn.cache_info().currsize, 2)
+
+        # Accessing f3 evicts f1
+        cached_fn(f3, False)
+        self.assertEqual(cached_fn.cache_info().currsize, 2)
+
+        # Accessing f2 is a hit
+        cached_fn(f2, False)
+        self.assertEqual(cached_fn.cache_info().hits, 1)
+
+        # Accessing f1 is a miss (was evicted)
+        cached_fn(f1, False)
+        self.assertEqual(cached_fn.cache_info().misses, 4)
 
     def test_get_signature_unhashable_callable(self):
         class UnhashableCallable:

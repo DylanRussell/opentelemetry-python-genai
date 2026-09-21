@@ -47,9 +47,39 @@ def _to_otel_value(python_value):
 def _get_function_args(wrapped_function, function_args, function_kwargs):
     """Records the details about a function invocation as span attributes."""
     function_arg_attr = {}
-    bound = bind_arguments(
-        wrapped_function, function_args, function_kwargs, apply_defaults=False
-    )
+    try:
+        signature = inspect.signature(wrapped_function)
+        parameters = list(signature.parameters.values())
+        has_variadics = any(
+            parameter.kind
+            in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            )
+            for parameter in parameters
+        )
+    except (TypeError, ValueError):
+        has_variadics = False
+        parameters = []
+
+    if has_variadics:
+        bound = {
+            (
+                parameters[index].name
+                if index < len(parameters)
+                else f"args[{index}]"
+            ): value
+            for index, value in enumerate(function_args)
+        }
+        bound.update(function_kwargs)
+    else:
+        bound = bind_arguments(
+            wrapped_function,
+            function_args,
+            function_kwargs,
+            apply_defaults=False,
+        )
+
     for key, value in bound.items():
         function_arg_attr[f"code.function.parameters.{key}.type"] = type(
             value

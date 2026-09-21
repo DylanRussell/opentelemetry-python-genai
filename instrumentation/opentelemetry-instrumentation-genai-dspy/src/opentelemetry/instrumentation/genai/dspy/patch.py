@@ -422,7 +422,7 @@ def _extract_retrieval_k(
         k = getattr(instance, "k", None)
     if k is not None:
         try:
-            return int(k)
+            return int(cast(Any, k))
         except (ValueError, TypeError):
             return None
     return None
