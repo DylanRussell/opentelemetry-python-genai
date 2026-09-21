@@ -473,12 +473,8 @@ def _extract_embedder_model(embedder: Any) -> str | None:
 
 def _extract_embedder_input_tokens(usage: dict[str, Any]) -> int | None:
     for key in ("prompt_tokens", "input_tokens", "total_tokens"):
-        val = usage.get(key)
-        if val is not None:
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return None
+        if (tok := safe_int(usage.get(key))) is not None:
+            return tok
     return None
 
 
@@ -558,15 +554,10 @@ def _embedder_get_embedding_and_usage(
             if embedding:
                 invocation.dimension_count = len(embedding)
             elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+                invocation.dimension_count = safe_int(instance.dimensions)
 
             if isinstance(usage, dict):
-                input_tokens = _extract_embedder_input_tokens(usage)
-                if input_tokens is not None:
-                    invocation.input_tokens = input_tokens
+                invocation.input_tokens = _extract_embedder_input_tokens(usage)
                 if model := usage.get("model"):
                     invocation.response_model_name = str(model)
 
@@ -659,15 +650,10 @@ def _embedder_async_get_embedding_and_usage(
             if embedding:
                 invocation.dimension_count = len(embedding)
             elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+                invocation.dimension_count = safe_int(instance.dimensions)
 
             if isinstance(usage, dict):
-                input_tokens = _extract_embedder_input_tokens(usage)
-                if input_tokens is not None:
-                    invocation.input_tokens = input_tokens
+                invocation.input_tokens = _extract_embedder_input_tokens(usage)
                 if model := usage.get("model"):
                     invocation.response_model_name = str(model)
 
@@ -1817,8 +1803,7 @@ def _start_retrieval_invocation(
     set_invocation_user_id(invocation, instance, args, kwargs)
 
     query = args[0] if args else kwargs.get("query")
-    if query is not None:
-        invocation.query_text = str(query)
+    invocation.query_text = str(query) if query is not None else None
 
     max_results = None
     if len(args) > 1 and args[1] is not None:
@@ -1995,8 +1980,9 @@ def _start_model_inference(
         kwargs=kwargs,
         run_response=run_response,
     )
-    if session_id is not None:
-        invocation.conversation_id = str(session_id)
+    invocation.conversation_id = (
+        str(session_id) if session_id is not None else None
+    )
 
     return invocation, assistant_message, response_obj
 
@@ -2030,29 +2016,21 @@ def _populate_model_response_telemetry(
             model_response, "response_usage", model_response
         )
 
-    if source_metrics is not None:
-        if (
-            tok := safe_int(getattr(source_metrics, "input_tokens", None))
-        ) is not None:
-            invocation.input_tokens = tok
-        if (
-            tok := safe_int(getattr(source_metrics, "output_tokens", None))
-        ) is not None:
-            invocation.output_tokens = tok
-        if (
-            tok := safe_int(getattr(source_metrics, "cache_read_tokens", None))
-        ) is not None:
-            invocation.cache_read_input_tokens = tok
-        if (
-            tok := safe_int(
-                getattr(source_metrics, "cache_write_tokens", None)
-            )
-        ) is not None:
-            invocation.cache_write_input_tokens = tok
-        if (
-            tok := safe_int(getattr(source_metrics, "reasoning_tokens", None))
-        ) is not None:
-            invocation.thinking_tokens = tok
+    invocation.input_tokens = safe_int(
+        getattr(source_metrics, "input_tokens", None)
+    )
+    invocation.output_tokens = safe_int(
+        getattr(source_metrics, "output_tokens", None)
+    )
+    invocation.cache_read_input_tokens = safe_int(
+        getattr(source_metrics, "cache_read_tokens", None)
+    )
+    invocation.cache_write_input_tokens = safe_int(
+        getattr(source_metrics, "cache_write_tokens", None)
+    )
+    invocation.thinking_tokens = safe_int(
+        getattr(source_metrics, "reasoning_tokens", None)
+    )
 
     finish_reasons = extract_model_finish_reasons(
         assistant_message, model_response
