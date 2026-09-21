@@ -19,7 +19,15 @@ from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
 )
 from opentelemetry.util.genai.types import (
     FunctionToolDefinition,
+    InputMessage,
+    MessagePart,
+    OutputMessage,
+    ReasoningPart,
     RetrievalDocument,
+    Role,
+    TextPart,
+    ToolCallRequestPart,
+    ToolCallResponsePart,
     ToolDefinition,
 )
 
@@ -398,6 +406,8 @@ _KNOWN_PROVIDERS: dict[str, str] = {
     "azure_ai": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
     "azure_ai_inference": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
     "azure-ai-inference": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "aws": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "awsbedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
     "bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
     "aws_bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
     "aws-bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
@@ -436,6 +446,21 @@ _KNOWN_PROVIDERS: dict[str, str] = {
     "nebius": "nebius",
     "vllm": "vllm",
     "jina": "jina",
+    "cerebras": "cerebras",
+    "cloudflare": "cloudflare",
+    "dashscope": "dashscope",
+    "deepinfra": "deepinfra",
+    "internlm": "internlm",
+    "litellm": "litellm",
+    "llama_cpp": "llama_cpp",
+    "lmstudio": "lmstudio",
+    "minimax": "minimax",
+    "moonshot": "moonshot",
+    "openrouter": "openrouter",
+    "sambanova": "sambanova",
+    "azureaifoundry": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "azure_ai_foundry": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "azure-ai-foundry": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
 }
 
 # Mapping of known embedder class names to provider values.
@@ -529,3 +554,331 @@ def resolve_embedder_provider(embedder: Any) -> str:
 
     # 5. Unresolved - fallback to unknown
     return _UNKNOWN_PROVIDER
+
+
+# Mapping of known model class names to provider values.
+_MODEL_CLASS_NAME_TO_PROVIDER: dict[str, str] = {
+    "OpenAIChat": GenAiProviderNameValues.OPENAI.value,
+    "OpenAIResponses": GenAiProviderNameValues.OPENAI.value,
+    "OpenAI": GenAiProviderNameValues.OPENAI.value,
+    "Claude": GenAiProviderNameValues.ANTHROPIC.value,
+    "Anthropic": GenAiProviderNameValues.ANTHROPIC.value,
+    "AnthropicClaude": GenAiProviderNameValues.ANTHROPIC.value,
+    "VertexAI": GenAiProviderNameValues.GCP_VERTEX_AI.value,
+    "AwsBedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "Bedrock": GenAiProviderNameValues.AWS_BEDROCK.value,
+    "AzureOpenAI": GenAiProviderNameValues.AZURE_AI_OPENAI.value,
+    "AzureAIFoundry": GenAiProviderNameValues.AZURE_AI_INFERENCE.value,
+    "MistralChat": GenAiProviderNameValues.MISTRAL_AI.value,
+    "Mistral": GenAiProviderNameValues.MISTRAL_AI.value,
+    "Groq": GenAiProviderNameValues.GROQ.value,
+    "Cohere": GenAiProviderNameValues.COHERE.value,
+    "DeepSeek": GenAiProviderNameValues.DEEPSEEK.value,
+    "WatsonX": GenAiProviderNameValues.IBM_WATSONX_AI.value,
+    "Perplexity": GenAiProviderNameValues.PERPLEXITY.value,
+    "xAI": GenAiProviderNameValues.X_AI.value,
+    "Ollama": "ollama",
+    "Fireworks": "fireworks",
+    "Together": "together",
+    "VLLM": "vllm",
+    "HuggingFace": "huggingface",
+    "Cerebras": "cerebras",
+    "CerebrasOpenAI": "cerebras",
+    "LiteLLM": "litellm",
+    "LiteLLMOpenAI": "litellm",
+    "OpenRouter": "openrouter",
+    "Nebius": "nebius",
+    "LangDB": "langdb",
+    "LMStudio": "lmstudio",
+    "DashScope": "dashscope",
+    "DeepInfra": "deepinfra",
+    "Sambanova": "sambanova",
+    "Cloudflare": "cloudflare",
+    "AIMLAPI": "aimlapi",
+    "MiniMax": "minimax",
+    "MoonShot": "moonshot",
+    "InternLM": "internlm",
+    "Siliconflow": "siliconflow",
+    "LlamaCpp": "llama_cpp",
+    "Llama": "meta",
+    "LlamaOpenAI": "meta",
+}
+
+
+def resolve_model_provider(model: Any) -> str:
+    """Resolve the ``gen_ai.provider.name`` value for an Agno model instance."""
+    # 1. Explicit provider attribute on the model
+    provider_attr = getattr(model, "provider", None)
+    if provider_attr is not None:
+        if isinstance(provider_attr, str):
+            p_name = provider_attr.strip().lower()
+            if p_name in ("google", "gemini"):
+                if getattr(model, "vertexai", False) or (
+                    os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+                    == "true"
+                ):
+                    return GenAiProviderNameValues.GCP_VERTEX_AI.value
+                return GenAiProviderNameValues.GCP_GEMINI.value
+            if p_name in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[p_name]
+            p_clean = "".join(c for c in p_name if c.isalnum())
+            if p_clean in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[p_clean]
+            if p_name and p_name != "none":
+                return p_name
+        else:
+            cls_name = provider_attr.__class__.__name__.lower()
+            if "provider" in cls_name and cls_name != "provider":
+                p_name = cls_name.removesuffix("provider")
+                if p_name in _KNOWN_PROVIDERS:
+                    return _KNOWN_PROVIDERS[p_name]
+                if p_name:
+                    return p_name
+
+    # 2. Check the model class hierarchy (most derived first)
+    for cls in type(model).__mro__:
+        cls_name = cls.__name__
+        if cls_name in ("Gemini", "Google", "GeminiInteractions"):
+            if getattr(model, "vertexai", False) or (
+                os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+                == "true"
+            ):
+                return GenAiProviderNameValues.GCP_VERTEX_AI.value
+            return GenAiProviderNameValues.GCP_GEMINI.value
+        if cls_name in _MODEL_CLASS_NAME_TO_PROVIDER:
+            return _MODEL_CLASS_NAME_TO_PROVIDER[cls_name]
+        if cls_name in ("OpenAILike", "Model"):
+            # Stop MRO traversal at OpenAILike or base Model
+            break
+
+    # 3. Check module name if in agno.models.<submodule>
+    module = getattr(model, "__module__", "")
+    if "agno.models." in module:
+        sub = module.split("agno.models.")[-1].split(".")[0]
+        if sub not in (
+            "base",
+            "openai_like",
+            "message",
+            "response",
+            "utils",
+            "fallback",
+        ):
+            if sub in ("google", "gemini", "vertexai"):
+                if getattr(model, "vertexai", False) or (
+                    os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+                    == "true"
+                ):
+                    return GenAiProviderNameValues.GCP_VERTEX_AI.value
+                return GenAiProviderNameValues.GCP_GEMINI.value
+            if sub in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[sub]
+            return sub
+
+    # 4. Check model/id prefix if it has provider/model format
+    model_id = (
+        getattr(model, "id", None)
+        or getattr(model, "model", None)
+        or getattr(model, "name", None)
+    )
+    if model_id is not None and isinstance(model_id, str):
+        model_str = model_id.strip()
+        if "/" in model_str:
+            prefix = model_str.split("/")[0].strip().lower()
+            if prefix in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[prefix]
+
+    # 5. Unresolved - fallback to unknown
+    return _UNKNOWN_PROVIDER
+
+
+def extract_model_finish_reasons(
+    assistant_message: Any = None,
+    model_response: Any = None,
+) -> list[str]:
+    """Derive gen_ai.response.finish_reasons from assistant message or model response."""
+    provider_data: Any = None
+    if assistant_message is not None:
+        provider_data = _get_property_value(assistant_message, "provider_data")
+    if not provider_data and model_response is not None:
+        provider_data = _get_property_value(model_response, "provider_data")
+
+    if isinstance(provider_data, dict):
+        provider_dict = cast(dict[str, Any], provider_data)
+        raw_reason = provider_dict.get("finish_reason") or provider_dict.get(
+            "stop_reason"
+        )
+        if raw_reason is not None:
+            r = str(cast(object, raw_reason)).lower()
+            if r in ("stop", "end_turn"):
+                return ["stop"]
+            if r in ("tool_calls", "tool_use", "function_call"):
+                return ["tool_calls"]
+            if r in ("length", "max_tokens"):
+                return ["length"]
+            if r in ("content_filter", "safety"):
+                return ["content_filter"]
+            return [r]
+
+    tool_calls = (
+        _get_property_value(assistant_message, "tool_calls")
+        if assistant_message is not None
+        else None
+    )
+    if tool_calls:
+        return ["tool_calls"]
+    return ["stop"]
+
+
+def format_model_input_messages(
+    messages: Iterable[Any],
+) -> list[InputMessage]:
+    """Format an iterable of Agno Message objects or dicts into InputMessage list."""
+    result: list[InputMessage] = []
+    for msg in messages:
+        if msg is None:
+            continue
+        role_raw = _get_property_value(msg, "role")
+        role_str = (
+            str(cast(object, role_raw)).lower()
+            if role_raw is not None
+            else "user"
+        )
+
+        name = _get_property_value(msg, "name")
+        name_str = str(cast(object, name)) if name is not None else None
+
+        parts: list[MessagePart] = []
+
+        # Tool response message
+        tool_call_id = _get_property_value(msg, "tool_call_id")
+
+        if role_str == "tool" or tool_call_id is not None:
+            role_str = Role.TOOL.value
+            content = _get_property_value(msg, "content")
+            parts.append(
+                ToolCallResponsePart(
+                    id=str(cast(object, tool_call_id))
+                    if tool_call_id is not None
+                    else None,
+                    response=format_content(cast(object, content))
+                    if content is not None
+                    else "",
+                )
+            )
+            result.append(
+                InputMessage(role=role_str, parts=parts, name=name_str)
+            )
+            continue
+
+        # Reasoning content
+        reasoning_content = _get_property_value(msg, "reasoning_content")
+        if reasoning_content:
+            parts.append(
+                ReasoningPart(content=str(cast(object, reasoning_content)))
+            )
+
+        # Tool calls requested by assistant in history
+        tool_calls = _get_property_value(msg, "tool_calls")
+        if tool_calls and isinstance(tool_calls, list):
+            tc_list = cast(list[Any], tool_calls)
+            for tc in tc_list:
+                tc_id = _get_property_value(tc, "id")
+                fn = _get_property_value(tc, "function")
+                if fn is not None:
+                    fn_name_val = _get_property_value(fn, "name")
+                    fn_name = (
+                        str(cast(object, fn_name_val)) if fn_name_val else ""
+                    )
+                    fn_args = _get_property_value(fn, "arguments")
+                else:
+                    fn_name_val = _get_property_value(tc, "name")
+                    fn_name = (
+                        str(cast(object, fn_name_val)) if fn_name_val else ""
+                    )
+                    fn_args = _get_property_value(tc, "arguments")
+                parts.append(
+                    ToolCallRequestPart(
+                        id=str(cast(object, tc_id))
+                        if tc_id is not None
+                        else None,
+                        name=fn_name,
+                        arguments=fn_args,
+                    )
+                )
+
+        # Main content
+        content = _get_property_value(msg, "content")
+        if content is not None:
+            formatted_content = format_content(cast(object, content))
+            if formatted_content or not parts:
+                parts.append(TextPart(content=formatted_content))
+
+        # Normalize role
+        if role_str in ("system", "user", "assistant"):
+            normalized_role = role_str
+        else:
+            normalized_role = Role.USER.value
+
+        if parts:
+            result.append(
+                InputMessage(role=normalized_role, parts=parts, name=name_str)
+            )
+
+    return result
+
+
+def format_model_output_message(
+    assistant_message: Any,
+    finish_reason: str = "stop",
+) -> OutputMessage:
+    """Format an Agno assistant message into an OutputMessage."""
+    parts: list[MessagePart] = []
+
+    reasoning_content = _get_property_value(
+        assistant_message, "reasoning_content"
+    )
+    if reasoning_content:
+        parts.append(
+            ReasoningPart(content=str(cast(object, reasoning_content)))
+        )
+
+    content = _get_property_value(assistant_message, "content")
+    if content is not None:
+        formatted = format_content(cast(object, content))
+        if formatted:
+            parts.append(TextPart(content=formatted))
+
+    tool_calls = _get_property_value(assistant_message, "tool_calls")
+    if tool_calls and isinstance(tool_calls, list):
+        tc_list = cast(list[Any], tool_calls)
+        for tc in tc_list:
+            tc_id = _get_property_value(tc, "id")
+            fn = _get_property_value(tc, "function")
+            if fn is not None:
+                fn_name_val = _get_property_value(fn, "name")
+                fn_name = str(cast(object, fn_name_val)) if fn_name_val else ""
+                fn_args = _get_property_value(fn, "arguments")
+            else:
+                fn_name_val = _get_property_value(tc, "name")
+                fn_name = str(cast(object, fn_name_val)) if fn_name_val else ""
+                fn_args = _get_property_value(tc, "arguments")
+            parts.append(
+                ToolCallRequestPart(
+                    id=str(cast(object, tc_id)) if tc_id is not None else None,
+                    name=fn_name,
+                    arguments=fn_args,
+                )
+            )
+
+    if not parts:
+        parts.append(TextPart(content=""))
+
+    name = _get_property_value(assistant_message, "name")
+    name_str = str(cast(object, name)) if name is not None else None
+
+    return OutputMessage(
+        role=Role.ASSISTANT.value,
+        parts=parts,
+        finish_reason=finish_reason,
+        name=name_str,
+    )
