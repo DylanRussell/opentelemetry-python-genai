@@ -426,15 +426,15 @@ class TestInferenceContext(TestBase):
             LLMInvocation,
         )
 
-        inv = LLMInvocation(request_model="test")
-        self.assertFalse(inv.already_started)
-
         with self.handler.inference("upstream"):
             nested_inv = LLMInvocation(request_model="nested")
             self.handler.start_llm(nested_inv)
-            self.assertTrue(nested_inv.already_started)
             self.assertTrue(nested_inv.span.is_recording())
-            self.assertFalse(nested_inv.should_capture_content)
+            assert nested_inv._inference_invocation is not None
+            self.assertTrue(nested_inv._inference_invocation._already_started)
+            self.assertFalse(
+                nested_inv._inference_invocation.should_capture_content
+            )
             nested_inv.attributes["custom.llm"] = "val"
             self.handler.stop_llm(nested_inv)
             attrs = get_inference_attributes()

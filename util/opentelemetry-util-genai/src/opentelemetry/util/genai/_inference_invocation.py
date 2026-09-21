@@ -620,19 +620,3 @@ class LLMInvocation:
             if self._inference_invocation is not None
             else INVALID_SPAN
         )
-
-    @property
-    def already_started(self) -> bool:
-        return (
-            self._inference_invocation._already_started
-            if self._inference_invocation is not None
-            else False
-        )
-
-    @property
-    def should_capture_content(self) -> bool:
-        return (
-            self._inference_invocation.should_capture_content
-            if self._inference_invocation is not None
-            else False
-        )
