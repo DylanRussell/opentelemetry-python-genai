@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from agno.knowledge.document.base import Document
+    from agno.models.base import MessageData, Model
+    from agno.models.message import Message
+    from agno.models.response import ModelResponse
 
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GenAiProviderNameValues,
@@ -605,7 +608,7 @@ _MODEL_CLASS_NAME_TO_PROVIDER: dict[str, str] = {
 }
 
 
-def resolve_model_provider(model: Any) -> str:
+def resolve_model_provider(model: Model) -> str:
     """Resolve the ``gen_ai.provider.name`` value for an Agno model instance."""
     # 1. Explicit provider attribute on the model
     provider_attr = getattr(model, "provider", None)
@@ -692,8 +695,8 @@ def resolve_model_provider(model: Any) -> str:
 
 
 def extract_model_finish_reasons(
-    assistant_message: Any = None,
-    model_response: Any = None,
+    assistant_message: Message | None = None,
+    model_response: ModelResponse | MessageData | None = None,
 ) -> list[str]:
     """Derive gen_ai.response.finish_reasons from assistant message or model response."""
     provider_data: Any = None
@@ -828,7 +831,7 @@ def format_model_input_messages(
 
 
 def format_model_output_message(
-    assistant_message: Any,
+    assistant_message: Message | ModelResponse,
     finish_reason: str = "stop",
 ) -> OutputMessage:
     """Format an Agno assistant message into an OutputMessage."""

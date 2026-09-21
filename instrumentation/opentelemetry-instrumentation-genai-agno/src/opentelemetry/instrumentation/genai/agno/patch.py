@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from agno.agent import RunOutput
     from agno.knowledge.document.base import Document
     from agno.knowledge.knowledge import Knowledge
+    from agno.models.base import MessageData, Model
+    from agno.models.message import Message
+    from agno.models.response import ModelResponse
     from agno.run.workflow import WorkflowRunOutput
     from agno.team import TeamRunOutput
     from agno.tools.function import FunctionCall, FunctionExecutionResult
@@ -1894,10 +1897,14 @@ def _knowledge_asearch(
 
 def _start_model_inference(
     handler: TelemetryHandler,
-    instance: Any,
+    instance: Model,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-) -> tuple[InferenceInvocation, Any, Any]:
+) -> tuple[
+    InferenceInvocation,
+    Message | None,
+    ModelResponse | MessageData | None,
+]:
     """Start an InferenceInvocation for an Agno model response call."""
     messages = (
         kwargs.get("messages")
@@ -2039,8 +2046,8 @@ def _start_model_inference(
 
 def _populate_model_response_telemetry(
     invocation: InferenceInvocation,
-    assistant_message: Any,
-    model_response: Any,
+    assistant_message: Message | None,
+    model_response: ModelResponse | None,
     capture_content: bool,
 ) -> None:
     """Populate final response telemetry on an InferenceInvocation."""
@@ -2138,7 +2145,7 @@ def _model_process_response(
 
     def traced_method(
         wrapped: Callable[..., Any],
-        instance: Any,
+        instance: Model,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
@@ -2154,7 +2161,7 @@ def _model_process_response(
         _populate_model_response_telemetry(
             invocation,
             assistant_message=assistant_message,
-            model_response=model_response,
+            model_response=cast("ModelResponse | None", model_response),
             capture_content=capture_content,
         )
         invocation.stop()
@@ -2170,7 +2177,7 @@ def _model_aprocess_response(
 
     async def traced_method(
         wrapped: Callable[..., Awaitable[Any]],
-        instance: Any,
+        instance: Model,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
@@ -2186,7 +2193,7 @@ def _model_aprocess_response(
         _populate_model_response_telemetry(
             invocation,
             assistant_message=assistant_message,
-            model_response=model_response,
+            model_response=cast("ModelResponse | None", model_response),
             capture_content=capture_content,
         )
         invocation.stop()
@@ -2202,7 +2209,7 @@ def _model_process_response_stream(
 
     def traced_method(
         wrapped: Callable[..., Any],
-        instance: Any,
+        instance: Model,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
@@ -2219,7 +2226,7 @@ def _model_process_response_stream(
             stream,
             invocation=invocation,
             assistant_message=assistant_message,
-            stream_data=stream_data,
+            stream_data=cast("MessageData | None", stream_data),
             capture_content=capture_content,
         )
 
@@ -2233,7 +2240,7 @@ def _model_aprocess_response_stream(
 
     def traced_method(
         wrapped: Callable[..., Any],
-        instance: Any,
+        instance: Model,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
@@ -2250,7 +2257,7 @@ def _model_aprocess_response_stream(
             stream,
             invocation=invocation,
             assistant_message=assistant_message,
-            stream_data=stream_data,
+            stream_data=cast("MessageData | None", stream_data),
             capture_content=capture_content,
         )
 

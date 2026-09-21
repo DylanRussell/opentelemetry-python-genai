@@ -6,7 +6,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from agno.agent import RunOutput
+    from agno.models.base import MessageData
+    from agno.models.message import Message
+    from agno.models.response import ModelResponse
+    from agno.run.workflow import WorkflowRunOutput
+    from agno.team import TeamRunOutput
+
+    AgnoRunOutput = RunOutput | TeamRunOutput | WorkflowRunOutput
 
 from opentelemetry.instrumentation.genai.agno.utils import (
     _get_property_value,
@@ -380,12 +390,12 @@ class AsyncAgnoToolStreamWrapper(AsyncToolStreamWrapper[Any]):
 
 class _ModelStreamMixin:
     _self_invocation: InferenceInvocation
-    _self_assistant_message: Any
-    _self_stream_data: Any
+    _self_assistant_message: Message | None
+    _self_stream_data: MessageData | None
     _self_capture_content: bool
     _self_accumulated_chunks: list[str]
 
-    def _process_chunk(self, chunk: Any) -> None:
+    def _process_chunk(self, chunk: ModelResponse) -> None:
         if self._self_capture_content:
             content = getattr(chunk, "content", None)
             if content is not None:
@@ -529,8 +539,8 @@ class AgnoModelStreamWrapper(_ModelStreamMixin, SyncStreamWrapper[Any]):
         self,
         stream: Any,
         invocation: InferenceInvocation,
-        assistant_message: Any = None,
-        stream_data: Any = None,
+        assistant_message: Message | None = None,
+        stream_data: MessageData | None = None,
         capture_content: bool = False,
     ) -> None:
         super().__init__(stream, invocation=invocation)
@@ -547,8 +557,8 @@ class AsyncAgnoModelStreamWrapper(_ModelStreamMixin, AsyncStreamWrapper[Any]):
         self,
         stream: Any,
         invocation: InferenceInvocation,
-        assistant_message: Any = None,
-        stream_data: Any = None,
+        assistant_message: Message | None = None,
+        stream_data: MessageData | None = None,
         capture_content: bool = False,
     ) -> None:
         super().__init__(stream, invocation=invocation)

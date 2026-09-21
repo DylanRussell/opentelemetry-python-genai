@@ -17,15 +17,14 @@ from agno.models.response import ModelResponse
 from tests.mock_model import MockModel
 
 from opentelemetry.instrumentation.genai.agno import AgnoInstrumentor
-from opentelemetry.instrumentation.genai.agno.utils import resolve_model_provider
+from opentelemetry.instrumentation.genai.agno.utils import (
+    resolve_model_provider,
+)
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
 from opentelemetry.semconv._incubating.attributes.error_attributes import (
     ERROR_TYPE,
-)
-from opentelemetry.semconv._incubating.attributes.user_attributes import (
-    USER_ID,
 )
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import StatusCode
@@ -147,9 +146,7 @@ def test_model_sync_response(
 
     assert span.name == "chat test-gpt-4o"
     assert span.kind == SpanKind.CLIENT
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "openai"
     )
@@ -169,9 +166,7 @@ def test_model_sync_response(
         GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
     ) == ("stop",)
     assert span.attributes.get(GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS) == 12
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS) == 7
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS) == 7
     assert (
         span.attributes.get(
             GenAIAttributes.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS
@@ -188,7 +183,9 @@ def test_model_sync_response(
         span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_TEMPERATURE) == 0.7
     )
     assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_TOP_P) == 0.9
-    assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS) == 256
+    assert (
+        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS) == 256
+    )
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_FREQUENCY_PENALTY)
         == 0.5
@@ -198,9 +195,9 @@ def test_model_sync_response(
         == 0.2
     )
     assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_SEED) == 42
-    assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES) == (
-        "END",
-    )
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_REQUEST_STOP_SEQUENCES
+    ) == ("END",)
     assert span.attributes.get("server.address") == "api.openai.com"
     assert span.attributes.get("server.port") == 8080
 
@@ -245,8 +242,7 @@ def test_model_sync_response_content_capture(
     assert len(output_messages) == 1
     assert output_messages[0]["role"] == "assistant"
     assert (
-        output_messages[0]["parts"][0]["content"]
-        == "Hello from test model!"
+        output_messages[0]["parts"][0]["content"] == "Hello from test model!"
     )
     assert output_messages[0]["finish_reason"] == "stop"
 
@@ -271,15 +267,14 @@ def test_model_async_response(
 
     assert span.name == "chat claude-3-5"
     assert span.kind == SpanKind.CLIENT
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME)
         == "anthropic"
     )
     assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MODEL) == "claude-3-5"
+        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_MODEL)
+        == "claude-3-5"
     )
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_RESPONSE_MODEL)
@@ -352,15 +347,11 @@ def test_model_response_stream(
 
     assert span.name == "chat stream-model"
     assert span.kind == SpanKind.CLIENT
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "openai"
     )
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_STREAM) is True
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_STREAM) is True
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_RESPONSE_MODEL)
         == "gpt-4o-stream"
@@ -398,9 +389,7 @@ def test_model_response_stream_content_capture(
     assert output_messages_raw is not None
     output_messages = json.loads(output_messages_raw)
     assert len(output_messages) == 1
-    assert (
-        output_messages[0]["parts"][0]["content"] == "chunk 1 chunk 2"
-    )
+    assert output_messages[0]["parts"][0]["content"] == "chunk 1 chunk 2"
 
 
 def test_model_aresponse_stream(
@@ -426,16 +415,12 @@ def test_model_aresponse_stream(
 
     assert span.name == "chat async-stream-model"
     assert span.kind == SpanKind.CLIENT
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_OPERATION_NAME) == "chat"
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME)
         == "anthropic"
     )
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_STREAM) is True
-    )
+    assert span.attributes.get(GenAIAttributes.GEN_AI_REQUEST_STREAM) is True
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_RESPONSE_MODEL)
         == "claude-stream"
@@ -713,6 +698,5 @@ def test_resolve_model_provider() -> None:
         == "unknown_custom_xyz"
     )
     assert (
-        resolve_model_provider(_SyncModel(id="m", provider=None))
-        == "unknown"
+        resolve_model_provider(_SyncModel(id="m", provider=None)) == "unknown"
     )
