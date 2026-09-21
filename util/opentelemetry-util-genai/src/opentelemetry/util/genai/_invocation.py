@@ -28,9 +28,6 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 from opentelemetry.semconv.attributes import error_attributes
 from opentelemetry.trace import (
-    INVALID_SPAN as _INVALID_SPAN,
-)
-from opentelemetry.trace import (
     Span,
     SpanKind,
     Tracer,
@@ -98,6 +95,8 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         metric_attributes: dict[str, AttributeValue] | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
         *,
+        start_attributes: dict[str, AttributeValue] | None = None,
+        context: Context | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
         self._tracer = tracer
@@ -119,19 +118,37 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             {} if metric_attributes is None else metric_attributes
         )
         """Additional attributes to set on metrics. Must be low cardinality. Not set on spans or events."""
-        self.span: Span = _INVALID_SPAN
-        self._span_context: Context
-        self._span_name: str = span_name
-        self._span_kind: SpanKind = span_kind
-        # Remains None when _already_started is True since no new context is attached.
-        self._context_token: ContextToken | None = None
-        self._monotonic_start_s: float
+        self._start_attributes: dict[str, AttributeValue] = {
+            GenAI.GEN_AI_OPERATION_NAME: operation_name,
+            **(start_attributes or {}),
+        }
         self._already_started: bool = (
             get_value(self._context_attributes_key) is not None
             if self._context_attributes_key is not None
             else False
         )
         self._finished: bool = False
+        if self._already_started:
+            self.span: Span = get_current_span()
+            self._span_context: Context = get_current()
+            # Remains None when _already_started is True since no new context is attached.
+            self._context_token: ContextToken | None = None
+        else:
+            self.span: Span = self._tracer.start_span(
+                name=span_name,
+                kind=span_kind,
+                attributes=self._start_attributes,
+                context=context,
+            )
+            ctx = set_span_in_context(self.span)
+            if self._context_attributes_key is not None:
+                ctx = set_value(self._context_attributes_key, {}, context=ctx)
+            self._span_context: Context = ctx
+            self._context_token: ContextToken | None = attach(
+                self._span_context
+            )
+
+        self._monotonic_start_s: float = timeit.default_timer()
         # Streaming state, set when the invocation is handed to a stream
         # wrapper. ``_request_stream`` marks the request as streamed
         # (gen_ai.request.stream); the timing fields are populated by
@@ -164,35 +181,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     def context(self) -> Context:
         """The OpenTelemetry Context containing this invocation's span."""
         return self._span_context
-
-    def _start(
-        self,
-        attributes: dict[str, AttributeValue] | None = None,
-        context: Context | None = None,
-    ) -> None:
-        """Start the invocation span and attach it to the current context.
-
-        Args:
-            attributes: Initial span attributes available for sampling decisions.
-            context: An optional OpenTelemetry Context to parent the span.
-        """
-        if self._already_started:
-            self.span = get_current_span()
-            self._span_context = get_current()
-        else:
-            self.span = self._tracer.start_span(
-                name=self._span_name,
-                kind=self._span_kind,
-                attributes=attributes,
-                context=context,
-            )
-            ctx = set_span_in_context(self.span)
-            if self._context_attributes_key is not None:
-                ctx = set_value(self._context_attributes_key, {}, context=ctx)
-            self._span_context = ctx
-            self._context_token = attach(self._span_context)
-
-        self._monotonic_start_s = timeit.default_timer()
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         """Return low-cardinality attributes for metric recording."""
@@ -406,14 +394,8 @@ def get_content_attributes(
         dicts = [asdict(item) for item in items]
         return gen_ai_json_dumps(dicts) if for_span else dicts
 
-    # Tool definitions are always captured, the sem conv recommends adding params / description only
-    # when the content capture mode is set..
     if mode not in allowed_modes:
-        return (
-            {GenAI.GEN_AI_TOOL_DEFINITIONS: serialize(tool_definitions)}
-            if tool_definitions
-            else {}
-        )
+        return {}
 
     optional_attrs = (
         (
