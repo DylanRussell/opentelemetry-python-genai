@@ -95,6 +95,7 @@ _ACTIVE_FOREGROUND_WORKFLOWS: contextvars.ContextVar[frozenset[int]] = (
 _SUPPRESS_EMBEDDING: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_SUPPRESS_EMBEDDING", default=False
 )
+_patched_embedder_classes: set[type[Any]] = set()
 _KNOWN_EMBEDDERS: tuple[tuple[str, str], ...] = (
     ("agno.knowledge.embedder.base", "Embedder"),
     ("agno.knowledge.embedder.openai", "OpenAIEmbedder"),
@@ -119,6 +120,14 @@ _KNOWN_EMBEDDERS: tuple[tuple[str, str], ...] = (
     ("agno.knowledge.embedder.nebius", "NebiusEmbedder"),
     ("agno.knowledge.embedder.openai_like", "OpenAILikeEmbedder"),
     ("agno.knowledge.embedder.vllm", "VLLMEmbedder"),
+)
+_EMBEDDER_METHODS: frozenset[str] = frozenset(
+    {
+        "get_embedding",
+        "get_embedding_and_usage",
+        "async_get_embedding",
+        "async_get_embedding_and_usage",
+    }
 )
 
 # wrapt has no unregister API for post-import hooks; monotonic generations
@@ -282,31 +291,38 @@ def patch_agent(handler: TelemetryHandler) -> None:
         current_generation,
     )
 
+    embedder_wrappers = _embedder_method_wrappers(handler)
     for mod_name, cls_name in _KNOWN_EMBEDDERS:
-        _safe_wrap_function(
-            mod_name,
-            f"{cls_name}.get_embedding",
-            _embedder_get_embedding(handler),
-            current_generation,
+        for method_name, wrapper_fn in embedder_wrappers:
+            _safe_wrap_function(
+                mod_name,
+                f"{cls_name}.{method_name}",
+                wrapper_fn,
+                current_generation,
+            )
+
+    try:
+        from agno.knowledge.embedder.base import Embedder
+
+        # Wrap all existing custom embedder classes
+        def _wrap_subclasses(base_cls: type[Any]) -> None:
+            for sub in base_cls.__subclasses__():
+                _wrap_embedder_class(sub, handler)
+                _wrap_subclasses(sub)
+
+        _wrap_subclasses(Embedder)
+
+        # Wrap new embedder classes created during runtime
+        def _traced_init_subclass(cls: type[Embedder], **kwargs: Any) -> None:
+            super(Embedder, cls).__init_subclass__(**kwargs)
+            if _is_instrumented:
+                _wrap_embedder_class(cls, handler)
+
+        setattr(
+            Embedder, "__init_subclass__", classmethod(_traced_init_subclass)
         )
-        _safe_wrap_function(
-            mod_name,
-            f"{cls_name}.get_embedding_and_usage",
-            _embedder_get_embedding_and_usage(handler),
-            current_generation,
-        )
-        _safe_wrap_function(
-            mod_name,
-            f"{cls_name}.async_get_embedding",
-            _embedder_async_get_embedding(handler),
-            current_generation,
-        )
-        _safe_wrap_function(
-            mod_name,
-            f"{cls_name}.async_get_embedding_and_usage",
-            _embedder_async_get_embedding_and_usage(handler),
-            current_generation,
-        )
+    except Exception:
+        pass
 
 
 def unpatch_agent() -> None:
@@ -321,17 +337,24 @@ def unpatch_agent() -> None:
         except (AttributeError, ValueError):
             pass
 
+    try:
+        from agno.knowledge.embedder.base import Embedder
+
+        if "__init_subclass__" in Embedder.__dict__:
+            delattr(Embedder, "__init_subclass__")
+    except Exception:
+        pass
+
+    for cls in list(_patched_embedder_classes):
+        for attr in _EMBEDDER_METHODS:
+            _safe_unwrap(cls, attr)
+    _patched_embedder_classes.clear()
     for mod_name, cls_name in _KNOWN_EMBEDDERS:
         if mod_name in sys.modules:
             mod = sys.modules[mod_name]
             cls = getattr(mod, cls_name, None)
             if cls is not None:
-                for attr in (
-                    "get_embedding",
-                    "get_embedding_and_usage",
-                    "async_get_embedding",
-                    "async_get_embedding_and_usage",
-                ):
+                for attr in _EMBEDDER_METHODS:
                     _safe_unwrap(cls, attr)
 
     if _AGNO_MODULE in sys.modules:
@@ -605,6 +628,40 @@ def _embedder_async_get_embedding_and_usage(
             _SUPPRESS_EMBEDDING.reset(token)
 
     return cast(Callable[..., Any], traced_method)
+
+
+def _embedder_method_wrappers(
+    handler: TelemetryHandler,
+) -> tuple[tuple[str, Callable[..., Any]], ...]:
+    return (
+        ("get_embedding", _embedder_get_embedding(handler)),
+        (
+            "get_embedding_and_usage",
+            _embedder_get_embedding_and_usage(handler),
+        ),
+        ("async_get_embedding", _embedder_async_get_embedding(handler)),
+        (
+            "async_get_embedding_and_usage",
+            _embedder_async_get_embedding_and_usage(handler),
+        ),
+    )
+
+
+def _wrap_embedder_class(
+    cls: type[Any],
+    handler: TelemetryHandler,
+) -> None:
+    for method_name, wrapper_fn in _embedder_method_wrappers(handler):
+        if hasattr(cls, method_name):
+            target = getattr(cls, method_name)
+            if not hasattr(target, "__wrapped__"):
+                try:
+                    wrap_function_wrapper(
+                        cast(Any, cls), method_name, wrapper_fn
+                    )
+                    _patched_embedder_classes.add(cls)
+                except Exception:
+                    pass
 
 
 def _extract_input_content(input_val: Any) -> str:
