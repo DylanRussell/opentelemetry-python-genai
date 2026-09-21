@@ -111,14 +111,14 @@ def test_sync_stream_wrapper_processes_chunks_and_stops():
     assert wrapper._self_stop_count == 1
 
 
-def test_sync_stream_wrapper_skips_chunk_accumulation_when_suppressed():
+def test_sync_stream_wrapper_processes_chunks_when_suppressed():
     invocation = MagicMock(spec=SuppressedInferenceInvocation)
     stream = _FakeSyncStream(chunks=["chunk1", "chunk2"])
     wrapper = _TestSyncStreamWrapper(stream, invocation=invocation)
 
     assert next(wrapper) == "chunk1"
     assert next(wrapper) == "chunk2"
-    assert wrapper._self_processed == []
+    assert wrapper._self_processed == ["chunk1", "chunk2"]
     assert invocation._on_stream_chunk.call_count == 2
 
 
@@ -314,7 +314,7 @@ def test_async_stream_wrapper_processes_chunks_and_stops():
     asyncio.run(exercise())
 
 
-def test_async_stream_wrapper_skips_chunk_accumulation_when_suppressed():
+def test_async_stream_wrapper_processes_chunks_when_suppressed():
     async def exercise():
         invocation = MagicMock(spec=SuppressedInferenceInvocation)
         stream = _FakeAsyncStream(chunks=["chunk1", "chunk2"])
@@ -322,7 +322,7 @@ def test_async_stream_wrapper_skips_chunk_accumulation_when_suppressed():
 
         assert await anext(wrapper) == "chunk1"
         assert await anext(wrapper) == "chunk2"
-        assert wrapper._self_processed == []
+        assert wrapper._self_processed == ["chunk1", "chunk2"]
         assert invocation._on_stream_chunk.call_count == 2
 
     asyncio.run(exercise())

@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import timeit
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Final
+from typing import Final
 
 from opentelemetry._logs import Logger, LogRecord
-from opentelemetry.context import Context, get_current
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -21,7 +19,6 @@ from opentelemetry.trace import (
     Span,
     SpanKind,
     Tracer,
-    get_current_span,
 )
 from opentelemetry.util.genai._context import (
     INFERENCE_ATTRIBUTES_KEY,
@@ -32,7 +29,6 @@ from opentelemetry.util.genai._context import (
 )
 from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
-    ContextToken,
     Error,
     GenAIInvocation,
     get_content_attributes,
@@ -121,14 +117,6 @@ class InferenceInvocation(GenAIInvocation):
 
     _context_attributes_key = INFERENCE_ATTRIBUTES_KEY
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> InferenceInvocation:
-        if (
-            cls is InferenceInvocation
-            and get_inference_attributes() is not None
-        ):
-            return object.__new__(SuppressedInferenceInvocation)
-        return super().__new__(cls)
-
     def __init__(
         self,
         tracer: Tracer,
@@ -143,6 +131,7 @@ class InferenceInvocation(GenAIInvocation):
         operation_name: str | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
+        start_span: bool = True,
     ) -> None:
         operation_name = (
             operation_name or GenAI.GenAiOperationNameValues.CHAT.value
@@ -170,6 +159,7 @@ class InferenceInvocation(GenAIInvocation):
             error_type_resolver=error_type_resolver,
             start_attributes=start_attributes,
             content_capturing_mode=content_capturing_mode,
+            start_span=start_span,
         )
         self.conversation_id: str | None = None
         self._emit_event: bool = _should_emit_event(
@@ -548,85 +538,20 @@ class SuppressedInferenceInvocation(InferenceInvocation):
         error_type_resolver: ErrorTypeResolver | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
-        self._tracer = tracer
-        self._instruments = instruments
-        self._logger = logger
-        self._completion_hook = completion_hook
-        self._error_type_resolver = error_type_resolver
-        self._operation_name = (
-            operation_name or GenAI.GenAiOperationNameValues.CHAT.value
+        super().__init__(
+            tracer,
+            instruments,
+            logger,
+            completion_hook,
+            provider,
+            request_model=request_model,
+            server_address=server_address,
+            server_port=server_port,
+            operation_name=operation_name,
+            error_type_resolver=error_type_resolver,
+            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
+            start_span=False,
         )
-        self._content_capturing_mode = ContentCapturingMode.NO_CONTENT
-        self.attributes: dict[str, AttributeValue] = {}
-        self.metric_attributes: dict[str, AttributeValue] = {}
-        self.span: Span = get_current_span()
-        self._span_context: Context = get_current()
-        self._context_token: ContextToken | None = None
-        self._finished: bool = False
-        self._monotonic_start_s: float = timeit.default_timer()
-        self._request_stream: bool | None = None
-        self._ttfc_seconds: float | None = None
-        self._stream_last_chunk_at: float | None = None
-
-        self._provider = provider
-        self._request_model = request_model
-        self._server_address = server_address
-        self._server_port = server_port
-        self._start_attributes: dict[str, AttributeValue] = {
-            GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
-            GenAI.GEN_AI_PROVIDER_NAME: provider,
-        }
-        if request_model is not None:
-            self._start_attributes[GenAI.GEN_AI_REQUEST_MODEL] = request_model
-        if server_address is not None:
-            self._start_attributes[server_attributes.SERVER_ADDRESS] = (
-                server_address
-            )
-        if server_port is not None:
-            self._start_attributes[server_attributes.SERVER_PORT] = server_port
-
-        self.conversation_id: str | None = None
-        self._emit_event: bool = False
-        self.input_messages: list[InputMessage] = []
-        self.output_messages: list[OutputMessage] = []
-        self.system_instruction: (
-            list[SystemInstructionPart] | list[MessagePart]
-        ) = []
-        self._response_model_name: str | None = None
-        self.response_id: str | None = None
-        self.finish_reasons: list[str] | None = None
-        self.input_tokens: int | None = None
-        self.output_tokens: int | None = None
-        self.thinking_tokens: int | None = None
-        self.temperature: float | None = None
-        self.top_p: float | None = None
-        self.frequency_penalty: float | None = None
-        self.presence_penalty: float | None = None
-        self.max_tokens: int | None = None
-        self.stop_sequences: list[str] | None = None
-        self.seed: int | None = None
-        self.cache_write_input_tokens: int | None = None
-        self.cache_read_input_tokens: int | None = None
-        self.text_input_tokens: int | None = None
-        self.image_input_tokens: int | None = None
-        self.audio_input_tokens: int | None = None
-        self.text_output_tokens: int | None = None
-        self.image_output_tokens: int | None = None
-        self.audio_output_tokens: int | None = None
-        self.text_cache_read_input_tokens: int | None = None
-        self.image_cache_read_input_tokens: int | None = None
-        self.audio_cache_read_input_tokens: int | None = None
-        self.reasoning_level: str | None = None
-        self.previous_response_id: str | None = None
-        self.conversation_compacted: bool | None = None
-        self.prompt_name: str | None = None
-        self.prompt_version: str | None = None
-        self.prompt_variables: Mapping[str, object] | None = None
-        self.tool_definitions: list[ToolDefinition] | None = None
-        self.top_k: int | None = None
-        self.request_choice_count: int | None = None
-        self.output_type: str | None = None
-        self._cached_metric_attributes: dict[str, AttributeValue] | None = None
 
     @property
     def should_capture_content(self) -> bool:
@@ -652,7 +577,7 @@ class SuppressedInferenceInvocation(InferenceInvocation):
             return
         self._finished = True
 
-        ctx_data = get_inference_attributes()
+        ctx_data = get_inference_attributes(self._span_context)
         if ctx_data is not None:
             attrs = dict(self._start_attributes)
             attrs.update(self._get_attributes())
@@ -718,7 +643,12 @@ class LLMInvocation:
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
         """Create and start an InferenceInvocation from this data container. Called by handler.start_llm()."""
-        inv = InferenceInvocation(
+        invocation_cls: type[InferenceInvocation] = (
+            SuppressedInferenceInvocation
+            if get_inference_attributes() is not None
+            else InferenceInvocation
+        )
+        inv = invocation_cls(
             tracer,
             instruments,
             logger,

@@ -19,6 +19,7 @@ from opentelemetry.context import (
     Context,
     attach,
     detach,
+    get_current,
     set_value,
 )
 from opentelemetry.semconv._incubating.attributes import (
@@ -29,6 +30,7 @@ from opentelemetry.trace import (
     Span,
     SpanKind,
     Tracer,
+    get_current_span,
     set_span_in_context,
 )
 from opentelemetry.trace.status import Status, StatusCode
@@ -97,6 +99,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         start_attributes: dict[str, AttributeValue] | None = None,
         context: Context | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
+        start_span: bool = True,
     ) -> None:
         self._tracer = tracer
         self._instruments: _Instruments = instruments
@@ -122,24 +125,31 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             **(start_attributes or {}),
         }
         self._finished: bool = False
-        self.span: Span = self._tracer.start_span(
-            name=span_name,
-            kind=span_kind,
-            attributes=self._start_attributes,
-            context=context,
-        )
-        ctx = set_span_in_context(self.span)
-        if self._context_attributes_key is not None:
-            ctx = set_value(
-                self._context_attributes_key,
-                {
-                    SPANEVENT_ATTRIBUTES_KEY: {},
-                    METRIC_ATTRIBUTES_KEY: {},
-                },
-                context=ctx,
+        if start_span:
+            self.span: Span = self._tracer.start_span(
+                name=span_name,
+                kind=span_kind,
+                attributes=self._start_attributes,
+                context=context,
             )
-        self._span_context: Context = ctx
-        self._context_token: ContextToken | None = attach(self._span_context)
+            ctx = set_span_in_context(self.span)
+            if self._context_attributes_key is not None:
+                ctx = set_value(
+                    self._context_attributes_key,
+                    {
+                        SPANEVENT_ATTRIBUTES_KEY: {},
+                        METRIC_ATTRIBUTES_KEY: {},
+                    },
+                    context=ctx,
+                )
+            self._span_context: Context = ctx
+            self._context_token: ContextToken | None = attach(
+                self._span_context
+            )
+        else:
+            self.span = get_current_span()
+            self._span_context = get_current() if context is None else context
+            self._context_token = None
 
         self._monotonic_start_s: float = timeit.default_timer()
         # Streaming state, set when the invocation is handed to a stream

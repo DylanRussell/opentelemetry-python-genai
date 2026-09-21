@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-from opentelemetry.context import attach, detach
+from opentelemetry.context import Context, attach, detach
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
@@ -810,3 +810,42 @@ class TestInferenceContext(TestBase):
         self.assertEqual(point.attributes.get("root.metric"), "root_val")
         # Inner metric attribute not on root is propagated
         self.assertEqual(point.attributes.get("inner.metric"), "inner_val")
+
+    def test_suppressed_invocation_publishes_in_different_context(
+        self,
+    ) -> None:
+        with self.handler.inference("proxy", request_model="gpt-4o"):
+            inner_inv = self.handler.inference(
+                "downstream", request_model="gpt-4o"
+            )
+            self.assertIsInstance(inner_inv, SuppressedInferenceInvocation)
+            inner_inv.input_tokens = 15
+            inner_inv.output_tokens = 25
+            inner_inv.response_model_name = "gpt-4o-2024-08-06"
+
+            # Finish inner_inv in a clean/detached context (simulating separate async task or thread)
+            token = attach(Context())
+            try:
+                self.assertIsNone(get_inference_attributes())
+                inner_inv.stop()
+            finally:
+                detach(token)
+
+            attrs = get_inference_attributes()
+            assert attrs is not None
+            self.assertEqual(
+                attrs[SPANEVENT_ATTRIBUTES_KEY][
+                    GenAI.GEN_AI_USAGE_INPUT_TOKENS
+                ],
+                15,
+            )
+            self.assertEqual(
+                attrs[SPANEVENT_ATTRIBUTES_KEY][
+                    GenAI.GEN_AI_USAGE_OUTPUT_TOKENS
+                ],
+                25,
+            )
+            self.assertEqual(
+                attrs[METRIC_ATTRIBUTES_KEY][GenAI.GEN_AI_RESPONSE_MODEL],
+                "gpt-4o-2024-08-06",
+            )
