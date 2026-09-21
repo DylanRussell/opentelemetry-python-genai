@@ -62,6 +62,7 @@ from opentelemetry.util.genai.utils import (
     gen_ai_json_dumps,
     get_argument,
     get_content_capturing_mode,
+    get_signature,
     image_from_url,
     should_capture_content_on_spans,
     should_emit_event,
@@ -1768,6 +1769,11 @@ class TestMediaHelpers(unittest.TestCase):
         self.assertIsNone(part)
 
 
+class _SampleService:
+    def execute(self, task: str):
+        pass
+
+
 class TestArgumentBinding(unittest.TestCase):
     def test_bind_arguments_positional_and_keyword(self):
         def sample_func(
@@ -1867,24 +1873,20 @@ class TestArgumentBinding(unittest.TestCase):
         self.assertEqual(val_with_defaults, False)
 
     def test_get_signature_caching(self):
-        class Service:
-            def execute(self, task: str):
-                pass
+        s1 = _SampleService()
+        s2 = _SampleService()
 
-        s1 = Service()
-        s2 = Service()
-
-        sig1 = _get_signature(s1.execute)
-        sig2 = _get_signature(s2.execute)
+        sig1 = get_signature(s1.execute)
+        sig2 = get_signature(s2.execute)
         self.assertIs(sig1, sig2)
         self.assertNotIn("self", sig1.parameters)
 
-        sig_unbound = _get_signature(Service.execute)
+        sig_unbound = get_signature(_SampleService.execute)
         self.assertIn("self", sig_unbound.parameters)
         self.assertIsNot(sig1, sig_unbound)
 
-        sig_fn1 = _get_signature(decode_base64)
-        sig_fn2 = _get_signature(decode_base64)
+        sig_fn1 = get_signature(decode_base64)
+        sig_fn2 = get_signature(decode_base64)
         self.assertIs(sig_fn1, sig_fn2)
 
     def test_get_signature_local_function_not_cached(self):
@@ -1894,8 +1896,24 @@ class TestArgumentBinding(unittest.TestCase):
             pass
 
         info_before = _cached_signature.cache_info()
-        sig1 = _get_signature(local_fn)
-        sig2 = _get_signature(local_fn)
+        sig1 = get_signature(local_fn)
+        sig2 = get_signature(local_fn)
+        info_after = _cached_signature.cache_info()
+        self.assertEqual(info_before.misses, info_after.misses)
+        self.assertEqual(info_before.hits, info_after.hits)
+        self.assertEqual(sig1, sig2)
+
+    def test_get_signature_local_method_not_cached(self):
+        from opentelemetry.util.genai.utils import _cached_signature
+
+        class LocalService:
+            def execute(self, x: int):
+                pass
+
+        svc = LocalService()
+        info_before = _cached_signature.cache_info()
+        sig1 = get_signature(svc.execute)
+        sig2 = get_signature(svc.execute)
         info_after = _cached_signature.cache_info()
         self.assertEqual(info_before.misses, info_after.misses)
         self.assertEqual(info_before.hits, info_after.hits)

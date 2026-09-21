@@ -14,7 +14,7 @@ from google.genai.types import (
 )
 
 from opentelemetry.util.genai.handler import TelemetryHandler
-from opentelemetry.util.genai.utils import bind_arguments
+from opentelemetry.util.genai.utils import bind_arguments, get_signature
 
 ToolFunction = Callable[..., Any]
 
@@ -48,7 +48,7 @@ def _get_function_args(wrapped_function, function_args, function_kwargs):
     """Records the details about a function invocation as span attributes."""
     function_arg_attr = {}
     try:
-        signature = inspect.signature(wrapped_function)
+        signature = get_signature(wrapped_function)
         parameters = list(signature.parameters.values())
         has_variadics = any(
             parameter.kind

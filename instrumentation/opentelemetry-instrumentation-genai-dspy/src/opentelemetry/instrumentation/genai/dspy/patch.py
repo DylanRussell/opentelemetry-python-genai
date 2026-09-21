@@ -246,7 +246,10 @@ def _extract_tool_arguments(
 ) -> dict[str, Any] | None:
     func: Any = getattr(instance, "func", None)
     if func is not None and callable(func):
-        return bind_arguments(func, args, kwargs, apply_defaults=True)
+        bound = bind_arguments(func, args, kwargs, apply_defaults=True)
+        if args and bound == kwargs:
+            return None
+        return bound
 
     if kwargs and not args:
         return dict(kwargs)

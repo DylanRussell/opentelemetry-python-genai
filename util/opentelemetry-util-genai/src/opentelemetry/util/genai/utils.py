@@ -224,7 +224,7 @@ def _cached_signature(
     return sig
 
 
-def _get_signature(func: Callable[..., object]) -> inspect.Signature:
+def get_signature(func: Callable[..., object]) -> inspect.Signature:
     """Return the inspect.Signature for a callable, caching long-lived definitions.
 
     Bound methods are new objects on every attribute access, so key on the
@@ -236,6 +236,7 @@ def _get_signature(func: Callable[..., object]) -> inspect.Signature:
         if (
             underlying is not None
             and getattr(func, "__self__", None) is not None
+            and "<locals>" not in getattr(underlying, "__qualname__", "")
         ):
             return _cached_signature(underlying, True)
         if inspect.isfunction(func) and "<locals>" not in func.__qualname__:
@@ -243,6 +244,9 @@ def _get_signature(func: Callable[..., object]) -> inspect.Signature:
     except TypeError:
         pass
     return _inspect_signature(func)
+
+
+_get_signature = get_signature
 
 
 def bind_arguments(
@@ -254,7 +258,7 @@ def bind_arguments(
 ) -> dict[str, object]:
     """Bind positional and keyword arguments to func's parameters by name."""
     try:
-        sig = _get_signature(func)
+        sig = get_signature(func)
         bound = sig.bind_partial(*args, **kwargs)
         if apply_defaults:
             bound.apply_defaults()

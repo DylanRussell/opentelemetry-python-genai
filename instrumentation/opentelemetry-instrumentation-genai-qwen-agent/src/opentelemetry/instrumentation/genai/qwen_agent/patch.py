@@ -29,7 +29,7 @@ from opentelemetry.instrumentation.genai.qwen_agent.utils import (
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import LocalAgentInvocation
 from opentelemetry.util.genai.stream import SyncStreamWrapper
-from opentelemetry.util.genai.utils import get_argument
+from opentelemetry.util.genai.utils import bind_arguments, get_argument
 
 
 class _AgentRunStreamWrapper(SyncStreamWrapper[Any]):
@@ -92,17 +92,16 @@ def wrap_agent_call_tool(
     handler: TelemetryHandler,
 ) -> Any:
     """Wrapper for ``Agent._call_tool()`` producing an ``execute_tool`` span."""
-    tool_name = str(
-        get_argument("tool_name", wrapped, args, kwargs, default="")
-    )
-    tool_args: Any = get_argument("tool_args", wrapped, args, kwargs)
+    bound = bind_arguments(wrapped, args, kwargs)
+    tool_name = str(bound.get("tool_name") or "")
+    tool_args: Any = bound.get("tool_args")
     tool = getattr(instance, "function_map", {}).get(tool_name)
 
     invocation = handler.tool(
         tool_name,
         tool_type="function",
     )
-    messages_arg: Any = get_argument("messages", wrapped, args, kwargs)
+    messages_arg: Any = kwargs.get("messages") or bound.get("messages")
     invocation.tool_call_id = find_tool_call_id(messages_arg, tool_name)
     invocation.tool_description = getattr(tool, "description", None)
     if invocation.should_capture_content and tool_args is not None:
