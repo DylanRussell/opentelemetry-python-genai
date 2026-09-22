@@ -22,7 +22,7 @@ from opentelemetry.util.genai._tool_invocation import ToolInvocation
 from opentelemetry.util.genai.utils import gen_ai_json_dumps
 
 if TYPE_CHECKING:
-    from opentelemetry.util.genai._invocation import GenAIInvocation
+    from opentelemetry.util.genai.types import Error
 
     class _ObjectProxy:
         __wrapped__: Any
@@ -42,9 +42,19 @@ AsyncStreamWrapperT = TypeVar(
     "AsyncStreamWrapperT", bound="AsyncStreamWrapper[Any]"
 )
 StreamT = TypeVar("StreamT")
-InvocationT = TypeVar("InvocationT", bound="GenAIInvocation")
 _ChunkT_co = TypeVar("_ChunkT_co", covariant=True)
 _logger = logging.getLogger(__name__)
+
+
+class _StreamTimingInvocation(Protocol):
+    def _on_stream_chunk(self, chunk_at: float) -> None: ...
+
+
+class _StreamingInvocation(_StreamTimingInvocation, Protocol):
+    def fail(self, error: Error | BaseException) -> None: ...
+
+
+InvocationT = TypeVar("InvocationT", bound="_StreamingInvocation")
 
 
 class _StreamWrapperMeta(ABCMeta, type(_ObjectProxy)):
@@ -118,15 +128,13 @@ class SyncStreamWrapper(
     def __init__(
         self,
         stream: _SyncStream[ChunkT],
-        invocation: GenAIInvocation | None = None,
+        invocation: _StreamTimingInvocation | None = None,
     ):
         super().__init__(stream)
         self._self_finalized = False
-        # Marks the request as streamed (gen_ai.request.stream) and receives
-        # per-chunk timing via _on_stream_chunk.
         self._self_invocation = invocation
-        if invocation is not None:
-            invocation._request_stream = True
+        if invocation is not None and hasattr(invocation, "_request_stream"):
+            setattr(invocation, "_request_stream", True)
         self._bind_stream(stream)
 
     # The SDK stream, held loosely typed: subclasses re-expose it through a
@@ -172,9 +180,7 @@ class SyncStreamWrapper(
 
     def close(self) -> None:
         try:
-            close_method = getattr(self._self_stream, "close", None)
-            if callable(close_method):
-                close_method()
+            self._self_stream.close()
         except BaseException as error:
             self._finalize_failure(error)
             raise
@@ -227,15 +233,13 @@ class AsyncStreamWrapper(
     def __init__(
         self,
         stream: _AsyncStream[ChunkT],
-        invocation: GenAIInvocation | None = None,
+        invocation: _StreamTimingInvocation | None = None,
     ):
         super().__init__(stream)
         self._self_finalized = False
-        # Marks the request as streamed (gen_ai.request.stream) and receives
-        # per-chunk timing via _on_stream_chunk.
         self._self_invocation = invocation
-        if invocation is not None:
-            invocation._request_stream = True
+        if invocation is not None and hasattr(invocation, "_request_stream"):
+            setattr(invocation, "_request_stream", True)
         self._bind_stream(stream)
 
     # See ``SyncStreamWrapper._self_stream``.
@@ -380,7 +384,7 @@ class SyncToolStreamWrapper(SyncStreamWrapper[ChunkT]):
         stream: _SyncStream[ChunkT],
         invocation: ToolInvocation,
     ) -> None:
-        super().__init__(stream, invocation=invocation)
+        super().__init__(stream)
         self._self_tool_invocation = invocation
         invocation.suspend()
         self._self_chunks: list[Any] = []
@@ -438,7 +442,7 @@ class AsyncToolStreamWrapper(AsyncStreamWrapper[ChunkT]):
         stream: _AsyncStream[ChunkT],
         invocation: ToolInvocation,
     ) -> None:
-        super().__init__(stream, invocation=invocation)
+        super().__init__(stream)
         self._self_tool_invocation = invocation
         invocation.suspend()
         self._self_chunks: list[Any] = []

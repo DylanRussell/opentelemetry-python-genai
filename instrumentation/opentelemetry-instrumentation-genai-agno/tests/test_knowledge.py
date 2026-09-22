@@ -68,17 +68,10 @@ def test_knowledge_search_content_capture(
     raw_docs = span.attributes.get(GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS)
     assert isinstance(raw_docs, str)
     parsed_docs = json.loads(raw_docs)
-    assert len(parsed_docs) == 2
-    assert (
-        parsed_docs[0]["content"]
-        == "OpenTelemetry is an observability framework."
-    )
-    assert parsed_docs[0]["id"] == "doc_1"
-    assert parsed_docs[0]["score"] == 0.95
-    assert parsed_docs[0]["metadata"] == {"source": "docs"}
-    assert parsed_docs[1]["content"] == "Agno is an agent framework."
-    assert parsed_docs[1]["id"] == "doc_2"
-    assert parsed_docs[1]["score"] == 0.88
+    assert parsed_docs == [
+        {"id": "doc_1", "score": 0.95},
+        {"id": "doc_2", "score": 0.88},
+    ]
 
 
 def test_knowledge_search_no_content_capture(
@@ -157,7 +150,7 @@ def test_knowledge_asearch_content_capture(
     )
     raw_docs = span.attributes.get(GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS)
     assert isinstance(raw_docs, str)
-    assert "Async retrieved doc" in raw_docs
+    assert json.loads(raw_docs) == [{"id": "adoc_1", "score": 0.9}]
 
 
 def test_knowledge_asearch_no_content_capture(

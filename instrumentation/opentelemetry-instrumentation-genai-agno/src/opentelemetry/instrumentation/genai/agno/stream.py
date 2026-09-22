@@ -13,14 +13,11 @@ from opentelemetry.instrumentation.genai.agno.utils import (
 )
 from opentelemetry.util.genai.invocation import (
     LocalAgentInvocation,
-    ToolInvocation,
     WorkflowInvocation,
 )
 from opentelemetry.util.genai.stream import (
     AsyncStreamWrapper,
-    AsyncToolStreamWrapper,
     SyncStreamWrapper,
-    SyncToolStreamWrapper,
 )
 from opentelemetry.util.genai.types import (
     OutputMessage,
@@ -304,37 +301,3 @@ class AsyncAgnoWorkflowStreamWrapper(
         self._self_content_parts = []
         self._self_completed_content = None
         self._self_finish_reason = "stop"
-
-
-class AgnoToolStreamWrapper(SyncToolStreamWrapper[Any]):
-    """Stream wrapper for synchronous tool executions that return iterators/generators."""
-
-    def __init__(
-        self,
-        stream: Any,
-        invocation: ToolInvocation,
-        capture_content: bool,
-    ) -> None:
-        super().__init__(stream, invocation)
-        self._self_capture_content = capture_content
-
-    def _process_chunk(self, chunk: Any) -> None:
-        if self._self_capture_content:
-            self._self_chunks.append(format_content(chunk))
-
-
-class AsyncAgnoToolStreamWrapper(AsyncToolStreamWrapper[Any]):
-    """Stream wrapper for asynchronous tool executions that return async iterators/generators."""
-
-    def __init__(
-        self,
-        stream: Any,
-        invocation: ToolInvocation,
-        capture_content: bool,
-    ) -> None:
-        super().__init__(stream, invocation)
-        self._self_capture_content = capture_content
-
-    def _process_chunk(self, chunk: Any) -> None:
-        if self._self_capture_content:
-            self._self_chunks.append(format_content(chunk))

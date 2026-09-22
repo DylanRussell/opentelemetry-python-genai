@@ -30,7 +30,7 @@ from opentelemetry.instrumentation.genai.langchain.callback_handler import (
     OpenTelemetryLangChainCallbackHandler,
 )
 from opentelemetry.util.genai.invocation import (
-    AgentInvocation,
+    LocalAgentInvocation,
     ToolInvocation,
     WorkflowInvocation,
 )
@@ -94,22 +94,14 @@ def test_uninstrument_restores_pregel_when_prebuilt_is_missing(
 def _handler() -> tuple[OpenTelemetryLangChainCallbackHandler, mock.MagicMock]:
     telemetry = mock.MagicMock()
     workflow = mock.MagicMock(spec=WorkflowInvocation)
-    workflow.span = mock.MagicMock()
-    workflow.span.is_recording.return_value = False
     telemetry.workflow.return_value = workflow
 
     def make_agent(*args: Any, **kwargs: Any) -> mock.MagicMock:
-        invocation = mock.MagicMock(spec=AgentInvocation)
-        invocation.agent_name = kwargs.get("agent_name")
-        invocation.span = mock.MagicMock()
-        invocation.span.is_recording.return_value = False
-        return invocation
+        return mock.MagicMock(spec=LocalAgentInvocation)
 
     telemetry.invoke_local_agent.side_effect = make_agent
 
     tool_invocation = mock.MagicMock(spec=ToolInvocation)
-    tool_invocation.span = mock.MagicMock()
-    tool_invocation.span.is_recording.return_value = False
     telemetry.tool.return_value = tool_invocation
     return OpenTelemetryLangChainCallbackHandler(telemetry), telemetry
 
@@ -395,6 +387,17 @@ def test_ordinary_runnable_is_not_an_agent() -> None:
     telemetry.invoke_local_agent.assert_not_called()
 
 
+def test_agent_named_runnable_is_an_agent() -> None:
+    handler, telemetry = _handler()
+    RunnableLambda(lambda value: value).with_config(
+        run_name="SupportAgentRunner"
+    ).invoke("value", {"callbacks": [handler]})
+
+    telemetry.invoke_local_agent.assert_called_once_with(
+        agent_name="SupportAgentRunner"
+    )
+
+
 def test_plain_state_graph_is_not_an_agent() -> None:
     handler, telemetry = _handler()
     builder = StateGraph(dict[str, int])
@@ -417,6 +420,22 @@ def test_plain_state_graph_with_agent_node_is_not_an_agent() -> None:
     )
 
     telemetry.invoke_local_agent.assert_not_called()
+
+
+def test_agent_named_runnable_inside_other_langgraph_node_is_agent() -> None:
+    handler, telemetry = _handler()
+    runnable = RunnableLambda(
+        lambda state: {"value": state["value"] + 1}
+    ).with_config(run_name="SupportAgentRunner")
+    builder = StateGraph(dict[str, int])
+    builder.add_node("model", runnable)
+    builder.add_edge(START, "model")
+    builder.add_edge("model", END)
+    builder.compile(name="support_pipeline").invoke(
+        {"value": 1}, {"callbacks": [handler]}
+    )
+
+    assert _agent_names(telemetry) == ["SupportAgentRunner"]
 
 
 def _span_named(spans: list[Any], name: str) -> Any:
@@ -545,6 +564,55 @@ def test_nested_named_agent_uses_its_declared_name(
     tool_span = _span_named(spans, "execute_tool delegate_named")
     _assert_parent(tool_span, outer_span)
     _assert_parent(inner_span, tool_span)
+
+
+def test_unnamed_inner_agent_does_not_leak_outer_agent_name_to_its_tools(
+    span_exporter, start_instrumentation
+) -> None:
+    @tool
+    def lookup() -> str:
+        """A tool inside the inner agent."""
+        return "data"
+
+    inner = create_agent(
+        FakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "lookup", "args": {}, "id": "c1"}],
+                ),
+                AIMessage(content="inner done"),
+            ]
+        ),
+        [lookup],
+    )
+
+    @tool
+    def delegate(config: RunnableConfig) -> str:
+        """Delegate to the inner agent."""
+        result = inner.invoke({"messages": [("user", "work")]}, config)
+        return str(result["messages"][-1].content)
+
+    create_agent(
+        FakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "delegate", "args": {}, "id": "c2"}],
+                ),
+                AIMessage(content="outer done"),
+            ]
+        ),
+        [delegate],
+        name="outer_agent",
+    ).invoke({"messages": [("user", "start")]})
+
+    spans = span_exporter.get_finished_spans()
+    inner_tool_span = _span_named(spans, "execute_tool lookup")
+    outer_tool_span = _span_named(spans, "execute_tool delegate")
+
+    assert outer_tool_span.attributes.get("gen_ai.agent.name") == "outer_agent"
+    assert "gen_ai.agent.name" not in inner_tool_span.attributes
 
 
 def test_three_level_agents_resolve_names_against_all_ancestors(
