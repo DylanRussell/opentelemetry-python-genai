@@ -777,8 +777,9 @@ def _media_item_to_part(
             )
 
     url = media.url
-    if not url and media.media_reference is not None:
-        url = media.media_reference.url
+    media_ref = getattr(media, "media_reference", None)
+    if not url and media_ref is not None:
+        url = getattr(media_ref, "url", None)
     if url:
         url_str = str(url)
         if url_str.startswith("data:"):
@@ -801,8 +802,8 @@ def _media_item_to_part(
 
     external = getattr(media, "external", None)
     if external is not None:
-        ext_uri = getattr(external, "uri", None) or getattr(
-            external, "url", None
+        ext_uri = _get_property_value(external, "uri") or _get_property_value(
+            external, "url"
         )
         if ext_uri:
             return UriPart(
@@ -810,8 +811,8 @@ def _media_item_to_part(
                 modality=modality,
                 uri=str(ext_uri),
             )
-        ext_id = getattr(external, "id", None) or getattr(
-            external, "name", None
+        ext_id = _get_property_value(external, "id") or _get_property_value(
+            external, "name"
         )
         if ext_id:
             return FilePart(
@@ -892,6 +893,11 @@ def _extract_tool_call_parts(
         fn_name_val = target.get("name")
         fn_name = str(fn_name_val) if fn_name_val else ""
         fn_args = target.get("arguments")
+        if isinstance(fn_args, str):
+            try:
+                fn_args = json.loads(fn_args)
+            except Exception:
+                pass
         parts.append(
             ToolCallRequestPart(
                 id=str(tc_id) if tc_id is not None else None,
@@ -964,22 +970,34 @@ def format_model_input_messages(
 def format_model_output_message(
     assistant_message: Message | ModelResponse,
     finish_reason: str = "stop",
+    stream_data: MessageData | None = None,
 ) -> OutputMessage:
     """Format an Agno assistant message into an OutputMessage."""
     parts: list[MessagePart] = []
 
-    if assistant_message.reasoning_content:
-        parts.append(
-            ReasoningPart(content=str(assistant_message.reasoning_content))
-        )
+    reasoning = (
+        stream_data.response_reasoning_content
+        if stream_data and stream_data.response_reasoning_content
+        else None
+    ) or assistant_message.reasoning_content
+    if reasoning:
+        parts.append(ReasoningPart(content=str(reasoning)))
 
-    if assistant_message.content is not None:
-        formatted = format_content(assistant_message.content)
+    content = (
+        stream_data.response_content
+        if stream_data and stream_data.response_content
+        else assistant_message.content
+    )
+    if content is not None:
+        formatted = format_content(content)
         if formatted:
             parts.append(TextPart(content=formatted))
 
     parts.extend(_extract_media_parts(assistant_message))
-    parts.extend(_extract_tool_call_parts(assistant_message.tool_calls))
+    tool_calls = assistant_message.tool_calls or (
+        stream_data.response_tool_calls if stream_data else None
+    )
+    parts.extend(_extract_tool_call_parts(tool_calls))
 
     if not parts:
         parts.append(TextPart(content=""))

@@ -502,9 +502,17 @@ class _ModelStreamMixin:
         self._self_invocation.finish_reasons = finish_reasons
 
         if self._self_invocation.should_capture_content:
-            if (
-                self._self_assistant_message is not None
-                and has_model_output_content(self._self_assistant_message)
+            has_stream_data_content = (
+                self._self_stream_data is not None
+                and bool(
+                    self._self_stream_data.response_content
+                    or self._self_stream_data.response_reasoning_content
+                    or self._self_stream_data.response_tool_calls
+                )
+            )
+            if self._self_assistant_message is not None and (
+                has_model_output_content(self._self_assistant_message)
+                or has_stream_data_content
             ):
                 self._self_invocation.output_messages = [
                     format_model_output_message(
@@ -512,6 +520,7 @@ class _ModelStreamMixin:
                         finish_reason=finish_reasons[0]
                         if finish_reasons
                         else "stop",
+                        stream_data=self._self_stream_data,
                     )
                 ]
             elif self._self_accumulated_chunks:

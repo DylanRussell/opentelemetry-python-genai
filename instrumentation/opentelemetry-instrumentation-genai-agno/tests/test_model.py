@@ -12,7 +12,13 @@ from typing import Any
 import pytest
 from agno.agent import Agent
 from agno.models.base import MessageData
-from agno.models.message import Message, MessageMetrics
+from agno.models.message import Message
+
+try:
+    from agno.models.message import MessageMetrics
+except ImportError:
+    from agno.models.message import Metrics as MessageMetrics
+
 from agno.models.response import ModelResponse
 from tests.mock_model import MockModel
 
@@ -574,6 +580,213 @@ def test_model_stream_error_caller_side(
     assert span.attributes.get(ERROR_TYPE) == "RuntimeError"
 
 
+def test_model_response_stream_early_close(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that closing a sync response stream before it is drained finalizes the span once."""
+
+    class MultiChunkStreamModel(MockModel):
+        def invoke_stream(self, *args: Any, **kwargs: Any) -> Any:
+            yield ModelResponse(content="chunk 1")
+            yield ModelResponse(content="chunk 2")
+            yield ModelResponse(content="chunk 3")
+
+    model = MultiChunkStreamModel(id="early-close-model", provider="OpenAI")
+    stream = model.process_response_stream(
+        messages=[Message(role="user", content="Hi")],
+        assistant_message=Message(role="assistant"),
+        stream_data=MessageData(),
+    )
+    first = next(stream)
+    assert first.content == "chunk 1"
+    stream.close()
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "chat early-close-model"
+    assert span.status.status_code != StatusCode.ERROR
+
+
+def test_model_aresponse_stream_error_stream_side(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that async stream-side errors mid-iteration mark the span with ERROR status."""
+
+    class AsyncStreamSideErrorModel(MockModel):
+        async def ainvoke_stream(self, *args: Any, **kwargs: Any) -> Any:
+            yield ModelResponse(content="async ok chunk")
+            raise ConnectionError("Async connection lost mid-stream")
+
+    model = AsyncStreamSideErrorModel(
+        id="async-stream-side-err-model", provider="Anthropic"
+    )
+
+    async def _run() -> None:
+        async for _ in model.aresponse_stream(
+            messages=[Message(role="user", content="Hi")]
+        ):
+            pass
+
+    with pytest.raises(
+        ConnectionError, match="Async connection lost mid-stream"
+    ):
+        asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ERROR_TYPE) == "ConnectionError"
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
+    ) == ("error",)
+
+
+def test_model_aresponse_stream_error_caller_side(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that caller-side errors inside async context manager mark the span with ERROR status."""
+
+    class AsyncInfiniteStreamModel(MockModel):
+        async def ainvoke_stream(self, *args: Any, **kwargs: Any) -> Any:
+            while True:
+                yield ModelResponse(content="endless")
+
+    model = AsyncInfiniteStreamModel(
+        id="async-caller-err-model", provider="Anthropic"
+    )
+
+    async def _run() -> None:
+        async with model.aprocess_response_stream(
+            messages=[Message(role="user", content="Hi")],
+            assistant_message=Message(role="assistant"),
+            stream_data=MessageData(),
+        ) as stream:
+            async for _ in stream:
+                raise RuntimeError("Async caller aborted")
+
+    with pytest.raises(RuntimeError, match="Async caller aborted"):
+        asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes.get(ERROR_TYPE) == "RuntimeError"
+
+
+def test_model_aresponse_stream_early_close(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that closing an async response stream early finalizes the span once."""
+
+    class AsyncMultiChunkStreamModel(MockModel):
+        async def ainvoke_stream(self, *args: Any, **kwargs: Any) -> Any:
+            yield ModelResponse(content="async chunk 1")
+            yield ModelResponse(content="async chunk 2")
+
+    model = AsyncMultiChunkStreamModel(
+        id="async-early-close-model", provider="Anthropic"
+    )
+
+    async def _run() -> None:
+        stream = model.aprocess_response_stream(
+            messages=[Message(role="user", content="Hi")],
+            assistant_message=Message(role="assistant"),
+            stream_data=MessageData(),
+        )
+        first = await stream.__anext__()
+        assert first.content == "async chunk 1"
+        await stream.aclose()
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "chat async-early-close-model"
+    assert span.status.status_code != StatusCode.ERROR
+
+
+def test_model_tool_call_arguments_json_decoding_and_fallback(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that JSON-encoded tool call arguments are decoded while malformed JSON strings are preserved."""
+
+    class ToolArgsModel(MockModel):
+        def invoke(self, *args: Any, **kwargs: Any) -> ModelResponse:
+            return ModelResponse(
+                content=None,
+                tool_calls=[
+                    {
+                        "id": "call_valid",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "Paris", "unit": "celsius"}',
+                        },
+                    },
+                    {
+                        "id": "call_malformed",
+                        "type": "function",
+                        "function": {
+                            "name": "raw_tool",
+                            "arguments": "{not valid json",
+                        },
+                    },
+                ],
+                response_usage=MessageMetrics(
+                    input_tokens=10, output_tokens=5
+                ),
+            )
+
+    model = ToolArgsModel(id="tool-args-model", provider="OpenAI")
+    model._process_model_response(
+        messages=[
+            Message(
+                role="assistant",
+                tool_calls=[
+                    {
+                        "id": "hist_call",
+                        "function": {
+                            "name": "lookup",
+                            "arguments": '{"query": "otel"}',
+                        },
+                    }
+                ],
+            )
+        ],
+        assistant_message=Message(role="assistant"),
+        model_response=ModelResponse(),
+    )
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    input_msgs = json.loads(
+        str(span.attributes.get(GenAIAttributes.GEN_AI_INPUT_MESSAGES))
+    )
+    assert input_msgs[0]["parts"][0]["arguments"] == {"query": "otel"}
+
+    output_msgs = json.loads(
+        str(span.attributes.get(GenAIAttributes.GEN_AI_OUTPUT_MESSAGES))
+    )
+    parts = output_msgs[0]["parts"]
+    assert parts[0]["name"] == "get_weather"
+    assert parts[0]["arguments"] == {"city": "Paris", "unit": "celsius"}
+    assert parts[1]["name"] == "raw_tool"
+    assert parts[1]["arguments"] == "{not valid json"
+
+
 def test_agent_multi_turn_tool_calling_spans(
     instrument_agno,
     span_exporter,
@@ -743,7 +956,11 @@ def test_model_multimodal_inputs_and_outputs(
             audio=[Audio(content=raw_audio, format="wav")],
             videos=[Video(filepath="/tmp/clip.mp4", format="mp4")],
             files=[
-                File(id="file-abc123", mime_type="application/pdf"),
+                File(
+                    id="file-abc123",
+                    mime_type="application/pdf",
+                    external={"id": "file-abc123"},
+                ),
                 File(url="https://example.com/report.pdf"),
             ],
         )
