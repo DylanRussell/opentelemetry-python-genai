@@ -31,6 +31,8 @@ from opentelemetry.util.genai.stream import (
     finalize_on_aclose,
     finalize_on_close,
 )
+from opentelemetry.util.genai.types import ContentCapturingMode
+from opentelemetry.util.genai.utils import gen_ai_json_dumps
 
 
 def test_stream_wrapper_abstract_method_signatures_match():
@@ -1359,8 +1361,44 @@ def _started_tool_invocation():
         logger=MagicMock(),
         completion_hook=MagicMock(spec=CompletionHook),
         name="streaming_tool",
+        content_capturing_mode=ContentCapturingMode.SPAN_ONLY,
     )
     return invocation, span_exporter
+
+
+def test_sync_tool_stream_wrapper_non_string_chunks():
+    invocation, span_exporter = _started_tool_invocation()
+    chunks = [{"k1": "v1"}, {"k2": "v2"}]
+    stream = _FakeSyncStream(chunks=chunks)
+    wrapper = SyncToolStreamWrapper(stream, invocation)
+
+    assert list(wrapper) == chunks
+
+    assert invocation.tool_result == chunks
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["gen_ai.tool.call.result"] == gen_ai_json_dumps(
+        chunks
+    )
+
+
+def test_async_tool_stream_wrapper_non_string_chunks():
+    async def exercise():
+        invocation, span_exporter = _started_tool_invocation()
+        chunks = [{"k1": "v1"}, {"k2": "v2"}]
+        stream = _FakeAsyncStream(chunks=chunks)
+        wrapper = AsyncToolStreamWrapper(stream, invocation)
+
+        assert [chunk async for chunk in wrapper] == chunks
+
+        assert invocation.tool_result == chunks
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].attributes[
+            "gen_ai.tool.call.result"
+        ] == gen_ai_json_dumps(chunks)
+
+    asyncio.run(exercise())
 
 
 def test_sync_tool_stream_wrapper_scopes_context_to_tool_code():

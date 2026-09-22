@@ -335,4 +335,3 @@ class AsyncAgnoWorkflowStreamWrapper(
         self._self_completed_content = None
         self._self_finish_reason = "stop"
         self._self_on_close = on_close
-
