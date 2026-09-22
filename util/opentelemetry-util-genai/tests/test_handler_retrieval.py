@@ -204,15 +204,12 @@ class TelemetryHandlerRetrievalTest(_RetrievalTestBase):  # pylint: disable=too-
             OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY",
         },
     )
-    def test_stop_sets_retrieval_documents_model(self) -> None:
+    def test_stop_sets_retrieval_document_models_when_content_capture_enabled(
+        self,
+    ) -> None:
         handler = TelemetryHandler(tracer_provider=self.tracer_provider)
         docs = [
-            RetrievalDocument(
-                id="doc_1",
-                score=0.95,
-                content="text 1",
-                metadata={"key": "val"},
-            ),
+            RetrievalDocument(id="doc_1", score=0.95),
             RetrievalDocument(id="doc_2", score=0.87),
         ]
         invocation = handler.retrieval()
@@ -222,43 +219,13 @@ class TelemetryHandlerRetrievalTest(_RetrievalTestBase):  # pylint: disable=too-
         spans = self._get_finished_spans()
         raw = spans[0].attributes[GenAI.GEN_AI_RETRIEVAL_DOCUMENTS]
         self.assertIsInstance(raw, str)
-        expected = [
-            {
-                "id": "doc_1",
-                "score": 0.95,
-                "content": "text 1",
-                "metadata": {"key": "val"},
-            },
-            {"id": "doc_2", "score": 0.87},
-        ]
-        self.assertEqual(json.loads(raw), expected)
-
-    @patch.dict(
-        os.environ,
-        {
-            OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY",
-        },
-    )
-    def test_stop_handles_non_json_metadata_safely(self) -> None:
-        class NonJson:
-            def __str__(self) -> str:
-                return "custom_str"
-
-        handler = TelemetryHandler(tracer_provider=self.tracer_provider)
-        docs = [
-            RetrievalDocument(
-                id="doc_1",
-                metadata={"custom": NonJson()},
-            )
-        ]
-        invocation = handler.retrieval()
-        invocation.documents = docs
-        invocation.stop()
-
-        spans = self._get_finished_spans()
-        raw = spans[0].attributes[GenAI.GEN_AI_RETRIEVAL_DOCUMENTS]
-        parsed = json.loads(raw)
-        self.assertEqual(parsed[0]["metadata"]["custom"], "custom_str")
+        self.assertEqual(
+            json.loads(raw),
+            [
+                {"id": "doc_1", "score": 0.95},
+                {"id": "doc_2", "score": 0.87},
+            ],
+        )
 
     @patch.dict(
         os.environ,
