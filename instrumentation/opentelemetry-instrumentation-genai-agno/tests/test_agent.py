@@ -226,14 +226,11 @@ def test_tool_call_failure_spans(
 def test_failed_tool_result_is_not_captured() -> None:
     invocation = MagicMock()
     invocation.tool_result = None
+    invocation.should_capture_content = True
 
     result = SimpleNamespace(status="failure", error="tool failed")
     _fail_tool_invocation(invocation, result)
-    _set_tool_invocation_output(
-        invocation,
-        result,
-        capture_content=True,
-    )
+    _set_tool_invocation_output(invocation, result)
 
     assert invocation.tool_result is None
     invocation.fail.assert_called_once()
@@ -715,6 +712,7 @@ def test_set_invocation_output_pydantic_structured_content(
 
 def test_set_tool_invocation_output_structured_result(
     tracer_provider,
+    monkeypatch,
 ) -> None:
     import json
 
@@ -729,12 +727,14 @@ def test_set_tool_invocation_output_structured_result(
         status: str
         code: int
 
+    monkeypatch.setenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "SPAN_ONLY"
+    )
     handler = TelemetryHandler(tracer_provider=tracer_provider)
     invocation = handler.tool(name="sample_tool")
     _set_tool_invocation_output(
         invocation,
         ToolOutput(status="ok", code=200),
-        capture_content=True,
     )
     invocation.stop()
     assert json.loads(invocation.tool_result) == {
