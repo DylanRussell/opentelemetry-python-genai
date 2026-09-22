@@ -51,9 +51,7 @@ from opentelemetry.instrumentation.genai.agno.stream import (
     AsyncAgnoWorkflowStreamWrapper,
 )
 from opentelemetry.instrumentation.genai.agno.utils import (
-    _extract_media_parts,
     _get_property_value,
-    extract_kwargs_media_parts,
     extract_model_finish_reasons,
     extract_session_id,
     extract_user_id,
@@ -87,7 +85,6 @@ from opentelemetry.util.genai.invocation import (
 from opentelemetry.util.genai.types import (
     Error,
     InputMessage,
-    MessagePart,
     OutputMessage,
     Role,
     TextPart,
@@ -768,35 +765,15 @@ def _set_invocation_input(
     kwargs: dict[str, Any],
     capture_content: bool,
 ) -> None:
-    if not capture_content:
-        return
-    kwarg_media_parts = extract_kwargs_media_parts(kwargs)
-    if args or "input" in kwargs:
+    if capture_content and (args or "input" in kwargs):
         input_val = args[0] if args else kwargs.get("input")
         if input_val is not None:
             content_str = _extract_input_content(input_val)
-            input_media_parts = _extract_media_parts(input_val)
-            parts: list[MessagePart] = []
-            if content_str or (
-                not input_media_parts and not kwarg_media_parts
-            ):
-                parts.append(TextPart(content=content_str))
-            parts.extend(input_media_parts)
-            parts.extend(kwarg_media_parts)
             invocation.input_messages = [
                 InputMessage(
-                    role=Role.USER.value,
-                    parts=parts,
+                    role=Role.USER.value, parts=[TextPart(content=content_str)]
                 )
             ]
-            return
-    if kwarg_media_parts:
-        invocation.input_messages = [
-            InputMessage(
-                role=Role.USER.value,
-                parts=kwarg_media_parts,
-            )
-        ]
 
 
 def _extract_continue_input(
@@ -969,15 +946,10 @@ def _set_invocation_output(
 ) -> None:
     if capture_content and result is not None:
         output_str = _extract_output_content(result)
-        media_parts = _extract_media_parts(result)
-        parts: list[MessagePart] = []
-        if output_str or not media_parts:
-            parts.append(TextPart(content=output_str))
-        parts.extend(media_parts)
         invocation.output_messages = [
             OutputMessage(
                 role=Role.ASSISTANT.value,
-                parts=parts,
+                parts=[TextPart(content=output_str)],
                 finish_reason=_extract_finish_reason(result),
             )
         ]

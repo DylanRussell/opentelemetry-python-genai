@@ -845,28 +845,17 @@ def _append_media_items(
         parts.append(part)
 
 
-def _extract_media_parts(obj: Any) -> list[MessagePart]:
+def _extract_media_parts(obj: Message | ModelResponse) -> list[MessagePart]:
     parts: list[MessagePart] = []
-    _append_media_items(parts, getattr(obj, "images", None), "image")
+    _append_media_items(parts, obj.images, "image")
     _append_media_items(parts, getattr(obj, "image_output", None), "image")
-    _append_media_items(parts, getattr(obj, "audio", None), "audio")
+    _append_media_items(parts, obj.audio, "audio")
     _append_media_items(parts, getattr(obj, "audios", None), "audio")
     _append_media_items(parts, getattr(obj, "audio_output", None), "audio")
-    _append_media_items(parts, getattr(obj, "response_audio", None), "audio")
-    _append_media_items(parts, getattr(obj, "videos", None), "video")
+    _append_media_items(parts, obj.videos, "video")
     _append_media_items(parts, getattr(obj, "video_output", None), "video")
-    _append_media_items(parts, getattr(obj, "files", None), "document")
+    _append_media_items(parts, obj.files, "document")
     _append_media_items(parts, getattr(obj, "file_output", None), "document")
-    return parts
-
-
-def extract_kwargs_media_parts(kwargs: dict[str, Any]) -> list[MessagePart]:
-    """Extract media parts from Agent/Team/Workflow run keyword arguments."""
-    parts: list[MessagePart] = []
-    _append_media_items(parts, kwargs.get("images"), "image")
-    _append_media_items(parts, kwargs.get("audio"), "audio")
-    _append_media_items(parts, kwargs.get("videos"), "video")
-    _append_media_items(parts, kwargs.get("files"), "document")
     return parts
 
 
