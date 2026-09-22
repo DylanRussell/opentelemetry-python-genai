@@ -92,6 +92,7 @@ from opentelemetry.util.genai.types import (
     TextPart,
     ToolCallResponsePart,
 )
+from opentelemetry.util.genai.utils import get_argument
 
 logger = logging.getLogger(__name__)
 
@@ -764,9 +765,10 @@ def _set_invocation_input(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
 ) -> None:
-    if capture_content and (args or "input" in kwargs):
-        input_val = args[0] if args else kwargs.get("input")
+    if capture_content:
+        input_val = get_argument("input", wrapped, args, kwargs)
         if input_val is not None:
             content_str = _extract_input_content(input_val)
             invocation.input_messages = [
@@ -964,11 +966,14 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
     *,
     is_continue: bool = False,
 ) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
-    model_obj = kwargs.get("model") or getattr(instance, "model", None)
+    model_obj = get_argument("model", wrapped, args, kwargs) or getattr(
+        instance, "model", None
+    )
     request_model = None
     if model_obj is not None:
         request_model = (
@@ -994,7 +999,7 @@ def _start_agent_invocation(
             invocation.conversation_id = session_id
     else:
         _set_invocation_input(
-            invocation, instance, args, kwargs, capture_content
+            invocation, instance, args, kwargs, capture_content, wrapped
         )
         session_id = extract_session_id(instance, args, kwargs)
         if session_id:
@@ -1048,6 +1053,7 @@ def _agent_run(
             args,
             kwargs,
             capture_content,
+            wrapped=wrapped,
             is_continue=is_continue,
         )
         user_id = extract_user_id(instance, args, kwargs)
@@ -1097,6 +1103,7 @@ def _agent_arun(
                 args,
                 kwargs,
                 capture_content,
+                wrapped=wrapped,
                 is_continue=is_continue,
             )
             set_invocation_user_id(invocation, instance, args, kwargs)
@@ -1110,6 +1117,7 @@ def _agent_arun(
                 args,
                 kwargs,
                 capture_content,
+                wrapped=wrapped,
                 is_continue=is_continue,
             )
             user_id = extract_user_id(instance, args, kwargs)
@@ -1131,6 +1139,7 @@ def _agent_arun(
                     args,
                     kwargs,
                     capture_content,
+                    wrapped=wrapped,
                     is_continue=is_continue,
                 )
                 user_id = extract_user_id(instance, args, kwargs)
@@ -1169,6 +1178,7 @@ def _agent_arun(
             args,
             kwargs,
             capture_content,
+            wrapped=wrapped,
             is_continue=is_continue,
         )
         set_invocation_user_id(invocation, instance, args, kwargs)
@@ -1256,6 +1266,7 @@ def _start_workflow_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
     *,
     is_continue: bool = False,
 ) -> WorkflowInvocation:
@@ -1270,7 +1281,7 @@ def _start_workflow_invocation(
             invocation.conversation_id = session_id
     else:
         _set_invocation_input(
-            invocation, instance, args, kwargs, capture_content
+            invocation, instance, args, kwargs, capture_content, wrapped
         )
         session_id = extract_session_id(instance, args, kwargs)
         if session_id:
@@ -1297,6 +1308,7 @@ def _workflow_run(
             args,
             kwargs,
             capture_content,
+            wrapped=wrapped,
             is_continue=is_continue,
         )
         user_id = extract_user_id(instance, args, kwargs)
@@ -1388,6 +1400,7 @@ def _workflow_arun(
                 args,
                 kwargs,
                 capture_content,
+                wrapped=wrapped,
                 is_continue=is_continue,
             )
             set_invocation_user_id(invocation, instance, args, kwargs)
@@ -1402,6 +1415,7 @@ def _workflow_arun(
                 args,
                 kwargs,
                 capture_content,
+                wrapped=wrapped,
                 is_continue=is_continue,
             )
             user_id = extract_user_id(instance, args, kwargs)
@@ -1423,6 +1437,7 @@ def _workflow_arun(
                     args,
                     kwargs,
                     capture_content,
+                    wrapped=wrapped,
                     is_continue=is_continue,
                 )
                 user_id = extract_user_id(instance, args, kwargs)
@@ -1468,6 +1483,7 @@ def _workflow_arun(
                 args,
                 kwargs,
                 capture_content,
+                wrapped=wrapped,
                 is_continue=is_continue,
             )
             set_invocation_user_id(invocation, instance, args, kwargs)
@@ -1741,6 +1757,7 @@ def _start_retrieval_invocation(
     instance: Knowledge,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
+    wrapped: Callable[..., Any],
 ) -> RetrievalInvocation:
     vector_db = instance.vector_db
     data_source_id = (
@@ -1786,15 +1803,11 @@ def _start_retrieval_invocation(
     )
     set_invocation_user_id(invocation, instance, args, kwargs)
 
-    query = args[0] if args else kwargs.get("query")
+    query = get_argument("query", wrapped, args, kwargs)
     invocation.query_text = str(query) if query is not None else None
 
-    max_results = None
-    if len(args) > 1 and args[1] is not None:
-        max_results = args[1]
-    elif kwargs.get("max_results") is not None:
-        max_results = kwargs.get("max_results")
-    else:
+    max_results = get_argument("max_results", wrapped, args, kwargs)
+    if max_results is None:
         max_results = instance.max_results
 
     invocation.top_k = safe_int(max_results)
@@ -1811,7 +1824,7 @@ def _knowledge_search(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs
+            handler, instance, args, kwargs, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -1839,7 +1852,7 @@ def _knowledge_asearch(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs
+            handler, instance, args, kwargs, wrapped=wrapped
         )
         try:
             result = await wrapped(*args, **kwargs)
