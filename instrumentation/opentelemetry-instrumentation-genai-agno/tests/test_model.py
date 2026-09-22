@@ -700,3 +700,119 @@ def test_resolve_model_provider() -> None:
     assert (
         resolve_model_provider(_SyncModel(id="m", provider=None)) == "unknown"
     )
+
+
+def test_model_multimodal_inputs_and_outputs(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that multimodal inputs (images, audio, videos, files) and outputs are captured."""
+    from base64 import b64encode
+
+    from agno.media import Audio, File, Image, Video
+
+    raw_audio = b"\x00\x01\x02\x03"
+    raw_image = b"\x89PNG\r\n\x1a\n"
+    data_url = f"data:image/png;base64,{b64encode(raw_image).decode()}"
+
+    class MultimodalModel(MockModel):
+        def invoke(self, *args: Any, **kwargs: Any) -> ModelResponse:
+            return ModelResponse(
+                content="Processed all media",
+                images=[
+                    Image(
+                        url="https://example.com/generated.png",
+                        mime_type="image/png",
+                    )
+                ],
+                audio=Audio(content=raw_audio, format="mp3"),
+                response_usage=MessageMetrics(
+                    input_tokens=50, output_tokens=15
+                ),
+            )
+
+    model = MultimodalModel(id="gpt-4o", provider="OpenAI")
+    messages = [
+        Message(
+            role="user",
+            content="Analyze these attachments",
+            images=[
+                Image(url="https://example.com/photo.jpg", format="jpg"),
+                Image(url=data_url),
+            ],
+            audio=[Audio(content=raw_audio, format="wav")],
+            videos=[Video(filepath="/tmp/clip.mp4", format="mp4")],
+            files=[
+                File(id="file-abc123", mime_type="application/pdf"),
+                File(url="https://example.com/report.pdf"),
+            ],
+        )
+    ]
+
+    model.response(messages=messages)
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+
+    input_msgs = json.loads(
+        str(span.attributes.get(GenAIAttributes.GEN_AI_INPUT_MESSAGES))
+    )
+    assert len(input_msgs) == 1
+    parts = input_msgs[0]["parts"]
+    assert parts[0] == {"type": "text", "content": "Analyze these attachments"}
+    assert parts[1] == {
+        "type": "uri",
+        "modality": "image",
+        "mime_type": "image/jpeg",
+        "uri": "https://example.com/photo.jpg",
+    }
+    assert parts[2] == {
+        "type": "blob",
+        "modality": "image",
+        "mime_type": "image/png",
+        "content": b64encode(raw_image).decode(),
+    }
+    assert parts[3] == {
+        "type": "blob",
+        "modality": "audio",
+        "mime_type": "audio/wav",
+        "content": b64encode(raw_audio).decode(),
+    }
+    assert parts[4] == {
+        "type": "uri",
+        "modality": "video",
+        "mime_type": "video/mp4",
+        "uri": "/tmp/clip.mp4",
+    }
+    assert parts[5] == {
+        "type": "file",
+        "modality": "document",
+        "mime_type": "application/pdf",
+        "file_id": "file-abc123",
+    }
+    assert parts[6] == {
+        "type": "uri",
+        "modality": "document",
+        "mime_type": "application/pdf",
+        "uri": "https://example.com/report.pdf",
+    }
+
+    output_msgs = json.loads(
+        str(span.attributes.get(GenAIAttributes.GEN_AI_OUTPUT_MESSAGES))
+    )
+    assert len(output_msgs) == 1
+    out_parts = output_msgs[0]["parts"]
+    assert out_parts[0] == {"type": "text", "content": "Processed all media"}
+    assert out_parts[1] == {
+        "type": "uri",
+        "modality": "image",
+        "mime_type": "image/png",
+        "uri": "https://example.com/generated.png",
+    }
+    assert out_parts[2] == {
+        "type": "blob",
+        "modality": "audio",
+        "mime_type": "audio/mpeg",
+        "content": b64encode(raw_audio).decode(),
+    }

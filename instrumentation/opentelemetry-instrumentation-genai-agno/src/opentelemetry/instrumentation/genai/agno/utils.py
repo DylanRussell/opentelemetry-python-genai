@@ -7,24 +7,31 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import mimetypes
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from agno.knowledge.document.base import Document
     from agno.knowledge.embedder.base import Embedder
+    from agno.media import Audio, File, Image, Video
     from agno.models.base import MessageData, Model
     from agno.models.message import Message
     from agno.models.response import ModelResponse
+
+    MediaItem = Image | Audio | Video | File
 
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GenAiProviderNameValues,
 )
 from opentelemetry.util.genai.types import (
+    BlobPart,
+    FilePart,
     FunctionToolDefinition,
     InputMessage,
     MessagePart,
+    Modality,
     OutputMessage,
     ReasoningPart,
     RetrievalDocument,
@@ -33,7 +40,9 @@ from opentelemetry.util.genai.types import (
     ToolCallRequestPart,
     ToolCallResponsePart,
     ToolDefinition,
+    UriPart,
 )
+from opentelemetry.util.genai.utils import image_from_url
 
 
 def safe_int(val: Any) -> int | None:
@@ -699,6 +708,188 @@ def extract_model_finish_reasons(
     return ["stop"]
 
 
+_FORMAT_MIME_TYPES: dict[str, str] = {
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "ogg": "audio/ogg",
+    "flac": "audio/flac",
+    "m4a": "audio/mp4",
+    "aac": "audio/aac",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "gif": "image/gif",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+    "avi": "video/x-msvideo",
+    "pdf": "application/pdf",
+    "txt": "text/plain",
+    "csv": "text/csv",
+    "json": "application/json",
+    "xml": "text/xml",
+    "html": "text/html",
+    "md": "text/markdown",
+}
+
+
+def _infer_mime_type(media: MediaItem, modality: Modality) -> str | None:
+    if media.mime_type:
+        return str(media.mime_type)
+    if media.format:
+        fmt = str(media.format).lower().lstrip(".")
+        if fmt in _FORMAT_MIME_TYPES:
+            return _FORMAT_MIME_TYPES[fmt]
+        guessed, _ = mimetypes.guess_type(f"file.{fmt}")
+        if guessed:
+            return guessed
+        if modality in ("image", "audio", "video"):
+            return f"{modality}/{fmt}"
+        return f"application/{fmt}"
+    for path_attr in ("filepath", "filename", "url"):
+        path_val = getattr(media, path_attr, None)
+        if path_val and not str(path_val).startswith("data:"):
+            guessed, _ = mimetypes.guess_type(str(path_val))
+            if guessed:
+                return guessed
+    return None
+
+
+def _media_item_to_part(
+    media: MediaItem,
+    modality: Modality,
+) -> MessagePart | None:
+    mime_type = _infer_mime_type(media, modality)
+
+    if media.content is not None:
+        if isinstance(media.content, bytes):
+            return BlobPart(
+                mime_type=mime_type,
+                modality=modality,
+                content=media.content,
+            )
+        if isinstance(media.content, str):
+            return BlobPart(
+                mime_type=mime_type,
+                modality=modality,
+                content=media.content.encode("utf-8"),
+            )
+
+    url = media.url
+    if not url and media.media_reference is not None:
+        url = media.media_reference.url
+    if url:
+        url_str = str(url)
+        if url_str.startswith("data:"):
+            part = image_from_url(url_str, modality=modality)
+            if isinstance(part, BlobPart) and part.mime_type is None:
+                part.mime_type = mime_type
+            return part
+        return UriPart(
+            mime_type=mime_type,
+            modality=modality,
+            uri=url_str,
+        )
+
+    if media.filepath is not None:
+        return UriPart(
+            mime_type=mime_type,
+            modality=modality,
+            uri=str(media.filepath),
+        )
+
+    external = getattr(media, "external", None)
+    if external is not None:
+        ext_uri = getattr(external, "uri", None) or getattr(
+            external, "url", None
+        )
+        if ext_uri:
+            return UriPart(
+                mime_type=mime_type,
+                modality=modality,
+                uri=str(ext_uri),
+            )
+        ext_id = getattr(external, "id", None) or getattr(
+            external, "name", None
+        )
+        if ext_id:
+            return FilePart(
+                mime_type=mime_type,
+                modality=modality,
+                file_id=str(ext_id),
+            )
+
+    if media.id:
+        return FilePart(
+            mime_type=mime_type,
+            modality=modality,
+            file_id=str(media.id),
+        )
+
+    return None
+
+
+def _append_media_items(
+    parts: list[MessagePart],
+    items: Sequence[MediaItem] | MediaItem | None,
+    modality: Modality,
+) -> None:
+    if items is None:
+        return
+    if isinstance(items, Sequence):
+        for item in items:
+            if (part := _media_item_to_part(item, modality)) is not None:
+                parts.append(part)
+    elif (part := _media_item_to_part(items, modality)) is not None:
+        parts.append(part)
+
+
+def _extract_media_parts(obj: Any) -> list[MessagePart]:
+    parts: list[MessagePart] = []
+    _append_media_items(parts, getattr(obj, "images", None), "image")
+    _append_media_items(parts, getattr(obj, "image_output", None), "image")
+    _append_media_items(parts, getattr(obj, "audio", None), "audio")
+    _append_media_items(parts, getattr(obj, "audios", None), "audio")
+    _append_media_items(parts, getattr(obj, "audio_output", None), "audio")
+    _append_media_items(parts, getattr(obj, "response_audio", None), "audio")
+    _append_media_items(parts, getattr(obj, "videos", None), "video")
+    _append_media_items(parts, getattr(obj, "video_output", None), "video")
+    _append_media_items(parts, getattr(obj, "files", None), "document")
+    _append_media_items(parts, getattr(obj, "file_output", None), "document")
+    return parts
+
+
+def extract_kwargs_media_parts(kwargs: dict[str, Any]) -> list[MessagePart]:
+    """Extract media parts from Agent/Team/Workflow run keyword arguments."""
+    parts: list[MessagePart] = []
+    _append_media_items(parts, kwargs.get("images"), "image")
+    _append_media_items(parts, kwargs.get("audio"), "audio")
+    _append_media_items(parts, kwargs.get("videos"), "video")
+    _append_media_items(parts, kwargs.get("files"), "document")
+    return parts
+
+
+def has_model_output_content(obj: Message | ModelResponse | None) -> bool:
+    """Return True if a Message or ModelResponse contains text, tool calls, reasoning, or media."""
+    if obj is None:
+        return False
+    return bool(
+        obj.content
+        or obj.tool_calls
+        or obj.reasoning_content
+        or obj.images
+        or obj.audio
+        or obj.videos
+        or obj.files
+        or getattr(obj, "audios", None)
+        or getattr(obj, "image_output", None)
+        or getattr(obj, "audio_output", None)
+        or getattr(obj, "video_output", None)
+        or getattr(obj, "file_output", None)
+    )
+
+
 def _extract_tool_call_parts(
     tool_calls: list[dict[str, Any]] | None,
 ) -> list[MessagePart]:
@@ -757,11 +948,15 @@ def format_model_input_messages(
         # Tool calls requested by assistant in history
         parts.extend(_extract_tool_call_parts(msg.tool_calls))
 
+        media_parts = _extract_media_parts(msg)
+
         # Main content
         if msg.content is not None:
             formatted_content = format_content(msg.content)
-            if formatted_content or not parts:
+            if formatted_content or (not parts and not media_parts):
                 parts.append(TextPart(content=formatted_content))
+
+        parts.extend(media_parts)
 
         # Normalize role
         if role_str in ("system", "user", "assistant"):
@@ -794,6 +989,7 @@ def format_model_output_message(
         if formatted:
             parts.append(TextPart(content=formatted))
 
+    parts.extend(_extract_media_parts(assistant_message))
     parts.extend(_extract_tool_call_parts(assistant_message.tool_calls))
 
     if not parts:

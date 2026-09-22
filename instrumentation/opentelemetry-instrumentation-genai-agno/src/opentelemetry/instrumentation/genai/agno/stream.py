@@ -23,6 +23,7 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     extract_model_finish_reasons,
     format_content,
     format_model_output_message,
+    has_model_output_content,
     safe_int,
 )
 from opentelemetry.semconv._incubating.attributes.user_attributes import (
@@ -501,9 +502,9 @@ class _ModelStreamMixin:
         self._self_invocation.finish_reasons = finish_reasons
 
         if self._self_invocation.should_capture_content:
-            if self._self_assistant_message is not None and (
-                getattr(self._self_assistant_message, "content", None)
-                or getattr(self._self_assistant_message, "tool_calls", None)
+            if (
+                self._self_assistant_message is not None
+                and has_model_output_content(self._self_assistant_message)
             ):
                 self._self_invocation.output_messages = [
                     format_model_output_message(
