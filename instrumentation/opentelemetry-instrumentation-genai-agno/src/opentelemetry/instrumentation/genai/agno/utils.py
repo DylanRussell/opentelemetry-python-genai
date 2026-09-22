@@ -673,12 +673,11 @@ def extract_model_finish_reasons(
         provider_data = _get_property_value(model_response, "provider_data")
 
     if isinstance(provider_data, dict):
-        provider_dict = cast(dict[str, Any], provider_data)
-        raw_reason = provider_dict.get("finish_reason") or provider_dict.get(
-            "stop_reason"
-        )
+        raw_reason = _get_property_value(
+            provider_data, "finish_reason"
+        ) or _get_property_value(provider_data, "stop_reason")
         if raw_reason is not None:
-            r = str(cast(object, raw_reason)).lower()
+            r = str(raw_reason).lower()
             if r in ("stop", "end_turn"):
                 return ["stop"]
             if r in ("tool_calls", "tool_use", "function_call"):
@@ -699,6 +698,27 @@ def extract_model_finish_reasons(
     return ["stop"]
 
 
+def _extract_tool_call_parts(tool_calls: Any) -> list[MessagePart]:
+    parts: list[MessagePart] = []
+    if not tool_calls:
+        return parts
+    for tc in tool_calls:
+        tc_id = _get_property_value(tc, "id")
+        fn = _get_property_value(tc, "function")
+        target = fn if fn is not None else tc
+        fn_name_val = _get_property_value(target, "name")
+        fn_name = str(fn_name_val) if fn_name_val else ""
+        fn_args = _get_property_value(target, "arguments")
+        parts.append(
+            ToolCallRequestPart(
+                id=str(tc_id) if tc_id is not None else None,
+                name=fn_name,
+                arguments=fn_args,
+            )
+        )
+    return parts
+
+
 def format_model_input_messages(
     messages: Iterable[Any],
 ) -> list[InputMessage]:
@@ -708,14 +728,10 @@ def format_model_input_messages(
         if msg is None:
             continue
         role_raw = _get_property_value(msg, "role")
-        role_str = (
-            str(cast(object, role_raw)).lower()
-            if role_raw is not None
-            else "user"
-        )
+        role_str = str(role_raw).lower() if role_raw is not None else "user"
 
         name = _get_property_value(msg, "name")
-        name_str = str(cast(object, name)) if name is not None else None
+        name_str = str(name) if name is not None else None
 
         parts: list[MessagePart] = []
 
@@ -727,10 +743,8 @@ def format_model_input_messages(
             content = _get_property_value(msg, "content")
             parts.append(
                 ToolCallResponsePart(
-                    id=str(cast(object, tool_call_id))
-                    if tool_call_id is not None
-                    else None,
-                    response=format_content(cast(object, content))
+                    id=str(tool_call_id) if tool_call_id is not None else None,
+                    response=format_content(content)
                     if content is not None
                     else "",
                 )
@@ -743,43 +757,17 @@ def format_model_input_messages(
         # Reasoning content
         reasoning_content = _get_property_value(msg, "reasoning_content")
         if reasoning_content:
-            parts.append(
-                ReasoningPart(content=str(cast(object, reasoning_content)))
-            )
+            parts.append(ReasoningPart(content=str(reasoning_content)))
 
         # Tool calls requested by assistant in history
-        tool_calls = _get_property_value(msg, "tool_calls")
-        if tool_calls and isinstance(tool_calls, list):
-            tc_list = cast(list[Any], tool_calls)
-            for tc in tc_list:
-                tc_id = _get_property_value(tc, "id")
-                fn = _get_property_value(tc, "function")
-                if fn is not None:
-                    fn_name_val = _get_property_value(fn, "name")
-                    fn_name = (
-                        str(cast(object, fn_name_val)) if fn_name_val else ""
-                    )
-                    fn_args = _get_property_value(fn, "arguments")
-                else:
-                    fn_name_val = _get_property_value(tc, "name")
-                    fn_name = (
-                        str(cast(object, fn_name_val)) if fn_name_val else ""
-                    )
-                    fn_args = _get_property_value(tc, "arguments")
-                parts.append(
-                    ToolCallRequestPart(
-                        id=str(cast(object, tc_id))
-                        if tc_id is not None
-                        else None,
-                        name=fn_name,
-                        arguments=fn_args,
-                    )
-                )
+        parts.extend(
+            _extract_tool_call_parts(_get_property_value(msg, "tool_calls"))
+        )
 
         # Main content
         content = _get_property_value(msg, "content")
         if content is not None:
-            formatted_content = format_content(cast(object, content))
+            formatted_content = format_content(content)
             if formatted_content or not parts:
                 parts.append(TextPart(content=formatted_content))
 
@@ -808,43 +796,25 @@ def format_model_output_message(
         assistant_message, "reasoning_content"
     )
     if reasoning_content:
-        parts.append(
-            ReasoningPart(content=str(cast(object, reasoning_content)))
-        )
+        parts.append(ReasoningPart(content=str(reasoning_content)))
 
     content = _get_property_value(assistant_message, "content")
     if content is not None:
-        formatted = format_content(cast(object, content))
+        formatted = format_content(content)
         if formatted:
             parts.append(TextPart(content=formatted))
 
-    tool_calls = _get_property_value(assistant_message, "tool_calls")
-    if tool_calls and isinstance(tool_calls, list):
-        tc_list = cast(list[Any], tool_calls)
-        for tc in tc_list:
-            tc_id = _get_property_value(tc, "id")
-            fn = _get_property_value(tc, "function")
-            if fn is not None:
-                fn_name_val = _get_property_value(fn, "name")
-                fn_name = str(cast(object, fn_name_val)) if fn_name_val else ""
-                fn_args = _get_property_value(fn, "arguments")
-            else:
-                fn_name_val = _get_property_value(tc, "name")
-                fn_name = str(cast(object, fn_name_val)) if fn_name_val else ""
-                fn_args = _get_property_value(tc, "arguments")
-            parts.append(
-                ToolCallRequestPart(
-                    id=str(cast(object, tc_id)) if tc_id is not None else None,
-                    name=fn_name,
-                    arguments=fn_args,
-                )
-            )
+    parts.extend(
+        _extract_tool_call_parts(
+            _get_property_value(assistant_message, "tool_calls")
+        )
+    )
 
     if not parts:
         parts.append(TextPart(content=""))
 
     name = _get_property_value(assistant_message, "name")
-    name_str = str(cast(object, name)) if name is not None else None
+    name_str = str(name) if name is not None else None
 
     return OutputMessage(
         role=Role.ASSISTANT.value,
