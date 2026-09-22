@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from agno.knowledge.document.base import Document
+    from agno.knowledge.embedder.base import Embedder
     from agno.models.base import MessageData, Model
     from agno.models.message import Message
     from agno.models.response import ModelResponse
@@ -501,7 +502,7 @@ _CLASS_NAME_TO_PROVIDER: dict[str, str] = {
 
 
 def _resolve_provider(
-    instance: Any,
+    instance: Model | Embedder,
     *,
     class_name_to_provider: dict[str, str],
     google_classes: tuple[str, ...],
@@ -581,7 +582,7 @@ def _resolve_provider(
     return _UNKNOWN_PROVIDER
 
 
-def resolve_embedder_provider(embedder: Any) -> str:
+def resolve_embedder_provider(embedder: Embedder) -> str:
     """Resolve the ``gen_ai.provider.name`` value for an Agno embedder instance."""
     return _resolve_provider(
         embedder,
