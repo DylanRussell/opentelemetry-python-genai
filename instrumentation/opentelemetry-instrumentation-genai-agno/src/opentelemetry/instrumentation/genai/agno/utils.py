@@ -500,69 +500,78 @@ _CLASS_NAME_TO_PROVIDER: dict[str, str] = {
 }
 
 
-def resolve_embedder_provider(embedder: Any) -> str:
-    """Resolve the ``gen_ai.provider.name`` value for an Agno embedder instance."""
-    # 1. Explicit provider attribute on the embedder
-    provider_attr = getattr(embedder, "provider", None)
+def _resolve_provider(
+    instance: Any,
+    *,
+    class_name_to_provider: dict[str, str],
+    google_classes: tuple[str, ...],
+    stop_classes: tuple[str, ...],
+    module_prefix: str,
+    ignored_submodules: tuple[str, ...],
+) -> str:
+    google_provider = (
+        GenAiProviderNameValues.GCP_VERTEX_AI.value
+        if getattr(instance, "vertexai", False)
+        or (os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true")
+        else GenAiProviderNameValues.GCP_GEMINI.value
+    )
+
+    # 1. Explicit provider attribute on the instance
+    provider_attr = getattr(instance, "provider", None)
     if provider_attr is not None:
         if isinstance(provider_attr, str):
             p_name = provider_attr.strip().lower()
+            if p_name in ("google", "gemini"):
+                return google_provider
             if p_name in _KNOWN_PROVIDERS:
                 return _KNOWN_PROVIDERS[p_name]
+            p_clean = "".join(c for c in p_name if c.isalnum())
+            if p_clean in _KNOWN_PROVIDERS:
+                return _KNOWN_PROVIDERS[p_clean]
             if p_name and p_name != "none":
                 return p_name
         else:
             cls_name = provider_attr.__class__.__name__.lower()
             if "provider" in cls_name and cls_name != "provider":
                 p_name = cls_name.removesuffix("provider")
+                if p_name in ("google", "gemini"):
+                    return google_provider
                 if p_name in _KNOWN_PROVIDERS:
                     return _KNOWN_PROVIDERS[p_name]
                 if p_name:
                     return p_name
 
-    # 2. Check the embedder class hierarchy (most derived first)
-    for cls in type(embedder).__mro__:
+    # 2. Check the class hierarchy (most derived first)
+    for cls in type(instance).__mro__:
         cls_name = cls.__name__
-        if cls_name in ("GeminiEmbedder", "GoogleEmbedder"):
-            if getattr(embedder, "vertexai", False) or (
-                os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
-                == "true"
-            ):
-                return GenAiProviderNameValues.GCP_VERTEX_AI.value
-            return GenAiProviderNameValues.GCP_GEMINI.value
-        if cls_name == "OpenAILikeEmbedder":
-            # OpenAILikeEmbedder is an adapter for arbitrary OpenAI-compatible endpoints.
-            # It inherits from OpenAIEmbedder, so stop MRO traversal to avoid attributing it to OpenAI.
+        if cls_name in google_classes:
+            return google_provider
+        if cls_name in stop_classes:
             break
-        if cls_name in _CLASS_NAME_TO_PROVIDER:
-            return _CLASS_NAME_TO_PROVIDER[cls_name]
-        if cls_name == "Embedder":
-            # Base class reached without matching a known embedder
-            break
+        if cls_name in class_name_to_provider:
+            return class_name_to_provider[cls_name]
 
-    # 3. Check module name if in agno.knowledge.embedder.<submodule>
-    module = getattr(embedder, "__module__", "")
-    if "agno.knowledge.embedder." in module:
-        sub = module.split("agno.knowledge.embedder.")[-1].split(".")[0]
-        if sub not in ("base", "openai_like"):
-            if sub == "google":
-                if getattr(embedder, "vertexai", False) or (
-                    os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
-                    == "true"
-                ):
+    # 3. Check module name if in <module_prefix><submodule>
+    module = getattr(instance, "__module__", "")
+    if module_prefix in module:
+        sub = module.split(module_prefix)[-1].split(".")[0]
+        if sub not in ignored_submodules:
+            if sub in ("google", "gemini", "vertexai"):
+                if sub == "vertexai":
                     return GenAiProviderNameValues.GCP_VERTEX_AI.value
-                return GenAiProviderNameValues.GCP_GEMINI.value
+                return google_provider
             if sub in _KNOWN_PROVIDERS:
                 return _KNOWN_PROVIDERS[sub]
+            return sub
 
     # 4. Check model/id prefix if it has provider/model format
-    model = (
-        getattr(embedder, "id", None)
-        or getattr(embedder, "model", None)
-        or getattr(embedder, "name", None)
+    model_id = (
+        getattr(instance, "id", None)
+        or getattr(instance, "model", None)
+        or getattr(instance, "name", None)
     )
-    if model is not None and isinstance(model, str):
-        model_str = model.strip()
+    if model_id is not None and isinstance(model_id, str):
+        model_str = model_id.strip()
         if "/" in model_str:
             prefix = model_str.split("/")[0].strip().lower()
             if prefix in _KNOWN_PROVIDERS:
@@ -570,6 +579,18 @@ def resolve_embedder_provider(embedder: Any) -> str:
 
     # 5. Unresolved - fallback to unknown
     return _UNKNOWN_PROVIDER
+
+
+def resolve_embedder_provider(embedder: Any) -> str:
+    """Resolve the ``gen_ai.provider.name`` value for an Agno embedder instance."""
+    return _resolve_provider(
+        embedder,
+        class_name_to_provider=_CLASS_NAME_TO_PROVIDER,
+        google_classes=("GeminiEmbedder", "GoogleEmbedder"),
+        stop_classes=("OpenAILikeEmbedder", "Embedder"),
+        module_prefix="agno.knowledge.embedder.",
+        ignored_submodules=("base", "openai_like"),
+    )
 
 
 # Mapping of known model class names to provider values.
@@ -623,82 +644,21 @@ _MODEL_CLASS_NAME_TO_PROVIDER: dict[str, str] = {
 
 def resolve_model_provider(model: Model) -> str:
     """Resolve the ``gen_ai.provider.name`` value for an Agno model instance."""
-    google_provider = (
-        GenAiProviderNameValues.GCP_VERTEX_AI.value
-        if getattr(model, "vertexai", False)
-        or (os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true")
-        else GenAiProviderNameValues.GCP_GEMINI.value
-    )
-
-    # 1. Explicit provider attribute on the model
-    provider_attr = getattr(model, "provider", None)
-    if provider_attr is not None:
-        if isinstance(provider_attr, str):
-            p_name = provider_attr.strip().lower()
-            if p_name in ("google", "gemini"):
-                return google_provider
-            if p_name in _KNOWN_PROVIDERS:
-                return _KNOWN_PROVIDERS[p_name]
-            p_clean = "".join(c for c in p_name if c.isalnum())
-            if p_clean in _KNOWN_PROVIDERS:
-                return _KNOWN_PROVIDERS[p_clean]
-            if p_name and p_name != "none":
-                return p_name
-        else:
-            cls_name = provider_attr.__class__.__name__.lower()
-            if "provider" in cls_name and cls_name != "provider":
-                p_name = cls_name.removesuffix("provider")
-                if p_name in _KNOWN_PROVIDERS:
-                    return _KNOWN_PROVIDERS[p_name]
-                if p_name:
-                    return p_name
-
-    # 2. Check the model class hierarchy (most derived first)
-    for cls in type(model).__mro__:
-        cls_name = cls.__name__
-        if cls_name in ("Gemini", "Google", "GeminiInteractions"):
-            return google_provider
-        if cls_name in _MODEL_CLASS_NAME_TO_PROVIDER:
-            return _MODEL_CLASS_NAME_TO_PROVIDER[cls_name]
-        if cls_name in ("OpenAILike", "Model"):
-            # Stop MRO traversal at OpenAILike or base Model
-            break
-
-    # 3. Check module name if in agno.models.<submodule>
-    module = getattr(model, "__module__", "")
-    if "agno.models." in module:
-        sub = module.split("agno.models.")[-1].split(".")[0]
-        if sub not in (
+    return _resolve_provider(
+        model,
+        class_name_to_provider=_MODEL_CLASS_NAME_TO_PROVIDER,
+        google_classes=("Gemini", "Google", "GeminiInteractions"),
+        stop_classes=("OpenAILike", "Model"),
+        module_prefix="agno.models.",
+        ignored_submodules=(
             "base",
             "openai_like",
             "message",
             "response",
             "utils",
             "fallback",
-        ):
-            if sub in ("google", "gemini", "vertexai"):
-                if sub == "vertexai":
-                    return GenAiProviderNameValues.GCP_VERTEX_AI.value
-                return google_provider
-            if sub in _KNOWN_PROVIDERS:
-                return _KNOWN_PROVIDERS[sub]
-            return sub
-
-    # 4. Check model/id prefix if it has provider/model format
-    model_id = (
-        getattr(model, "id", None)
-        or getattr(model, "model", None)
-        or getattr(model, "name", None)
+        ),
     )
-    if model_id is not None and isinstance(model_id, str):
-        model_str = model_id.strip()
-        if "/" in model_str:
-            prefix = model_str.split("/")[0].strip().lower()
-            if prefix in _KNOWN_PROVIDERS:
-                return _KNOWN_PROVIDERS[prefix]
-
-    # 5. Unresolved - fallback to unknown
-    return _UNKNOWN_PROVIDER
 
 
 def extract_model_finish_reasons(
