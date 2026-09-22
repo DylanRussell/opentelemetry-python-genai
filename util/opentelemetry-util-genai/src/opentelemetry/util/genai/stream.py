@@ -19,7 +19,6 @@ from typing import (
 )
 
 from opentelemetry.util.genai._tool_invocation import ToolInvocation
-from opentelemetry.util.genai.utils import gen_ai_json_dumps
 
 if TYPE_CHECKING:
     from opentelemetry.util.genai.types import Error
@@ -406,15 +405,15 @@ class SyncToolStreamWrapper(SyncStreamWrapper[ChunkT]):
         with self._self_tool_invocation.activate():
             return super().__exit__(exc_type, exc_val, exc_tb)
 
+    def __del__(self) -> None:
+        try:
+            self._finalize_success()
+        except BaseException:  # pylint: disable=broad-exception-caught
+            pass
+
     def _process_chunk(self, chunk: ChunkT) -> None:
         if self._self_tool_invocation.should_capture_content:
-            if isinstance(chunk, str):
-                self._self_chunks.append(chunk)
-            else:
-                try:
-                    self._self_chunks.append(gen_ai_json_dumps(chunk))
-                except Exception:
-                    self._self_chunks.append(str(chunk))
+            self._self_chunks.append(chunk)
 
     def _on_stream_end(self) -> None:
         if self._self_tool_invocation.should_capture_content:
@@ -447,6 +446,12 @@ class AsyncToolStreamWrapper(AsyncStreamWrapper[ChunkT]):
         invocation.suspend()
         self._self_chunks: list[Any] = []
 
+    def __del__(self) -> None:
+        try:
+            self._finalize_success()
+        except BaseException:  # pylint: disable=broad-exception-caught
+            pass
+
     async def __anext__(self) -> ChunkT:
         with self._self_tool_invocation.activate():
             return await super().__anext__()
@@ -466,13 +471,7 @@ class AsyncToolStreamWrapper(AsyncStreamWrapper[ChunkT]):
 
     def _process_chunk(self, chunk: ChunkT) -> None:
         if self._self_tool_invocation.should_capture_content:
-            if isinstance(chunk, str):
-                self._self_chunks.append(chunk)
-            else:
-                try:
-                    self._self_chunks.append(gen_ai_json_dumps(chunk))
-                except Exception:
-                    self._self_chunks.append(str(chunk))
+            self._self_chunks.append(chunk)
 
     def _on_stream_end(self) -> None:
         if self._self_tool_invocation.should_capture_content:
