@@ -1693,7 +1693,7 @@ def test_agent_continue_run_with_tools_json_string_and_additional_instructions(
 
 
 def test_agent_continue_run_with_tools_json_string_tool_definitions(
-    instrument_agno,
+    instrument_agno_content_capture,
     span_exporter,
 ) -> None:
     """Test Agent with tools initialized as a JSON string of tool definitions."""
