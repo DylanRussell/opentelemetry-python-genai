@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from agno.agent import RunOutput
     from agno.knowledge.document.base import Document
+    from agno.knowledge.embedder.base import Embedder
     from agno.knowledge.knowledge import Knowledge
     from agno.run.workflow import WorkflowRunOutput
     from agno.team import TeamRunOutput
@@ -51,6 +52,7 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     format_retrieval_document,
     prepare_tool_definitions,
     resolve_embedder_provider,
+    safe_int,
     set_invocation_user_id,
 )
 from opentelemetry.instrumentation.utils import unwrap
@@ -410,7 +412,7 @@ def unpatch_agent() -> None:
 _extract_embedder_provider = resolve_embedder_provider
 
 
-def _extract_embedder_model(embedder: Any) -> str | None:
+def _extract_embedder_model(embedder: Embedder) -> str | None:
     model = (
         getattr(embedder, "id", None)
         or getattr(embedder, "model", None)
@@ -421,12 +423,8 @@ def _extract_embedder_model(embedder: Any) -> str | None:
 
 def _extract_embedder_input_tokens(usage: dict[str, Any]) -> int | None:
     for key in ("prompt_tokens", "input_tokens", "total_tokens"):
-        val = usage.get(key)
-        if val is not None:
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return None
+        if (tok := safe_int(usage.get(key))) is not None:
+            return tok
     return None
 
 
@@ -435,7 +433,7 @@ def _embedder_get_embedding(
 ) -> Callable[..., Any]:
     def traced_method(
         wrapped: Callable[..., Sequence[float]],
-        instance: Any,
+        instance: Embedder,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Sequence[float]:
@@ -452,18 +450,15 @@ def _embedder_get_embedding(
         if request_model:
             invocation.response_model_name = request_model
         set_invocation_user_id(invocation, instance, args, kwargs)
-        if hasattr(instance, "encoding_format") and instance.encoding_format:
-            invocation.encoding_formats = [str(instance.encoding_format)]
+        if encoding_format := getattr(instance, "encoding_format", None):
+            invocation.encoding_formats = [str(encoding_format)]
 
         try:
             result = wrapped(*args, **kwargs)
             if result:
                 invocation.dimension_count = len(result)
-            elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+            else:
+                invocation.dimension_count = safe_int(instance.dimensions)
             invocation.stop()
             return result
         except BaseException as error:
@@ -480,7 +475,7 @@ def _embedder_get_embedding_and_usage(
 ) -> Callable[..., Any]:
     def traced_method(
         wrapped: Callable[..., tuple[Sequence[float], dict[str, Any] | None]],
-        instance: Any,
+        instance: Embedder,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> tuple[Sequence[float], dict[str, Any] | None]:
@@ -497,24 +492,19 @@ def _embedder_get_embedding_and_usage(
         if request_model:
             invocation.response_model_name = request_model
         set_invocation_user_id(invocation, instance, args, kwargs)
-        if hasattr(instance, "encoding_format") and instance.encoding_format:
-            invocation.encoding_formats = [str(instance.encoding_format)]
+        if encoding_format := getattr(instance, "encoding_format", None):
+            invocation.encoding_formats = [str(encoding_format)]
 
         try:
             result = wrapped(*args, **kwargs)
             embedding, usage = result
             if embedding:
                 invocation.dimension_count = len(embedding)
-            elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+            else:
+                invocation.dimension_count = safe_int(instance.dimensions)
 
             if isinstance(usage, dict):
-                input_tokens = _extract_embedder_input_tokens(usage)
-                if input_tokens is not None:
-                    invocation.input_tokens = input_tokens
+                invocation.input_tokens = _extract_embedder_input_tokens(usage)
                 if model := usage.get("model"):
                     invocation.response_model_name = str(model)
 
@@ -534,7 +524,7 @@ def _embedder_async_get_embedding(
 ) -> Callable[..., Any]:
     async def traced_method(
         wrapped: Callable[..., Awaitable[Sequence[float]]],
-        instance: Any,
+        instance: Embedder,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Sequence[float]:
@@ -551,18 +541,15 @@ def _embedder_async_get_embedding(
         if request_model:
             invocation.response_model_name = request_model
         set_invocation_user_id(invocation, instance, args, kwargs)
-        if hasattr(instance, "encoding_format") and instance.encoding_format:
-            invocation.encoding_formats = [str(instance.encoding_format)]
+        if encoding_format := getattr(instance, "encoding_format", None):
+            invocation.encoding_formats = [str(encoding_format)]
 
         try:
             result = await wrapped(*args, **kwargs)
             if result:
                 invocation.dimension_count = len(result)
-            elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+            else:
+                invocation.dimension_count = safe_int(instance.dimensions)
             invocation.stop()
             return result
         except BaseException as error:
@@ -581,7 +568,7 @@ def _embedder_async_get_embedding_and_usage(
         wrapped: Callable[
             ..., Awaitable[tuple[Sequence[float], dict[str, Any] | None]]
         ],
-        instance: Any,
+        instance: Embedder,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> tuple[Sequence[float], dict[str, Any] | None]:
@@ -598,24 +585,19 @@ def _embedder_async_get_embedding_and_usage(
         if request_model:
             invocation.response_model_name = request_model
         set_invocation_user_id(invocation, instance, args, kwargs)
-        if hasattr(instance, "encoding_format") and instance.encoding_format:
-            invocation.encoding_formats = [str(instance.encoding_format)]
+        if encoding_format := getattr(instance, "encoding_format", None):
+            invocation.encoding_formats = [str(encoding_format)]
 
         try:
             result = await wrapped(*args, **kwargs)
             embedding, usage = result
             if embedding:
                 invocation.dimension_count = len(embedding)
-            elif hasattr(instance, "dimensions") and instance.dimensions:
-                try:
-                    invocation.dimension_count = int(instance.dimensions)
-                except (ValueError, TypeError):
-                    pass
+            else:
+                invocation.dimension_count = safe_int(instance.dimensions)
 
             if isinstance(usage, dict):
-                input_tokens = _extract_embedder_input_tokens(usage)
-                if input_tokens is not None:
-                    invocation.input_tokens = input_tokens
+                invocation.input_tokens = _extract_embedder_input_tokens(usage)
                 if model := usage.get("model"):
                     invocation.response_model_name = str(model)
 

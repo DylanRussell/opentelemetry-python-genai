@@ -13,9 +13,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from agno.knowledge.embedder.azure_openai import AzureOpenAIEmbedder
 from agno.knowledge.embedder.base import Embedder
-from agno.knowledge.embedder.google import GeminiEmbedder
 from agno.knowledge.embedder.openai import OpenAIEmbedder
 from agno.knowledge.embedder.openai_like import OpenAILikeEmbedder
+
+try:
+    from agno.knowledge.embedder.google import GeminiEmbedder
+except ImportError:
+    GeminiEmbedder = None
 
 from opentelemetry.instrumentation.genai.agno.utils import (
     resolve_embedder_provider,
@@ -430,6 +434,9 @@ def test_embedder_zero_input_tokens_usage(
     assert spans[0].attributes.get(GEN_AI_USAGE_INPUT_TOKENS) == 0
 
 
+@pytest.mark.skipif(
+    GeminiEmbedder is None, reason="google-genai not installed"
+)
 def test_embedder_provider_extraction_gemini(
     instrument_agno,
     span_exporter,
@@ -506,16 +513,20 @@ def test_resolve_embedder_provider_unit() -> None:
         resolve_embedder_provider(AzureOpenAIEmbedder(api_key="fake"))
         == "azure.ai.openai"
     )
-    assert (
-        resolve_embedder_provider(GeminiEmbedder(api_key="fake"))
-        == "gcp.gemini"
-    )
-    assert (
-        resolve_embedder_provider(
-            GeminiEmbedder(api_key="fake", vertexai=True)
+    if GeminiEmbedder is not None:
+        assert (
+            resolve_embedder_provider(GeminiEmbedder(api_key="fake"))
+            == "gcp.gemini"
         )
-        == "gcp.vertex_ai"
-    )
+        assert (
+            resolve_embedder_provider(
+                GeminiEmbedder(api_key="fake", vertexai=True)
+            )
+            == "gcp.vertex_ai"
+        )
+    else:
+        gemini_stub = type("GeminiEmbedder", (Embedder,), {})
+        assert resolve_embedder_provider(gemini_stub()) == "gcp.gemini"
 
     # Class hierarchy check for other embedders via stub subclasses of Embedder
     class AwsBedrockEmbedder(Embedder):
