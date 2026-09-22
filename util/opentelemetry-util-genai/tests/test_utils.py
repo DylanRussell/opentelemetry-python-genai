@@ -55,7 +55,6 @@ from opentelemetry.util.genai.types import (
     UriPart,
 )
 from opentelemetry.util.genai.utils import (
-    _get_signature,
     _should_emit_event,
     bind_arguments,
     decode_base64,
@@ -1959,5 +1958,18 @@ class TestArgumentBinding(unittest.TestCase):
                 pass
 
         obj = UnhashableCallable()
-        sig = _get_signature(obj)
+        sig = get_signature(obj)
         self.assertIn("x", sig.parameters)
+
+    def test_get_argument_skips_binding_when_no_args_or_defaults(self):
+        def sample_func(user_id: str | None = None):
+            pass
+
+        with patch(
+            "opentelemetry.util.genai.utils.bind_arguments"
+        ) as mock_bind:
+            val = get_argument(
+                "user_id", sample_func, (), {"other": "val"}, default="fallback"
+            )
+            self.assertEqual(val, "fallback")
+            mock_bind.assert_not_called()

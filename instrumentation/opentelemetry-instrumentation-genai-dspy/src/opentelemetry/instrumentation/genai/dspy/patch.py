@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import copy, deepcopy
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
@@ -36,7 +36,7 @@ from opentelemetry.util.genai.types import (
     OutputMessage,
     TextPart,
 )
-from opentelemetry.util.genai.utils import bind_arguments, get_argument
+from opentelemetry.util.genai.utils import bind_arguments
 
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
@@ -406,21 +406,17 @@ def _react_aforward(
 
 
 def _extract_retrieval_query(
-    wrapped: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
+    bound: Mapping[str, object],
 ) -> str | None:
-    val = get_argument("query", wrapped, args, kwargs)
+    val = bound.get("query")
     return str(val) if val is not None else None
 
 
 def _extract_retrieval_k(
     instance: Any,
-    wrapped: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
+    bound: Mapping[str, object],
 ) -> int | None:
-    k = get_argument("k", wrapped, args, kwargs)
+    k = bound.get("k")
     if k is None and hasattr(instance, "k"):
         k = getattr(instance, "k", None)
     if k is not None:
@@ -460,8 +456,9 @@ def _start_retrieval_invocation(
         else None,
     )
 
-    invocation.query_text = _extract_retrieval_query(wrapped, args, kwargs)
-    invocation.top_k = _extract_retrieval_k(instance, wrapped, args, kwargs)
+    bound = bind_arguments(wrapped, args, kwargs)
+    invocation.query_text = _extract_retrieval_query(bound)
+    invocation.top_k = _extract_retrieval_k(instance, bound)
     return invocation
 
 

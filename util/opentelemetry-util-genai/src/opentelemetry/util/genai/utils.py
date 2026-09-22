@@ -246,9 +246,6 @@ def get_signature(func: Callable[..., object]) -> inspect.Signature:
     return _inspect_signature(func)
 
 
-_get_signature = get_signature
-
-
 def bind_arguments(
     func: Callable[..., object],
     args: tuple[object, ...],
@@ -279,5 +276,7 @@ def get_argument(
     """Extract a named argument from kwargs or args via signature binding."""
     if name in kwargs:
         return kwargs[name]
+    if not args and not apply_defaults:
+        return default
     bound = bind_arguments(func, args, kwargs, apply_defaults=apply_defaults)
     return bound.get(name, default)
