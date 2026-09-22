@@ -763,21 +763,23 @@ def test_base_exception_tool_finishes(
 
 
 def test_tool_stream_restores_caller_context(
-    instrument_agno, span_exporter
+    instrument_agno_content_capture, span_exporter
 ) -> None:
     from opentelemetry.trace import get_current_span
 
     inside = []
 
-    def streaming_tool() -> Iterator[str]:
+    def streaming_tool(prefix: str) -> Iterator[str]:
         inside.append(get_current_span())
-        yield "chunk"
+        yield f"{prefix}_1"
         inside.append(get_current_span())
-        yield "chunk2"
+        yield f"{prefix}_2"
 
     caller = get_current_span()
     call = FunctionCall(
-        function=Function.from_callable(streaming_tool), arguments={}
+        function=Function.from_callable(streaming_tool),
+        arguments={"prefix": "chunk"},
+        call_id="call_ctx_sync",
     )
     result = call.execute()
     current_after_return = get_current_span()
@@ -788,7 +790,7 @@ def test_tool_stream_restores_caller_context(
         # The caller holds control between chunks.
         assert get_current_span() is caller
 
-    assert chunks == ["chunk", "chunk2"]
+    assert chunks == ["chunk_1", "chunk_2"]
     assert current_after_return is caller
     assert get_current_span() is caller
 
@@ -796,25 +798,34 @@ def test_tool_stream_restores_caller_context(
     assert [s.get_span_context().span_id for s in inside] == [
         tool_span.context.span_id
     ] * 2
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "chunk"})
+    assert (
+        tool_span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT)
+        == "chunk_1chunk_2"
+    )
 
 
 def test_async_tool_stream_restores_caller_context(
-    instrument_agno, span_exporter
+    instrument_agno_content_capture, span_exporter
 ) -> None:
     from opentelemetry.trace import get_current_span
 
     inside = []
 
-    async def streaming_tool() -> AsyncIterator[str]:
+    async def streaming_tool(prefix: str) -> AsyncIterator[str]:
         inside.append(get_current_span())
-        yield "chunk"
+        yield f"{prefix}_1"
         inside.append(get_current_span())
-        yield "chunk2"
+        yield f"{prefix}_2"
 
     async def _test() -> None:
         caller = get_current_span()
         call = FunctionCall(
-            function=Function.from_callable(streaming_tool), arguments={}
+            function=Function.from_callable(streaming_tool),
+            arguments={"prefix": "chunk"},
+            call_id="call_ctx_async",
         )
         result = await call.aexecute()
         current_after_return = get_current_span()
@@ -825,7 +836,7 @@ def test_async_tool_stream_restores_caller_context(
             # The caller holds control between chunks.
             assert get_current_span() is caller
 
-        assert chunks == ["chunk", "chunk2"]
+        assert chunks == ["chunk_1", "chunk_2"]
         assert current_after_return is caller
         assert get_current_span() is caller
 
@@ -835,3 +846,297 @@ def test_async_tool_stream_restores_caller_context(
     assert [s.get_span_context().span_id for s in inside] == [
         tool_span.context.span_id
     ] * 2
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "chunk"})
+    assert (
+        tool_span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT)
+        == "chunk_1chunk_2"
+    )
+
+
+def test_tool_call_execute_streaming_non_string_chunks(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    def stream_dicts(count: int):
+        """Yield dictionary chunks."""
+        for idx in range(count):
+            yield {"index": idx}
+
+    call = FunctionCall(
+        function=Function.from_callable(stream_dicts),
+        arguments={"count": 2},
+        call_id="call_stream_dicts_sync",
+    )
+    result = call.execute()
+    assert list(result.result) == [{"index": 0}, {"index": 1}]
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"count": 2})
+    assert json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_TOOL_CALL_RESULT]
+    ) == [{"index": 0}, {"index": 1}]
+
+
+def test_tool_call_aexecute_streaming_non_string_chunks(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    async def async_stream_dicts(count: int):
+        """Yield async dictionary chunks."""
+        for idx in range(count):
+            yield {"index": idx}
+
+    call = FunctionCall(
+        function=Function.from_callable(async_stream_dicts),
+        arguments={"count": 2},
+        call_id="call_stream_dicts_async",
+    )
+
+    async def _test() -> None:
+        result = await call.aexecute()
+        chunks = [chunk async for chunk in result.result]
+        assert chunks == [{"index": 0}, {"index": 1}]
+
+    asyncio.run(_test())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"count": 2})
+    assert json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_TOOL_CALL_RESULT]
+    ) == [{"index": 0}, {"index": 1}]
+
+
+def test_tool_stream_mid_iteration_error(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    from opentelemetry.trace import StatusCode, get_current_span
+
+    inside = []
+
+    def failing_streaming_tool(prefix: str) -> Iterator[str]:
+        inside.append(get_current_span())
+        yield f"{prefix}_1"
+        inside.append(get_current_span())
+        raise ValueError("mid-iteration failure")
+
+    caller = get_current_span()
+    call = FunctionCall(
+        function=Function.from_callable(failing_streaming_tool),
+        arguments={"prefix": "part"},
+        call_id="call_mid_err_sync",
+    )
+    result = call.execute()
+    assert get_current_span() is caller
+
+    chunks = []
+    with pytest.raises(ValueError, match="mid-iteration failure"):
+        for chunk in result.result:
+            chunks.append(chunk)
+            assert get_current_span() is caller
+
+    assert chunks == ["part_1"]
+    assert get_current_span() is caller
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    tool_span = spans[0]
+    assert tool_span.status.status_code == StatusCode.ERROR
+    assert tool_span.attributes.get("error.type") == "ValueError"
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "part"})
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ] * 2
+
+
+def test_async_tool_stream_mid_iteration_error(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    from opentelemetry.trace import StatusCode, get_current_span
+
+    inside = []
+
+    async def failing_streaming_tool(prefix: str) -> AsyncIterator[str]:
+        inside.append(get_current_span())
+        yield f"{prefix}_1"
+        inside.append(get_current_span())
+        raise ValueError("async mid-iteration failure")
+
+    async def _test() -> None:
+        caller = get_current_span()
+        call = FunctionCall(
+            function=Function.from_callable(failing_streaming_tool),
+            arguments={"prefix": "part"},
+            call_id="call_mid_err_async",
+        )
+        result = await call.aexecute()
+        assert get_current_span() is caller
+
+        chunks = []
+        with pytest.raises(ValueError, match="async mid-iteration failure"):
+            async for chunk in result.result:
+                chunks.append(chunk)
+                assert get_current_span() is caller
+
+        assert chunks == ["part_1"]
+        assert get_current_span() is caller
+
+    asyncio.run(_test())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    tool_span = spans[0]
+    assert tool_span.status.status_code == StatusCode.ERROR
+    assert tool_span.attributes.get("error.type") == "ValueError"
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "part"})
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ] * 2
+
+
+@pytest.mark.parametrize("use_context_manager", [True, False])
+def test_tool_stream_early_break(
+    instrument_agno_content_capture,
+    span_exporter,
+    use_context_manager: bool,
+) -> None:
+    from opentelemetry.trace import StatusCode, get_current_span
+
+    inside = []
+    cleanup = []
+
+    def streaming_tool(prefix: str) -> Iterator[str]:
+        try:
+            inside.append(get_current_span())
+            yield f"{prefix}_1"
+            inside.append(get_current_span())
+            yield f"{prefix}_2"
+        finally:
+            cleanup.append(get_current_span())
+
+    caller = get_current_span()
+    call = FunctionCall(
+        function=Function.from_callable(streaming_tool),
+        arguments={"prefix": "part"},
+        call_id="call_break_sync",
+    )
+    result = call.execute()
+    assert get_current_span() is caller
+
+    chunks = []
+    if use_context_manager:
+        with result.result as stream:
+            for chunk in stream:
+                chunks.append(chunk)
+                assert get_current_span() is caller
+                break
+    else:
+        for chunk in result.result:
+            chunks.append(chunk)
+            assert get_current_span() is caller
+            break
+        result.result.close()
+
+    assert chunks == ["part_1"]
+    assert get_current_span() is caller
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    tool_span = spans[0]
+    assert tool_span.status.status_code != StatusCode.ERROR
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "part"})
+    assert (
+        tool_span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT)
+        == "part_1"
+    )
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ]
+    assert [s.get_span_context().span_id for s in cleanup] == [
+        tool_span.context.span_id
+    ]
+
+
+@pytest.mark.parametrize("use_context_manager", [True, False])
+def test_async_tool_stream_early_break(
+    instrument_agno_content_capture,
+    span_exporter,
+    use_context_manager: bool,
+) -> None:
+    from opentelemetry.trace import StatusCode, get_current_span
+
+    inside = []
+    cleanup = []
+
+    async def streaming_tool(prefix: str) -> AsyncIterator[str]:
+        try:
+            inside.append(get_current_span())
+            yield f"{prefix}_1"
+            inside.append(get_current_span())
+            yield f"{prefix}_2"
+        finally:
+            cleanup.append(get_current_span())
+
+    async def _test() -> None:
+        caller = get_current_span()
+        call = FunctionCall(
+            function=Function.from_callable(streaming_tool),
+            arguments={"prefix": "part"},
+            call_id="call_break_async",
+        )
+        result = await call.aexecute()
+        assert get_current_span() is caller
+
+        chunks = []
+        if use_context_manager:
+            async with result.result as stream:
+                async for chunk in stream:
+                    chunks.append(chunk)
+                    assert get_current_span() is caller
+                    break
+        else:
+            async for chunk in result.result:
+                chunks.append(chunk)
+                assert get_current_span() is caller
+                break
+            await result.result.aclose()
+
+        assert chunks == ["part_1"]
+        assert get_current_span() is caller
+
+    asyncio.run(_test())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    tool_span = spans[0]
+    assert tool_span.status.status_code != StatusCode.ERROR
+    assert tool_span.attributes.get(
+        GenAIAttributes.GEN_AI_TOOL_CALL_ARGUMENTS
+    ) == json.dumps({"prefix": "part"})
+    assert (
+        tool_span.attributes.get(GenAIAttributes.GEN_AI_TOOL_CALL_RESULT)
+        == "part_1"
+    )
+    assert [s.get_span_context().span_id for s in inside] == [
+        tool_span.context.span_id
+    ]
+    assert [s.get_span_context().span_id for s in cleanup] == [
+        tool_span.context.span_id
+    ]
