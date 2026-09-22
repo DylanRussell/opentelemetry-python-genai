@@ -698,17 +698,19 @@ def extract_model_finish_reasons(
     return ["stop"]
 
 
-def _extract_tool_call_parts(tool_calls: Any) -> list[MessagePart]:
+def _extract_tool_call_parts(
+    tool_calls: list[dict[str, Any]] | None,
+) -> list[MessagePart]:
     parts: list[MessagePart] = []
     if not tool_calls:
         return parts
     for tc in tool_calls:
-        tc_id = _get_property_value(tc, "id")
-        fn = _get_property_value(tc, "function")
-        target = fn if fn is not None else tc
-        fn_name_val = _get_property_value(target, "name")
+        tc_id = tc.get("id")
+        fn: dict[str, Any] | None = tc.get("function")
+        target = fn or tc
+        fn_name_val = target.get("name")
         fn_name = str(fn_name_val) if fn_name_val else ""
-        fn_args = _get_property_value(target, "arguments")
+        fn_args = target.get("arguments")
         parts.append(
             ToolCallRequestPart(
                 id=str(tc_id) if tc_id is not None else None,
@@ -720,54 +722,43 @@ def _extract_tool_call_parts(tool_calls: Any) -> list[MessagePart]:
 
 
 def format_model_input_messages(
-    messages: Iterable[Any],
+    messages: Iterable[Message],
 ) -> list[InputMessage]:
-    """Format an iterable of Agno Message objects or dicts into InputMessage list."""
+    """Format an iterable of Agno Message objects into InputMessage list."""
     result: list[InputMessage] = []
     for msg in messages:
-        if msg is None:
-            continue
-        role_raw = _get_property_value(msg, "role")
-        role_str = str(role_raw).lower() if role_raw is not None else "user"
-
-        name = _get_property_value(msg, "name")
-        name_str = str(name) if name is not None else None
+        role_str = msg.role.lower() if msg.role else "user"
+        name_str = str(msg.name) if msg.name is not None else None
 
         parts: list[MessagePart] = []
 
         # Tool response message
-        tool_call_id = _get_property_value(msg, "tool_call_id")
-
-        if role_str == "tool" or tool_call_id is not None:
-            role_str = Role.TOOL.value
-            content = _get_property_value(msg, "content")
+        if role_str == "tool" or msg.tool_call_id is not None:
             parts.append(
                 ToolCallResponsePart(
-                    id=str(tool_call_id) if tool_call_id is not None else None,
-                    response=format_content(content)
-                    if content is not None
+                    id=str(msg.tool_call_id)
+                    if msg.tool_call_id is not None
+                    else None,
+                    response=format_content(msg.content)
+                    if msg.content is not None
                     else "",
                 )
             )
             result.append(
-                InputMessage(role=role_str, parts=parts, name=name_str)
+                InputMessage(role=Role.TOOL.value, parts=parts, name=name_str)
             )
             continue
 
         # Reasoning content
-        reasoning_content = _get_property_value(msg, "reasoning_content")
-        if reasoning_content:
-            parts.append(ReasoningPart(content=str(reasoning_content)))
+        if msg.reasoning_content:
+            parts.append(ReasoningPart(content=str(msg.reasoning_content)))
 
         # Tool calls requested by assistant in history
-        parts.extend(
-            _extract_tool_call_parts(_get_property_value(msg, "tool_calls"))
-        )
+        parts.extend(_extract_tool_call_parts(msg.tool_calls))
 
         # Main content
-        content = _get_property_value(msg, "content")
-        if content is not None:
-            formatted_content = format_content(content)
+        if msg.content is not None:
+            formatted_content = format_content(msg.content)
             if formatted_content or not parts:
                 parts.append(TextPart(content=formatted_content))
 
@@ -792,28 +783,22 @@ def format_model_output_message(
     """Format an Agno assistant message into an OutputMessage."""
     parts: list[MessagePart] = []
 
-    reasoning_content = _get_property_value(
-        assistant_message, "reasoning_content"
-    )
-    if reasoning_content:
-        parts.append(ReasoningPart(content=str(reasoning_content)))
+    if assistant_message.reasoning_content:
+        parts.append(
+            ReasoningPart(content=str(assistant_message.reasoning_content))
+        )
 
-    content = _get_property_value(assistant_message, "content")
-    if content is not None:
-        formatted = format_content(content)
+    if assistant_message.content is not None:
+        formatted = format_content(assistant_message.content)
         if formatted:
             parts.append(TextPart(content=formatted))
 
-    parts.extend(
-        _extract_tool_call_parts(
-            _get_property_value(assistant_message, "tool_calls")
-        )
-    )
+    parts.extend(_extract_tool_call_parts(assistant_message.tool_calls))
 
     if not parts:
         parts.append(TextPart(content=""))
 
-    name = _get_property_value(assistant_message, "name")
+    name = getattr(assistant_message, "name", None)
     name_str = str(name) if name is not None else None
 
     return OutputMessage(
