@@ -1969,7 +1969,11 @@ class TestArgumentBinding(unittest.TestCase):
             "opentelemetry.util.genai.utils.bind_arguments"
         ) as mock_bind:
             val = get_argument(
-                "user_id", sample_func, (), {"other": "val"}, default="fallback"
+                "user_id",
+                sample_func,
+                (),
+                {"other": "val"},
+                default="fallback",
             )
             self.assertEqual(val, "fallback")
             mock_bind.assert_not_called()
