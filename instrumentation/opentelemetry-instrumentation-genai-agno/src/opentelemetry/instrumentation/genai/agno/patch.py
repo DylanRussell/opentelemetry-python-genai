@@ -65,6 +65,7 @@ from opentelemetry.util.genai.types import (
     Role,
     TextPart,
 )
+from opentelemetry.util.genai.utils import get_argument
 
 logger = logging.getLogger(__name__)
 
@@ -299,9 +300,10 @@ def _set_invocation_input(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
 ) -> None:
-    if capture_content and (args or "input" in kwargs):
-        input_val = args[0] if args else kwargs.get("input")
+    if capture_content:
+        input_val = get_argument("input", wrapped, args, kwargs)
         if input_val is not None:
             content_str = _extract_input_content(input_val)
             invocation.input_messages = [
@@ -342,9 +344,12 @@ def _start_agent_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
 ) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
-    model_obj = kwargs.get("model") or getattr(instance, "model", None)
+    model_obj = get_argument("model", wrapped, args, kwargs) or getattr(
+        instance, "model", None
+    )
     request_model = None
     if model_obj is not None:
         request_model = (
@@ -361,7 +366,9 @@ def _start_agent_invocation(
     if description:
         invocation.agent_description = str(description)
 
-    _set_invocation_input(invocation, instance, args, kwargs, capture_content)
+    _set_invocation_input(
+        invocation, instance, args, kwargs, capture_content, wrapped
+    )
     invocation.tool_definitions = prepare_tool_definitions(
         getattr(instance, "tools", None)
     )
@@ -401,7 +408,7 @@ def _agent_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -434,14 +441,24 @@ def _agent_arun(
             result = wrapped(*args, **kwargs)
         except Exception as error:
             invocation = _start_agent_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             invocation.fail(error)
             raise
 
         if isinstance(result, AsyncIterator):
             invocation = _start_agent_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             return AsyncAgnoAgentStreamWrapper(
                 result, invocation, capture_content
@@ -452,7 +469,12 @@ def _agent_arun(
             @functools.wraps(wrapped)
             async def _await_result() -> object:
                 invocation = _start_agent_invocation(
-                    handler, instance, args, kwargs, capture_content
+                    handler,
+                    instance,
+                    args,
+                    kwargs,
+                    capture_content,
+                    wrapped=wrapped,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -473,7 +495,7 @@ def _agent_arun(
             return _await_result()
 
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()
@@ -556,10 +578,13 @@ def _start_workflow_invocation(
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
+    wrapped: Callable[..., Any],
 ) -> WorkflowInvocation:
     workflow_name = getattr(instance, "name", None)
     invocation = handler.workflow(name=workflow_name)
-    _set_invocation_input(invocation, instance, args, kwargs, capture_content)
+    _set_invocation_input(
+        invocation, instance, args, kwargs, capture_content, wrapped
+    )
     return invocation
 
 
@@ -575,7 +600,7 @@ def _workflow_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -610,14 +635,24 @@ def _workflow_arun(
             result = wrapped(*args, **kwargs)
         except Exception as error:
             invocation = _start_workflow_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             invocation.fail(error)
             raise
 
         if isinstance(result, AsyncIterator):
             invocation = _start_workflow_invocation(
-                handler, instance, args, kwargs, capture_content
+                handler,
+                instance,
+                args,
+                kwargs,
+                capture_content,
+                wrapped=wrapped,
             )
             return AsyncAgnoWorkflowStreamWrapper(
                 result, invocation, capture_content
@@ -628,7 +663,12 @@ def _workflow_arun(
             @functools.wraps(wrapped)
             async def _await_result() -> object:
                 invocation = _start_workflow_invocation(
-                    handler, instance, args, kwargs, capture_content
+                    handler,
+                    instance,
+                    args,
+                    kwargs,
+                    capture_content,
+                    wrapped=wrapped,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -649,7 +689,7 @@ def _workflow_arun(
             return _await_result()
 
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content
+            handler, instance, args, kwargs, capture_content, wrapped=wrapped
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()
@@ -663,6 +703,7 @@ def _start_retrieval_invocation(
     instance: Knowledge,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
+    wrapped: Callable[..., Any],
 ) -> RetrievalInvocation:
     vector_db = instance.vector_db
     data_source_id = (
@@ -707,19 +748,15 @@ def _start_retrieval_invocation(
         else None,
     )
 
-    query = args[0] if args else kwargs.get("query")
+    query = get_argument("query", wrapped, args, kwargs)
     if query is not None:
         invocation.query_text = str(query)
 
-    max_results = None
-    if len(args) > 1 and args[1] is not None:
-        max_results = args[1]
-    elif kwargs.get("max_results") is not None:
-        max_results = kwargs.get("max_results")
-    else:
+    max_results = get_argument("max_results", wrapped, args, kwargs)
+    if max_results is None:
         max_results = instance.max_results
 
-    if max_results is not None:
+    if isinstance(max_results, (int, float, str)):
         try:
             invocation.top_k = int(max_results)
         except (ValueError, TypeError):
@@ -738,7 +775,7 @@ def _knowledge_search(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs
+            handler, instance, args, kwargs, wrapped=wrapped
         )
         try:
             result = wrapped(*args, **kwargs)
@@ -766,7 +803,7 @@ def _knowledge_asearch(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_retrieval_invocation(
-            handler, instance, args, kwargs
+            handler, instance, args, kwargs, wrapped=wrapped
         )
         try:
             result = await wrapped(*args, **kwargs)
