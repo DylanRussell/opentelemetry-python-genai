@@ -738,8 +738,8 @@ def _infer_mime_type(media: MediaItem, modality: Modality) -> str | None:
         guessed, _ = mimetypes.guess_type(f"file.{fmt}")
         if guessed:
             return guessed
-        if modality in ("image", "audio", "video"):
-            return f"{modality}/{fmt}"
+        if modality in (Modality.IMAGE, Modality.AUDIO, Modality.VIDEO):
+            return f"{modality.value}/{fmt}"
         return f"application/{fmt}"
     for path_attr in ("filepath", "filename", "url"):
         path_val = getattr(media, path_attr, None)
@@ -842,15 +842,23 @@ def _append_media_items(
 
 def _extract_media_parts(obj: Message | ModelResponse) -> list[MessagePart]:
     parts: list[MessagePart] = []
-    _append_media_items(parts, obj.images, "image")
-    _append_media_items(parts, getattr(obj, "image_output", None), "image")
-    _append_media_items(parts, obj.audio, "audio")
-    _append_media_items(parts, getattr(obj, "audios", None), "audio")
-    _append_media_items(parts, getattr(obj, "audio_output", None), "audio")
-    _append_media_items(parts, obj.videos, "video")
-    _append_media_items(parts, getattr(obj, "video_output", None), "video")
-    _append_media_items(parts, obj.files, "document")
-    _append_media_items(parts, getattr(obj, "file_output", None), "document")
+    _append_media_items(parts, obj.images, Modality.IMAGE)
+    _append_media_items(
+        parts, getattr(obj, "image_output", None), Modality.IMAGE
+    )
+    _append_media_items(parts, obj.audio, Modality.AUDIO)
+    _append_media_items(parts, getattr(obj, "audios", None), Modality.AUDIO)
+    _append_media_items(
+        parts, getattr(obj, "audio_output", None), Modality.AUDIO
+    )
+    _append_media_items(parts, obj.videos, Modality.VIDEO)
+    _append_media_items(
+        parts, getattr(obj, "video_output", None), Modality.VIDEO
+    )
+    _append_media_items(parts, obj.files, Modality.DOCUMENT)
+    _append_media_items(
+        parts, getattr(obj, "file_output", None), Modality.DOCUMENT
+    )
     return parts
 
 
