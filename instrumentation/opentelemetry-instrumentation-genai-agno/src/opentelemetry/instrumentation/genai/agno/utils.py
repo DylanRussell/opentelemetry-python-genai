@@ -46,16 +46,10 @@ def safe_float(val: Any) -> float | None:
 
 
 def format_retrieval_document(doc: Document) -> RetrievalDocument:
-    """Format an Agno Document into a RetrievalDocument model."""
-    metadata: dict[str, Any] | None = None
-    if doc.meta_data:
-        metadata = dict(doc.meta_data)
-
+    """Format an Agno Document into a RetrievalDocument."""
     return RetrievalDocument(
-        content=doc.content,
         id=str(doc.id) if doc.id is not None else None,
         score=safe_float(doc.reranking_score),
-        metadata=metadata,
     )
 
 
