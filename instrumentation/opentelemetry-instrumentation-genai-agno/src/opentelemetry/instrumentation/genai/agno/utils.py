@@ -623,8 +623,11 @@ _MODEL_CLASS_NAME_TO_PROVIDER: dict[str, str] = {
 
 def resolve_model_provider(model: Model) -> str:
     """Resolve the ``gen_ai.provider.name`` value for an Agno model instance."""
-    is_vertex = getattr(model, "vertexai", False) or (
-        os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
+    google_provider = (
+        GenAiProviderNameValues.GCP_VERTEX_AI.value
+        if getattr(model, "vertexai", False)
+        or (os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true")
+        else GenAiProviderNameValues.GCP_GEMINI.value
     )
 
     # 1. Explicit provider attribute on the model
@@ -633,9 +636,7 @@ def resolve_model_provider(model: Model) -> str:
         if isinstance(provider_attr, str):
             p_name = provider_attr.strip().lower()
             if p_name in ("google", "gemini"):
-                if is_vertex:
-                    return GenAiProviderNameValues.GCP_VERTEX_AI.value
-                return GenAiProviderNameValues.GCP_GEMINI.value
+                return google_provider
             if p_name in _KNOWN_PROVIDERS:
                 return _KNOWN_PROVIDERS[p_name]
             p_clean = "".join(c for c in p_name if c.isalnum())
@@ -656,9 +657,7 @@ def resolve_model_provider(model: Model) -> str:
     for cls in type(model).__mro__:
         cls_name = cls.__name__
         if cls_name in ("Gemini", "Google", "GeminiInteractions"):
-            if is_vertex:
-                return GenAiProviderNameValues.GCP_VERTEX_AI.value
-            return GenAiProviderNameValues.GCP_GEMINI.value
+            return google_provider
         if cls_name in _MODEL_CLASS_NAME_TO_PROVIDER:
             return _MODEL_CLASS_NAME_TO_PROVIDER[cls_name]
         if cls_name in ("OpenAILike", "Model"):
@@ -678,9 +677,9 @@ def resolve_model_provider(model: Model) -> str:
             "fallback",
         ):
             if sub in ("google", "gemini", "vertexai"):
-                if is_vertex or sub == "vertexai":
+                if sub == "vertexai":
                     return GenAiProviderNameValues.GCP_VERTEX_AI.value
-                return GenAiProviderNameValues.GCP_GEMINI.value
+                return google_provider
             if sub in _KNOWN_PROVIDERS:
                 return _KNOWN_PROVIDERS[sub]
             return sub
