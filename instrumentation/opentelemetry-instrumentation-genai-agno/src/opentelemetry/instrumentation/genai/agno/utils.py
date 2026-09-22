@@ -21,23 +21,16 @@ from opentelemetry.util.genai.types import (
 
 
 def format_retrieval_document(doc: Document) -> RetrievalDocument:
-    """Format an Agno Document into a RetrievalDocument model."""
+    """Format an Agno Document into a RetrievalDocument."""
     score: float | None = None
     if doc.reranking_score is not None:
         try:
             score = float(doc.reranking_score)
         except (ValueError, TypeError):
             pass
-
-    metadata: dict[str, Any] | None = None
-    if doc.meta_data:
-        metadata = dict(doc.meta_data)
-
     return RetrievalDocument(
-        content=doc.content,
         id=str(doc.id) if doc.id is not None else None,
         score=score,
-        metadata=metadata,
     )
 
 
