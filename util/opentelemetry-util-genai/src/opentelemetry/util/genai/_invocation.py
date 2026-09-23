@@ -79,6 +79,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         *,
         start_attributes: dict[str, AttributeValue] | None = None,
         context: Context | None = None,
+        _attach_to_context: bool = True,
         conversation_id: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
     ) -> None:
@@ -123,8 +124,9 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             context=context,
         )
         self._span_context: Context = set_span_in_context(self.span, context)
-        self._context_token: ContextToken | None = attach(self._span_context)
-        self._finished: bool = False
+        self._context_token: ContextToken | None = (
+            attach(self._span_context) if _attach_to_context else None
+        )
         self._monotonic_start_s: float = timeit.default_timer()
         # Streaming state, set when the invocation is handed to a stream
         # wrapper. ``_request_stream`` marks the request as streamed
@@ -133,6 +135,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         self._request_stream: bool | None = None
         self._ttfc_seconds: float | None = None
         self._stream_last_chunk_at: float | None = None
+        self._finished: bool = False
 
     @property
     def should_capture_content(self) -> bool:
