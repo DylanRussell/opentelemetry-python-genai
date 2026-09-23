@@ -397,27 +397,26 @@ def _set_invocation_input(
 
 
 def _extract_continue_input(
+    wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> Any:
-    if "input" in kwargs and kwargs["input"] is not None:
-        return kwargs["input"]
-    if (
-        "additional_instructions" in kwargs
-        and kwargs["additional_instructions"] is not None
+    for param in (
+        "input",
+        "additional_instructions",
+        "additionalInstructions",
     ):
-        return kwargs["additional_instructions"]
-    if (
-        "additionalInstructions" in kwargs
-        and kwargs["additionalInstructions"] is not None
-    ):
-        return kwargs["additionalInstructions"]
+        val = get_argument(param, wrapped, args, kwargs)
+        if val is not None:
+            return val
     if args and isinstance(args[0], str):
         return args[0]
     return None
 
 
 def _extract_continue_tool_results(
+    wrapped: Callable[..., Any],
+    args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> list[tuple[str, Any]]:
     """Extract tool call results passed to continue_run.
@@ -429,9 +428,9 @@ def _extract_continue_tool_results(
     - ``requirements``: list of RunRequirement objects containing tool_execution
     """
     raw_tools: Any = (
-        kwargs.get("tools")
-        or kwargs.get("updated_tools")
-        or kwargs.get("requirements")
+        get_argument("tools", wrapped, args, kwargs)
+        or get_argument("updated_tools", wrapped, args, kwargs)
+        or get_argument("requirements", wrapped, args, kwargs)
     )
     if not raw_tools:
         return []
@@ -497,13 +496,16 @@ def _extract_continue_tool_results(
 
 def _extract_continue_session_id(
     instance: Any,
+    wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> str | None:
-    session_id = kwargs.get("session_id")
+    session_id = get_argument("session_id", wrapped, args, kwargs)
     if session_id:
         return str(session_id)
-    run_response = kwargs.get("run_response") or (args[0] if args else None)
+    run_response = get_argument("run_response", wrapped, args, kwargs) or (
+        args[0] if args else None
+    )
     if run_response is not None:
         sid = getattr(run_response, "session_id", None)
         if sid:
@@ -516,6 +518,7 @@ def _extract_continue_session_id(
 
 def _set_continue_invocation_input(
     invocation: LocalAgentInvocation | WorkflowInvocation,
+    wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     capture_content: bool,
@@ -524,7 +527,7 @@ def _set_continue_invocation_input(
         return
     messages: list[InputMessage] = []
 
-    tool_results = _extract_continue_tool_results(kwargs)
+    tool_results = _extract_continue_tool_results(wrapped, args, kwargs)
     for call_id, resp in tool_results:
         messages.append(
             InputMessage(
@@ -538,7 +541,7 @@ def _set_continue_invocation_input(
             )
         )
 
-    input_val = _extract_continue_input(args, kwargs)
+    input_val = _extract_continue_input(wrapped, args, kwargs)
     if input_val is not None:
         content_str = _extract_input_content(input_val)
         if content_str:
@@ -610,9 +613,11 @@ def _start_agent_invocation(
 
     if is_continue:
         _set_continue_invocation_input(
-            invocation, args, kwargs, capture_content
+            invocation, wrapped, args, kwargs, capture_content
         )
-        session_id = _extract_continue_session_id(instance, args, kwargs)
+        session_id = _extract_continue_session_id(
+            instance, wrapped, args, kwargs
+        )
         if session_id:
             invocation.conversation_id = session_id
     else:
@@ -624,8 +629,10 @@ def _start_agent_invocation(
             invocation.conversation_id = str(session_id)
 
     tool_defs = prepare_tool_definitions(getattr(instance, "tools", None))
-    if not tool_defs and "tools" in kwargs:
-        tool_defs = prepare_tool_definitions(kwargs.get("tools"))
+    if not tool_defs:
+        tools_arg = get_argument("tools", wrapped, args, kwargs)
+        if tools_arg is not None:
+            tool_defs = prepare_tool_definitions(tools_arg)
     invocation.tool_definitions = tool_defs
     return invocation
 
@@ -892,9 +899,11 @@ def _start_workflow_invocation(
     invocation = handler.workflow(name=workflow_name)
     if is_continue:
         _set_continue_invocation_input(
-            invocation, args, kwargs, capture_content
+            invocation, wrapped, args, kwargs, capture_content
         )
-        session_id = _extract_continue_session_id(instance, args, kwargs)
+        session_id = _extract_continue_session_id(
+            instance, wrapped, args, kwargs
+        )
         if session_id:
             invocation.conversation_id = session_id
     else:
