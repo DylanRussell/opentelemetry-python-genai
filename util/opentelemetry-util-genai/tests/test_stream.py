@@ -1576,3 +1576,34 @@ def test_sync_tool_stream_wrapper_restores_context_when_abandoned_via_close():
     assert get_current_span() is caller_span
     assert invocation._context_token is None
     assert len(span_exporter.get_finished_spans()) == 1
+
+
+def test_sync_tool_stream_wrapper_finalizes_failure_on_del():
+    invocation, span_exporter = _started_tool_invocation()
+    stream = _FakeSyncStream(chunks=["a", "b"])
+    wrapper = SyncToolStreamWrapper(stream, invocation)
+    assert next(wrapper) == "a"
+
+    wrapper.__del__()
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].status.status_code is StatusCode.ERROR
+    assert spans[0].attributes["error.type"] == "GeneratorExit"
+
+
+def test_async_tool_stream_wrapper_finalizes_failure_on_del():
+    async def exercise():
+        invocation, span_exporter = _started_tool_invocation()
+        stream = _FakeAsyncStream(chunks=["a", "b"])
+        wrapper = AsyncToolStreamWrapper(stream, invocation)
+        assert await wrapper.__anext__() == "a"
+
+        wrapper.__del__()
+
+        spans = span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].status.status_code is StatusCode.ERROR
+        assert spans[0].attributes["error.type"] == "GeneratorExit"
+
+    asyncio.run(exercise())
