@@ -444,7 +444,9 @@ class SyncToolStreamWrapper(SyncStreamWrapper[ChunkT]):
 
     def __del__(self) -> None:
         try:
-            self._finalize_success()
+            self._finalize_failure(
+                GeneratorExit("Stream garbage collected before completion")
+            )
         except BaseException:  # pylint: disable=broad-exception-caught
             pass
 
@@ -485,7 +487,9 @@ class AsyncToolStreamWrapper(AsyncStreamWrapper[ChunkT]):
 
     def __del__(self) -> None:
         try:
-            self._finalize_success()
+            self._finalize_failure(
+                GeneratorExit("Stream garbage collected before completion")
+            )
         except BaseException:  # pylint: disable=broad-exception-caught
             pass
 
