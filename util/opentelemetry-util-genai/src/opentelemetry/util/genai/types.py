@@ -303,19 +303,6 @@ class GenericToolDefinition:
 
 ToolDefinition = Union[FunctionToolDefinition, GenericToolDefinition]
 
-
-@dataclass()
-class RetrievalDocument:
-    """Represents a single document retrieved from a vector database or search system.
-
-    This model is specified as part of semconv in `GenAI messages Python models - RetrievalDocument
-    <https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/non-normative/models.py>`__.
-    """
-
-    id: str | None = None
-    score: float | None = None
-
-
 MessagePart = Union[
     TextPart,
     ToolCallRequestPart,
@@ -361,6 +348,18 @@ class OutputMessage:
     finish_reason: str | FinishReason | None = None
     """Deprecated. Report finish reasons in ``gen_ai.response.finish_reasons`` instead."""
     name: str | None = None
+
+
+@dataclass()
+class RetrievalDocument:
+    """Represents a document retrieved from a vector database or search system.
+
+    Mirrors the `GenAI retrieval Python model - RetrievalDocument
+    <https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/non-normative/models.py>`__.
+    """
+
+    id: str | None = None
+    score: float | None = None
 
 
 # Callback an instrumentor may supply to derive the error.type attribute from a
