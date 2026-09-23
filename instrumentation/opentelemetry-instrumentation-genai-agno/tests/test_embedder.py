@@ -14,7 +14,14 @@ import pytest
 from agno.knowledge.embedder.azure_openai import AzureOpenAIEmbedder
 from agno.knowledge.embedder.base import Embedder
 from agno.knowledge.embedder.openai import OpenAIEmbedder
-from agno.knowledge.embedder.openai_like import OpenAILikeEmbedder
+
+try:
+    from agno.knowledge.embedder.openai_like import OpenAILikeEmbedder
+except ImportError:
+
+    class OpenAILikeEmbedder(OpenAIEmbedder):
+        __module__ = "agno.knowledge.embedder.openai_like"
+
 
 try:
     from agno.knowledge.embedder.google import GeminiEmbedder
