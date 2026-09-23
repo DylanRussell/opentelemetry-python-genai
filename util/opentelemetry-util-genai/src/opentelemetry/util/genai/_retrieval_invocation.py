@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, is_dataclass
-from typing import Any, Final
+from typing import Final
 
 from opentelemetry._logs import Logger
 from opentelemetry.context import Context
@@ -99,8 +98,13 @@ class RetrievalInvocation(GenAIInvocation):
         self.top_k: int | None = None
         self.query_text: str | None = None
         self.documents: (
-            Sequence[RetrievalDocument | Mapping[str, Any]] | None
+            Sequence[RetrievalDocument | Mapping[str, object]] | None
         ) = None
+        """Retrieved document models, captured only in span content modes.
+
+        Passing mappings is deprecated; use ``RetrievalDocument`` instead.
+        Legacy mappings are still serialized unchanged.
+        """
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # data_source_id intentionally excluded — high cardinality
@@ -123,19 +127,13 @@ class RetrievalInvocation(GenAIInvocation):
             or not self._should_capture_content_on_span
         ):
             return {}
-        docs = None
-        if self.documents is not None:
-            docs = [
-                {k: v for k, v in asdict(d).items() if v is not None}
-                if is_dataclass(d) and not isinstance(d, type)
-                else d
-                for d in self.documents
-            ]
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
             (GenAI.GEN_AI_RETRIEVAL_QUERY_TEXT, self.query_text),
             (
                 GenAI.GEN_AI_RETRIEVAL_DOCUMENTS,
-                gen_ai_json_dumps(docs) if docs is not None else None,
+                gen_ai_json_dumps(self.documents)
+                if self.documents is not None
+                else None,
             ),
         )
         return {k: v for k, v in optional_attrs if v is not None}

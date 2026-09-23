@@ -352,9 +352,9 @@ class OutputMessage:
 
 @dataclass()
 class RetrievalDocument:
-    """Represents a single document retrieved from a vector database or search system.
+    """Represents a document retrieved from a vector database or search system.
 
-    This model is specified as part of semconv in `GenAI retrieval Python models - RetrievalDocument
+    Mirrors the `GenAI retrieval Python model - RetrievalDocument
     <https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/non-normative/models.py>`__.
     """
 
