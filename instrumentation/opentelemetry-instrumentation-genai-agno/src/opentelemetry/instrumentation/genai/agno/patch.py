@@ -1924,6 +1924,12 @@ def _start_model_inference(
         except Exception:
             pass
 
+    session_id = extract_session_id(
+        instance=instance,
+        args=args,
+        kwargs=kwargs,
+        run_response=run_response,
+    )
     invocation = handler.inference(
         provider,
         request_model=str(request_model)
@@ -1931,6 +1937,7 @@ def _start_model_inference(
         else None,
         server_address=server_address,
         server_port=server_port,
+        conversation_id=str(session_id) if session_id is not None else None,
     )
 
     invocation.temperature = safe_float(getattr(instance, "temperature", None))
@@ -1970,15 +1977,6 @@ def _start_model_inference(
         args=args,
         kwargs=kwargs,
         run_response=run_response,
-    )
-    session_id = extract_session_id(
-        instance=instance,
-        args=args,
-        kwargs=kwargs,
-        run_response=run_response,
-    )
-    invocation.conversation_id = (
-        str(session_id) if session_id is not None else None
     )
 
     return invocation, assistant_message, response_obj
