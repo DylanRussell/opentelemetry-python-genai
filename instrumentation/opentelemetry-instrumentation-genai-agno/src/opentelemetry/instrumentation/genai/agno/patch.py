@@ -1020,9 +1020,10 @@ def _start_retrieval_invocation(
         else None,
     )
 
-    query = get_argument("query", wrapped, args, kwargs)
-    if query is not None:
-        invocation.query_text = str(query)
+    if invocation.should_capture_content:
+        query = get_argument("query", wrapped, args, kwargs)
+        if query is not None:
+            invocation.query_text = str(query)
 
     max_results = get_argument("max_results", wrapped, args, kwargs)
     if max_results is None:

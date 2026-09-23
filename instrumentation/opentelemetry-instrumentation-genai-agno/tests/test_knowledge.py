@@ -17,6 +17,8 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 from opentelemetry.trace import SpanKind
 
+GEN_AI_RETRIEVAL_TOP_K = "gen_ai.retrieval.top_k"
+
 
 def test_knowledge_search_content_capture(
     instrument_agno_content_capture,
@@ -59,7 +61,7 @@ def test_knowledge_search_content_capture(
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "pgvector"
     )
-    assert span.attributes.get("gen_ai.retrieval.top_k") == 5
+    assert span.attributes.get(GEN_AI_RETRIEVAL_TOP_K) == 5
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT)
         == "what is OpenTelemetry?"
@@ -100,7 +102,7 @@ def test_knowledge_search_no_content_capture(
         span.attributes.get(GenAIAttributes.GEN_AI_DATA_SOURCE_ID)
         == "private_kb"
     )
-    assert span.attributes.get("gen_ai.retrieval.top_k") == 3
+    assert span.attributes.get(GEN_AI_RETRIEVAL_TOP_K) == 3
     assert GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT not in span.attributes
     assert GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS not in span.attributes
 
@@ -143,7 +145,7 @@ def test_knowledge_asearch_content_capture(
         span.attributes.get(GenAIAttributes.GEN_AI_DATA_SOURCE_ID)
         == "async_kb"
     )
-    assert span.attributes.get("gen_ai.retrieval.top_k") == 2
+    assert span.attributes.get(GEN_AI_RETRIEVAL_TOP_K) == 2
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT)
         == "async query"
@@ -187,7 +189,7 @@ def test_knowledge_asearch_no_content_capture(
         span.attributes.get(GenAIAttributes.GEN_AI_DATA_SOURCE_ID)
         == "private_async_kb"
     )
-    assert span.attributes.get("gen_ai.retrieval.top_k") == 3
+    assert span.attributes.get(GEN_AI_RETRIEVAL_TOP_K) == 3
     assert GenAIAttributes.GEN_AI_RETRIEVAL_QUERY_TEXT not in span.attributes
     assert GenAIAttributes.GEN_AI_RETRIEVAL_DOCUMENTS not in span.attributes
 
