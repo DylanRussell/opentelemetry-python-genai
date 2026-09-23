@@ -14,6 +14,7 @@ from opentelemetry.util.genai.invocation import (
     RemoteAgentInvocation,
 )
 from opentelemetry.util.genai.stream import (
+    AbandonedStreamError,
     AsyncStreamWrapper,
     SyncStreamWrapper,
 )
@@ -683,17 +684,21 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
                 await self.__wrapped__.aclose()
             elif hasattr(self.__wrapped__, "close"):
                 self.__wrapped__.close()
-        finally:
-            if not self._self_finalized:
-                self._finalize(b"".join(self._self_chunks))
+        except BaseException as exc:
+            self._finalize_error(exc)
+            raise
+        if not self._self_finalized:
+            self._finalize(b"".join(self._self_chunks))
 
     def close(self) -> None:
         try:
             if hasattr(self.__wrapped__, "close"):
                 self.__wrapped__.close()
-        finally:
-            if not self._self_finalized:
-                self._finalize(b"".join(self._self_chunks))
+        except BaseException as exc:
+            self._finalize_error(exc)
+            raise
+        if not self._self_finalized:
+            self._finalize(b"".join(self._self_chunks))
 
     async def __aexit__(
         self,
@@ -708,16 +713,23 @@ class AsyncBedrockStreamingBodyWrapper(_ObjectProxy):
                 await self.__wrapped__.aclose()
             elif hasattr(self.__wrapped__, "close"):
                 self.__wrapped__.close()
-        finally:
-            if exc_val is not None:
-                self._finalize_error(exc_val)
-            elif not self._self_finalized:
-                self._finalize(b"".join(self._self_chunks))
+        except BaseException as close_exc:
+            self._finalize_error(exc_val if exc_val is not None else close_exc)
+            raise
+        if exc_val is not None:
+            self._finalize_error(exc_val)
+        elif not self._self_finalized:
+            self._finalize(b"".join(self._self_chunks))
 
     def __del__(self) -> None:
-        if not getattr(self, "_self_finalized", True):
-            chunks = getattr(self, "_self_chunks", [])
-            self._finalize(b"".join(chunks))
+        if getattr(self, "_self_finalized", True):
+            return
+        try:
+            self._finalize_error(AbandonedStreamError())
+        except BaseException:  # pylint: disable=broad-exception-caught
+            # Mirrors _StreamTelemetry.__del__: suppress errors during GC or
+            # interpreter shutdown so sys.unraisablehook is not triggered.
+            pass
 
 
 class _BedrockAgentEventStreamMixin:

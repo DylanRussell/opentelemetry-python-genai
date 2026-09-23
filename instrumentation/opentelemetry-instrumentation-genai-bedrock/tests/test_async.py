@@ -1260,3 +1260,44 @@ async def test_async_invoke_model_embedding_error(
     span = spans[0]
     assert span.name == f"embeddings {EMBEDDING_MODEL_ID}"
     assert span.attributes[ErrorAttributes.ERROR_TYPE] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_model_embedding_abandoned_body(
+    async_bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    import gc
+
+    from opentelemetry.trace import StatusCode
+
+    request_body = '{"inputText":"Test abandon"}'
+    body_content = b'{"embedding":[0.1,0.2],"inputTextTokenCount":3}'
+
+    with _stub(
+        async_bedrock_client,
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": _streaming_body(body_content),
+        },
+        modelId=EMBEDDING_MODEL_ID,
+        body=request_body,
+    ):
+        response = await async_bedrock_client.invoke_model(
+            modelId=EMBEDDING_MODEL_ID,
+            body=request_body,
+        )
+        body = response.pop("body")
+        del response
+        del body
+        gc.collect()
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == f"embeddings {EMBEDDING_MODEL_ID}"
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.status.description == "abandoned stream"
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "_OTHER"

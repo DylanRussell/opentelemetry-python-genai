@@ -131,10 +131,7 @@ def test_invoke_agent_sync_with_content(
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_AGENT_ID) == "agent-12345"
     )
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_VERSION)
-        == "alias-12345"
-    )
+    assert GenAIAttributes.GEN_AI_AGENT_VERSION not in span.attributes
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
         == "session-123"
@@ -615,10 +612,7 @@ async def test_async_invoke_agent_with_content(
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_AGENT_ID) == "async-agent-1"
     )
-    assert (
-        span.attributes.get(GenAIAttributes.GEN_AI_AGENT_VERSION)
-        == "async-alias-1"
-    )
+    assert GenAIAttributes.GEN_AI_AGENT_VERSION not in span.attributes
     assert (
         span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
         == "async-session-123"

@@ -1489,3 +1489,13 @@ def test_abandoned_stream_records_error_status_and_type():
     assert span.status.status_code == StatusCode.ERROR
     assert span.status.description == "abandoned stream"
     assert span.attributes.get("error.type") == "_OTHER"
+
+
+def test_abandoned_stream_catches_base_exception_in_del():
+    class _BaseExceptionOnErrorWrapper(_TestSyncStreamWrapper):
+        def _on_stream_error(self, error):
+            raise asyncio.CancelledError("cancelled during cleanup")
+
+    wrapper = _BaseExceptionOnErrorWrapper(_FakeSyncStream(chunks=["a"]))
+    # Must not raise out of __del__
+    wrapper.__del__()

@@ -116,7 +116,7 @@ class _StreamTelemetry(Generic[ChunkT], metaclass=ABCMeta):
             return
         try:
             self._finalize_failure(AbandonedStreamError())
-        except Exception:  # pylint: disable=broad-exception-caught
+        except BaseException:  # pylint: disable=broad-exception-caught
             _logger.debug(
                 "GenAI stream finalization error for abandoned stream",
                 exc_info=True,

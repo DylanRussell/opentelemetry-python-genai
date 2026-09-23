@@ -186,17 +186,16 @@ def _handle_invoke_model(
         extract_embedding_request(api_params, invocation)
         try:
             response: Any = wrapped(*args, **kwargs)
+            raw_bytes = b""
+            body_stream = response.get("body")
+            if hasattr(body_stream, "read"):
+                raw_bytes = body_stream.read()
+                response["body"] = StreamingBody(
+                    io.BytesIO(raw_bytes), len(raw_bytes)
+                )
         except BaseException as exc:
             invocation.fail(exc)
             raise
-
-        raw_bytes = b""
-        body_stream = response.get("body")
-        if hasattr(body_stream, "read"):
-            raw_bytes = body_stream.read()
-            response["body"] = StreamingBody(
-                io.BytesIO(raw_bytes), len(raw_bytes)
-            )
 
         extract_embedding_response(
             response,
@@ -217,7 +216,7 @@ def _handle_invoke_model(
         api_params, invocation, capture_content=capture_content
     )
     try:
-        response: Any = wrapped(*args, **kwargs)
+        response = wrapped(*args, **kwargs)
     except BaseException as exc:
         invocation.fail(exc)
         raise
@@ -234,7 +233,11 @@ def _handle_invoke_model(
         raw_bytes = b""
         body_stream = response.get("body")
         if hasattr(body_stream, "read"):
-            raw_bytes = body_stream.read()
+            try:
+                raw_bytes = body_stream.read()
+            except BaseException as exc:
+                invocation.fail(exc)
+                raise
             response["body"] = StreamingBody(
                 io.BytesIO(raw_bytes), len(raw_bytes)
             )
@@ -295,7 +298,11 @@ async def _handle_async_invoke_model(
 
             raw_bytes = b""
             if hasattr(body_stream, "read"):
-                raw_bytes = body_stream.read()
+                try:
+                    raw_bytes = body_stream.read()
+                except BaseException as exc:
+                    invocation.fail(exc)
+                    raise
                 response["body"] = StreamingBody(
                     io.BytesIO(raw_bytes), len(raw_bytes)
                 )
@@ -320,7 +327,7 @@ async def _handle_async_invoke_model(
         api_params, invocation, capture_content=capture_content
     )
     try:
-        response: Any = await wrapped(*args, **kwargs)
+        response = await wrapped(*args, **kwargs)
     except BaseException as exc:
         invocation.fail(exc)
         raise
@@ -349,7 +356,11 @@ async def _handle_async_invoke_model(
 
             raw_bytes = b""
             if hasattr(body_stream, "read"):
-                raw_bytes = body_stream.read()
+                try:
+                    raw_bytes = body_stream.read()
+                except BaseException as exc:
+                    invocation.fail(exc)
+                    raise
                 response["body"] = StreamingBody(
                     io.BytesIO(raw_bytes), len(raw_bytes)
                 )
@@ -389,11 +400,6 @@ def _start_invoke_agent(
     raw_agent_id = api_params.get("agentId")
     if raw_agent_id:
         invocation.agent_id = str(raw_agent_id)
-    # InvokeAgent addresses an agent by alias rather than by version, and an alias
-    # resolves to a version server-side.
-    raw_alias_id = api_params.get("agentAliasId")
-    if raw_alias_id:
-        invocation.agent_version = str(raw_alias_id)
 
     extract_invoke_agent_request(
         api_params,

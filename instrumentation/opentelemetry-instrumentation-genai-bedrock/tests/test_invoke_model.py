@@ -1087,3 +1087,44 @@ def test_invoke_model_embedding_error(
         span.attributes[ErrorAttributes.ERROR_TYPE]
         == "botocore.errorfactory.ValidationException"
     )
+
+
+def test_invoke_model_embedding_body_read_error(
+    bedrock_client,
+    instrument_with_content,
+    span_exporter,
+) -> None:
+    class _FailingRawStream(io.RawIOBase):
+        def read(self, size: int = -1) -> bytes:
+            raise ConnectionError("stream read failed")
+
+    stubber = Stubber(bedrock_client)
+    request_body = json.dumps({"inputText": "Hello"})
+    stubber.add_response(
+        "invoke_model",
+        {
+            "contentType": "application/json",
+            "body": StreamingBody(
+                raw_stream=_FailingRawStream(),
+                content_length=10,
+            ),
+        },
+        {
+            "modelId": "amazon.titan-embed-text-v1",
+            "body": request_body,
+        },
+    )
+
+    with stubber:
+        with pytest.raises(ConnectionError, match="stream read failed"):
+            bedrock_client.invoke_model(
+                modelId="amazon.titan-embed-text-v1",
+                body=request_body,
+            )
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "embeddings amazon.titan-embed-text-v1"
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.attributes[ErrorAttributes.ERROR_TYPE] == "ConnectionError"

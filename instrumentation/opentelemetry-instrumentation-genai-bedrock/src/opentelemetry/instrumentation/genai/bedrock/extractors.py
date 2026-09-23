@@ -945,13 +945,6 @@ def extract_invoke_agent_request(
     if session_id:
         invocation.conversation_id = str(session_id)
 
-    # InvokeAgent takes an alias, not a version, and the response doesn't report the
-    # version the alias resolved to. The alias is the closest available identifier of
-    # which agent revision served the request.
-    agent_alias_id = api_params.get("agentAliasId")
-    if agent_alias_id:
-        invocation.agent_version = str(agent_alias_id)
-
     if capture_content:
         input_text = api_params.get("inputText")
         if input_text is not None:
