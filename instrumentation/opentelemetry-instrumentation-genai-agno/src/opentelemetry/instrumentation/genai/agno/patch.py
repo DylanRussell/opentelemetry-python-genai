@@ -425,32 +425,24 @@ def _extract_continue_tool_results(
         if (tool_exec := getattr(item, "tool_execution", None)) is not None:
             item = tool_exec
 
-        if isinstance(item, dict):
-            item_dict = cast(dict[str, Any], item)
-            call_id = item_dict.get("tool_call_id") or item_dict.get("id")
-            if not call_id:
-                continue
-            resp: Any = item_dict.get("result")
-            if resp is None:
-                resp = (
-                    {"confirmed": item_dict["confirmed"]}
-                    if "confirmed" in item_dict
-                    else item_dict
-                )
-            tool_results.append((str(call_id), resp))
-        else:
-            call_id = getattr(item, "tool_call_id", None)
-            if not call_id:
-                continue
-            resp = getattr(item, "result", None)
-            if resp is None:
-                confirmed = getattr(item, "confirmed", None)
-                if confirmed is not None:
-                    resp = {"confirmed": confirmed}
-                else:
-                    to_dict = getattr(item, "to_dict", None)
-                    resp = to_dict() if callable(to_dict) else str(item)
-            tool_results.append((str(call_id), resp))
+        call_id = _get_property_value(
+            item, "tool_call_id"
+        ) or _get_property_value(item, "id")
+        if not call_id:
+            continue
+
+        resp: Any = _get_property_value(item, "result")
+        if resp is None:
+            confirmed = _get_property_value(item, "confirmed")
+            if confirmed is not None:
+                resp = {"confirmed": confirmed}
+            elif isinstance(item, dict):
+                resp = cast(dict[str, Any], item)
+            else:
+                to_dict = getattr(item, "to_dict", None)
+                resp = to_dict() if callable(to_dict) else str(item)
+
+        tool_results.append((str(call_id), resp))
 
     return tool_results
 
