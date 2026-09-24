@@ -484,8 +484,8 @@ def _set_continue_invocation_input(
             InputMessage(
                 role=Role.TOOL.value,
                 parts=[
-                    # format_content dumps structured objects to JSON strings,
-                    # while plain strings are kept as-is.
+                    # format_content dumps structured objects to JSON strings (potentially
+                    # double JSON-encoded when serialized to spans); strings are kept as-is.
                     ToolCallResponsePart(
                         id=call_id,
                         response=format_content(resp),
