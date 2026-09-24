@@ -177,11 +177,16 @@ class TelemetryHandler:
         server_address: str | None = None,
         server_port: int | None = None,
         operation_name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> InferenceInvocation:
         """Create and start an LLM inference invocation.
 
         .. deprecated:: 1.0b0
             Use ``handler.inference()`` instead.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set remaining attributes (input_messages, temperature, etc.) on the
         returned invocation, then call invocation.stop() or invocation.fail().
@@ -202,6 +207,8 @@ class TelemetryHandler:
             server_port=server_port,
             operation_name=operation_name,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def start_llm(self, invocation: LLMInvocation) -> LLMInvocation:
@@ -226,11 +233,16 @@ class TelemetryHandler:
         request_model: str | None = None,
         server_address: str | None = None,
         server_port: int | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> EmbeddingInvocation:
         """Create and start an Embedding invocation.
 
         .. deprecated:: 1.0b0
             Use ``handler.embedding()`` instead.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set remaining attributes (encoding_formats, etc.) on the returned
         invocation, then call invocation.stop() or invocation.fail().
@@ -245,6 +257,8 @@ class TelemetryHandler:
             server_address=server_address,
             server_port=server_port,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def retrieval(
@@ -255,8 +269,13 @@ class TelemetryHandler:
         request_model: str | None = None,
         server_address: str | None = None,
         server_port: int | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> RetrievalInvocation:
         """Returns a Retrieval invocation. Starts span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
@@ -275,6 +294,8 @@ class TelemetryHandler:
             server_address=server_address,
             server_port=server_port,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def start_tool(
@@ -285,11 +306,15 @@ class TelemetryHandler:
         tool_call_id: str | None = None,
         tool_description: str | None = None,
         context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> ToolInvocation:
         """Create and start a tool invocation.
 
         .. deprecated:: 1.0b0
             Use ``handler.tool()`` instead.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set tool_result on the returned invocation when done, then call
         invocation.stop() or invocation.fail().
@@ -305,17 +330,23 @@ class TelemetryHandler:
             tool_description=tool_description,
             content_capturing_mode=self._content_capturing_mode,
             context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def start_workflow(
         self,
         *,
         name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> WorkflowInvocation:
         """Create and start a workflow invocation.
 
         .. deprecated:: 1.0b0
             Use ``handler.workflow()`` instead.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set remaining attributes on the returned invocation, then call
         invocation.stop() or invocation.fail().
@@ -327,6 +358,8 @@ class TelemetryHandler:
             self._completion_hook,
             name,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def stop_llm(self, invocation: LLMInvocation) -> LLMInvocation:  # pylint: disable=no-self-use
@@ -366,12 +399,21 @@ class TelemetryHandler:
         server_port: int | None = None,
         operation_name: str | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> InferenceInvocation:
         """Returns an Inference invocation. Starts span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
         responsible for calling `stop` or `fail` to finalize the span.
+
+        ``context`` parents the span and becomes the base of the invocation's
+        own context. ``conversation_id`` overrides the one inherited from it.
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
@@ -392,6 +434,9 @@ class TelemetryHandler:
             operation_name=operation_name,
             error_type_resolver=error_type_resolver,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
+            conversation_id=conversation_id,
         )
 
     def embedding(
@@ -401,8 +446,13 @@ class TelemetryHandler:
         request_model: str | None = None,
         server_address: str | None = None,
         server_port: int | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> EmbeddingInvocation:
         """Returns an Embedding invocation. Starts span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
@@ -420,6 +470,8 @@ class TelemetryHandler:
             server_address=server_address,
             server_port=server_port,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def fetch_response(
@@ -431,12 +483,17 @@ class TelemetryHandler:
         server_address: str | None = None,
         server_port: int | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> FetchResponseInvocation:
         """Returns a Fetch Response invocation. Starts span when called.
 
         Describes fetching a previously generated model response by its
         identifier. No inference is performed and no tokens are consumed, so
         the fetched response's token counts must not be recorded here.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
@@ -456,6 +513,8 @@ class TelemetryHandler:
             server_port=server_port,
             error_type_resolver=error_type_resolver,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def tool(
@@ -467,6 +526,7 @@ class TelemetryHandler:
         tool_call_id: str | None = None,
         tool_description: str | None = None,
         context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> ToolInvocation:
         """Returns a Tool invocation. Starts span when called.
 
@@ -474,6 +534,9 @@ class TelemetryHandler:
             Passing ``tool_call_id`` or ``tool_description`` as keyword
             arguments is deprecated. Set ``invocation.tool_call_id`` and
             ``invocation.tool_description`` on the returned invocation instead.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
@@ -495,6 +558,7 @@ class TelemetryHandler:
             tool_description=tool_description,
             content_capturing_mode=self._content_capturing_mode,
             context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def start_invoke_local_agent(
@@ -502,6 +566,8 @@ class TelemetryHandler:
         *,
         request_model: str | None = None,
         agent_name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> AgentInvocation:
         """Create and start a local agent invocation (INTERNAL span kind).
 
@@ -509,6 +575,9 @@ class TelemetryHandler:
             Use ``handler.invoke_local_agent()`` instead.
 
         Use for agents running within the same process (e.g. LangChain, CrewAI).
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set remaining attributes (agent_name, etc.) on the returned invocation,
         then call invocation.stop() or invocation.fail().
@@ -521,6 +590,8 @@ class TelemetryHandler:
             request_model=request_model,
             agent_name=agent_name,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def start_invoke_remote_agent(
@@ -531,6 +602,8 @@ class TelemetryHandler:
         server_address: str | None = None,
         server_port: int | None = None,
         agent_name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
     ) -> AgentInvocation:
         """Create and start a remote agent invocation (CLIENT span kind).
 
@@ -538,6 +611,9 @@ class TelemetryHandler:
             Use ``handler.invoke_remote_agent()`` instead.
 
         Use for agents invoked over a remote service (e.g. OpenAI Assistants, AWS Bedrock).
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Set remaining attributes (agent_name, etc.) on the returned invocation,
         then call invocation.stop() or invocation.fail().
@@ -553,6 +629,8 @@ class TelemetryHandler:
             server_address=server_address,
             server_port=server_port,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
         )
 
     def invoke_local_agent(
@@ -560,14 +638,23 @@ class TelemetryHandler:
         *,
         request_model: str | None = None,
         agent_name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> LocalAgentInvocation:
         """Returns an agent invocation (INTERNAL span kind). Starts span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
         responsible for calling `stop` or `fail` to finalize the span.
 
         Use for agents running within the same process (e.g. LangChain, CrewAI).
+
+        ``context`` parents the span and becomes the base of the invocation's
+        own context. ``conversation_id`` overrides the one inherited from it.
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
@@ -579,6 +666,9 @@ class TelemetryHandler:
             request_model=request_model,
             agent_name=agent_name,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
+            conversation_id=conversation_id,
         )
 
     def invoke_remote_agent(
@@ -589,14 +679,23 @@ class TelemetryHandler:
         server_address: str | None = None,
         server_port: int | None = None,
         agent_name: str | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> RemoteAgentInvocation:
         """Returns an agent invocation (CLIENT span kind). Starts span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
         responsible for calling `stop` or `fail` to finalize the span.
 
         Use for agents invoked over a remote service (e.g. OpenAI Assistants, AWS Bedrock).
+
+        ``context`` parents the span and becomes the base of the invocation's
+        own context. ``conversation_id`` overrides the one inherited from it.
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
@@ -611,17 +710,30 @@ class TelemetryHandler:
             server_address=server_address,
             server_port=server_port,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
+            conversation_id=conversation_id,
         )
 
     def workflow(
         self,
         name: str | None = None,
+        *,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> WorkflowInvocation:
         """Returns a Workflow invocation. Starts a span when called.
+
+        Args:
+            context: An optional OpenTelemetry Context to parent the span.
 
         Returned object can be used as a ContextManager which automatically calls `stop` or `fail`
         to finalize the span upon exiting. If not used as a ContextManager, the caller is
         responsible for calling `stop` or `fail` to finalize the span.
+
+        ``context`` parents the span and becomes the base of the invocation's
+        own context. ``conversation_id`` overrides the one inherited from it.
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
@@ -632,6 +744,9 @@ class TelemetryHandler:
             self._completion_hook,
             name,
             content_capturing_mode=self._content_capturing_mode,
+            context=context,
+            _attach_to_context=_attach_to_context,
+            conversation_id=conversation_id,
         )
 
 

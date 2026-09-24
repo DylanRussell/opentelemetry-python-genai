@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from opentelemetry._logs import Logger, LogRecord
+from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -135,6 +136,9 @@ class InferenceInvocation(GenAIInvocation):
         error_type_resolver: ErrorTypeResolver | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
         start_span: bool = True,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> None:
         operation_name = (
             operation_name or GenAI.GenAiOperationNameValues.CHAT.value
@@ -161,10 +165,16 @@ class InferenceInvocation(GenAIInvocation):
             span_kind=SpanKind.CLIENT,
             error_type_resolver=error_type_resolver,
             start_attributes=start_attributes,
+            context=context,
+            conversation_id=conversation_id,
             content_capturing_mode=content_capturing_mode,
             start_span=start_span,
+            _attach_to_context=_attach_to_context,
         )
-        self.conversation_id: str | None = None
+        self._provider: str = provider
+        self._request_model: str | None = request_model
+        self._server_address: str | None = server_address
+        self._server_port: int | None = server_port
         self._emit_event: bool = _should_emit_event(
             self._content_capturing_mode
         )
@@ -540,6 +550,9 @@ class SuppressedInferenceInvocation(InferenceInvocation):
         operation_name: str | None = None,
         error_type_resolver: ErrorTypeResolver | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
+        context: Context | None = None,
+        _attach_to_context: bool = True,
+        conversation_id: str | None = None,
     ) -> None:
         super().__init__(
             tracer,
@@ -554,6 +567,9 @@ class SuppressedInferenceInvocation(InferenceInvocation):
             error_type_resolver=error_type_resolver,
             content_capturing_mode=ContentCapturingMode.NO_CONTENT,
             start_span=False,
+            context=context,
+            _attach_to_context=_attach_to_context,
+            conversation_id=conversation_id,
         )
 
     def _on_stream_chunk(self, chunk_at: float) -> None:
