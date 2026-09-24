@@ -22,12 +22,13 @@ from collections.abc import (
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from agno.agent import RunOutput
+    from agno.agent import Agent, RunOutput
     from agno.knowledge.document.base import Document
     from agno.knowledge.knowledge import Knowledge
     from agno.run.workflow import WorkflowRunOutput
-    from agno.team import TeamRunOutput
+    from agno.team import Team, TeamRunOutput
     from agno.tools.function import FunctionCall, FunctionExecutionResult
+    from agno.workflow import Workflow
 
     AgnoRunOutput = RunOutput | TeamRunOutput | WorkflowRunOutput
 
@@ -372,8 +373,6 @@ def _extract_continue_input(
         val = get_argument(param, wrapped, args, kwargs)
         if val is not None:
             return val
-    if args and isinstance(args[0], str):
-        return args[0]
     return None
 
 
@@ -390,7 +389,7 @@ def _extract_continue_tool_results(
     - ``updated_tools``: list of ToolExecution objects or dicts
     - ``requirements``: list of RunRequirement objects containing tool_execution
     """
-    raw_tools: Any = (
+    raw_tools = (
         get_argument("tools", wrapped, args, kwargs)
         or get_argument("updated_tools", wrapped, args, kwargs)
         or get_argument("requirements", wrapped, args, kwargs)
@@ -398,67 +397,58 @@ def _extract_continue_tool_results(
     if not raw_tools:
         return []
 
-    items: list[Any] = []
     if isinstance(raw_tools, str):
         try:
-            parsed_tools: Any = json.loads(raw_tools)
-            if isinstance(parsed_tools, list):
-                items = cast(list[Any], parsed_tools)
-            elif isinstance(parsed_tools, dict):
-                items = [cast(dict[str, Any], parsed_tools)]
+            parsed = json.loads(raw_tools)
+            items = parsed if isinstance(parsed, list) else [parsed]
         except Exception:
             return []
     elif isinstance(raw_tools, Iterable):
-        items = list(cast(Iterable[Any], raw_tools))
+        items = list(raw_tools)
     else:
         items = [raw_tools]
 
     tool_results: list[tuple[str, Any]] = []
-    for item_raw in items:
-        item: Any = item_raw
+    for item in items:
         if isinstance(item, str):
             try:
-                parsed_item: Any = json.loads(item)
-                if isinstance(parsed_item, dict):
-                    item = cast(dict[str, Any], parsed_item)
-                elif isinstance(parsed_item, list):
-                    item = cast(list[Any], parsed_item)
+                item = json.loads(item)
             except Exception:
                 pass
 
-        if hasattr(item, "tool_execution"):
-            tool_exec: Any = getattr(item, "tool_execution")
-            if tool_exec is not None:
-                item = tool_exec
+        item = getattr(item, "tool_execution", item) or item
 
         if isinstance(item, dict):
-            item_dict = cast(dict[str, Any], item)
-            call_id = item_dict.get("tool_call_id") or item_dict.get("id")
-            if call_id:
-                resp: Any = item_dict.get("result")
-                if resp is None and "confirmed" in item_dict:
-                    resp = {"confirmed": item_dict.get("confirmed")}
-                elif resp is None:
-                    resp = item_dict
-                tool_results.append((str(call_id), resp))
-        elif getattr(item, "tool_call_id", None) is not None:
-            call_id_attr: Any = getattr(item, "tool_call_id")
-            resp_attr: Any = getattr(item, "result", None)
-            if (
-                resp_attr is None
-                and getattr(item, "confirmed", None) is not None
-            ):
-                resp_attr = {"confirmed": getattr(item, "confirmed")}
-            elif resp_attr is None:
-                to_dict_fn: Any = getattr(item, "to_dict", None)
-                resp_attr = to_dict_fn() if callable(to_dict_fn) else str(item)
-            tool_results.append((str(call_id_attr), resp_attr))
+            call_id = item.get("tool_call_id") or item.get("id")
+            if not call_id:
+                continue
+            resp = item.get("result")
+            if resp is None:
+                resp = (
+                    {"confirmed": item["confirmed"]}
+                    if "confirmed" in item
+                    else item
+                )
+            tool_results.append((str(call_id), resp))
+        else:
+            call_id = getattr(item, "tool_call_id", None)
+            if not call_id:
+                continue
+            resp = getattr(item, "result", None)
+            if resp is None:
+                confirmed = getattr(item, "confirmed", None)
+                if confirmed is not None:
+                    resp = {"confirmed": confirmed}
+                else:
+                    to_dict = getattr(item, "to_dict", None)
+                    resp = to_dict() if callable(to_dict) else str(item)
+            tool_results.append((str(call_id), resp))
 
     return tool_results
 
 
 def _extract_continue_session_id(
-    instance: Any,
+    instance: Agent | Team | Workflow,
     wrapped: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
@@ -466,9 +456,7 @@ def _extract_continue_session_id(
     session_id = get_argument("session_id", wrapped, args, kwargs)
     if session_id:
         return str(session_id)
-    run_response = get_argument("run_response", wrapped, args, kwargs) or (
-        args[0] if args else None
-    )
+    run_response = get_argument("run_response", wrapped, args, kwargs)
     if run_response is not None:
         sid = getattr(run_response, "session_id", None)
         if sid:
@@ -589,7 +577,7 @@ def _start_agent_invocation(
         )
 
     tool_defs = prepare_tool_definitions(getattr(instance, "tools", None))
-    if not tool_defs:
+    if not tool_defs and not is_continue:
         tools_arg: Any = get_argument("tools", wrapped, args, kwargs)
         if tools_arg is not None:
             tool_defs = prepare_tool_definitions(tools_arg)
