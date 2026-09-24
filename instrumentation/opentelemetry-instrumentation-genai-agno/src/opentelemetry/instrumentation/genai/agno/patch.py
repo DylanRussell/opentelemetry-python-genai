@@ -567,11 +567,9 @@ def _start_agent_invocation(
         _set_continue_invocation_input(
             invocation, wrapped, args, kwargs, capture_content
         )
-        session_id = _extract_continue_session_id(
+        invocation.conversation_id = _extract_continue_session_id(
             instance, wrapped, args, kwargs
         )
-        if session_id:
-            invocation.conversation_id = session_id
     else:
         _set_invocation_input(
             invocation, instance, args, kwargs, capture_content, wrapped
@@ -818,11 +816,9 @@ def _start_workflow_invocation(
         _set_continue_invocation_input(
             invocation, wrapped, args, kwargs, capture_content
         )
-        session_id = _extract_continue_session_id(
+        invocation.conversation_id = _extract_continue_session_id(
             instance, wrapped, args, kwargs
         )
-        if session_id:
-            invocation.conversation_id = session_id
     else:
         _set_invocation_input(
             invocation, instance, args, kwargs, capture_content, wrapped
