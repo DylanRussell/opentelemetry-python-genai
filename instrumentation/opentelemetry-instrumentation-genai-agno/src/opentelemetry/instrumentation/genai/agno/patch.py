@@ -504,8 +504,7 @@ def _set_continue_invocation_input(
                 )
             )
 
-    if messages:
-        invocation.input_messages = messages
+    invocation.input_messages = messages
 
 
 def _extract_finish_reason(result: object) -> str:
