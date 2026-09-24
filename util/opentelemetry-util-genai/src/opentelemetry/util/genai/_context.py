@@ -5,63 +5,63 @@
 
 from __future__ import annotations
 
-from typing import Any, Final, TypedDict, cast
+from typing import TYPE_CHECKING, Final
 
 from opentelemetry.context import Context, get_value, set_value
-from opentelemetry.util.types import AttributeValue
 
-INFERENCE_ATTRIBUTES_KEY: Final[str] = (
-    "opentelemetry.genai.inference_attributes"
-)
-_INFERENCE_ATTRIBUTES_KEY = INFERENCE_ATTRIBUTES_KEY
+if TYPE_CHECKING:
+    from opentelemetry.util.genai._inference_invocation import (
+        InferenceNonContentCaptureData,
+    )
 
-SPANEVENT_ATTRIBUTES_KEY: Final[str] = "spanevent_attributes"
-METRIC_ATTRIBUTES_KEY: Final[str] = "metric_attributes"
-
-
-class InferenceAttributes(TypedDict):
-    spanevent_attributes: dict[str, AttributeValue]
-    metric_attributes: dict[str, AttributeValue]
+INFERENCE_CONTEXT_KEY: Final[str] = "opentelemetry.genai.inference_context"
+_INFERENCE_CONTEXT_KEY = INFERENCE_CONTEXT_KEY
 
 
-__all__ = [
-    "INFERENCE_ATTRIBUTES_KEY",
-    "METRIC_ATTRIBUTES_KEY",
-    "SPANEVENT_ATTRIBUTES_KEY",
-    "InferenceAttributes",
-    "get_inference_attributes",
-    "set_inference_attributes",
-]
-
-
-def set_inference_attributes(
-    attributes: InferenceAttributes | dict[str, Any],
+def set_inference_context_data(
+    data: InferenceNonContentCaptureData,
     context: Context | None = None,
 ) -> Context:
-    """Return a Context with the given inference attributes dictionary attached.
+    """Return a Context with the given inference context data attached.
 
     Args:
-        attributes: The mutable inference attributes dictionary.
+        data: The mutable inference non-content capture data object.
         context: The context to attach to. Defaults to the current context.
 
     Returns:
-        A new Context containing the inference attributes dictionary.
+        A new Context containing the inference context data.
     """
-    return set_value(_INFERENCE_ATTRIBUTES_KEY, attributes, context=context)
+    return set_value(_INFERENCE_CONTEXT_KEY, data, context=context)
 
 
-def get_inference_attributes(
+def get_inference_context_data(
     context: Context | None = None,
-) -> InferenceAttributes | None:
-    """Return the active inference attributes dictionary from context, if any.
+) -> InferenceNonContentCaptureData | None:
+    """Return the active inference context data from context, if any.
 
     Args:
         context: The context to inspect. Defaults to the current context.
 
     Returns:
-        The active inference attributes dictionary, or None if not set.
+        The active inference context data, or None if not set.
     """
-    attrs = get_value(_INFERENCE_ATTRIBUTES_KEY, context=context)
-    if isinstance(attrs, dict):
-        return cast(InferenceAttributes, attrs)
+    from opentelemetry.util.genai._inference_invocation import (
+        InferenceNonContentCaptureData,
+    )
+
+    data = get_value(_INFERENCE_CONTEXT_KEY, context=context)
+    if isinstance(data, InferenceNonContentCaptureData):
+        return data
     return None
+
+
+from opentelemetry.util.genai._inference_invocation import (
+    InferenceNonContentCaptureData,
+)
+
+__all__ = [
+    "INFERENCE_CONTEXT_KEY",
+    "InferenceNonContentCaptureData",
+    "get_inference_context_data",
+    "set_inference_context_data",
+]

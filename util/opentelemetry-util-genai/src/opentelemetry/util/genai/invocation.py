@@ -27,8 +27,9 @@ from opentelemetry.util.genai._fetch_response_invocation import (
     FetchResponseInvocation,
 )
 from opentelemetry.util.genai._inference_invocation import (
+    InferenceContentData,
     InferenceInvocation,
-    SuppressedInferenceInvocation,
+    InferenceNonContentCaptureData,
 )
 from opentelemetry.util.genai._invocation import (
     ContextToken,
@@ -46,11 +47,12 @@ __all__ = [
     "Error",
     "FetchResponseInvocation",
     "GenAIInvocation",
+    "InferenceContentData",
     "InferenceInvocation",
+    "InferenceNonContentCaptureData",
     "LocalAgentInvocation",
     "RemoteAgentInvocation",
     "RetrievalInvocation",
-    "SuppressedInferenceInvocation",
     "ToolInvocation",
     "WorkflowInvocation",
 ]
