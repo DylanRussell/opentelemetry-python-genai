@@ -484,10 +484,8 @@ def _set_continue_invocation_input(
             InputMessage(
                 role=Role.TOOL.value,
                 parts=[
-                    # format_content stringifies responses (dumping structured objects to JSON).
-                    # When gen_ai.input.messages is serialized to a JSON string attribute on the span,
-                    # structured responses become inner JSON strings that consumers can json.loads().
-                    # If the response is already a string, it remains a normal string and is not double-encoded.
+                    # format_content dumps structured objects to JSON strings,
+                    # while plain strings are kept as-is.
                     ToolCallResponsePart(
                         id=call_id,
                         response=format_content(resp),
