@@ -416,7 +416,8 @@ def _extract_continue_tool_results(
             except Exception:
                 pass
 
-        item = getattr(item, "tool_execution", item) or item
+        if (tool_exec := getattr(item, "tool_execution", None)) is not None:
+            item = tool_exec
 
         if isinstance(item, dict):
             call_id = item.get("tool_call_id") or item.get("id")
