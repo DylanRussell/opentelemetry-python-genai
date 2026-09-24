@@ -389,7 +389,7 @@ def _extract_continue_tool_results(
     - ``updated_tools``: list of ToolExecution objects or dicts
     - ``requirements``: list of RunRequirement objects containing tool_execution
     """
-    raw_tools = (
+    raw_tools: Any = (
         get_argument("tools", wrapped, args, kwargs)
         or get_argument("updated_tools", wrapped, args, kwargs)
         or get_argument("requirements", wrapped, args, kwargs)
@@ -397,19 +397,25 @@ def _extract_continue_tool_results(
     if not raw_tools:
         return []
 
+    items: list[Any]
     if isinstance(raw_tools, str):
         try:
-            parsed = json.loads(raw_tools)
-            items = parsed if isinstance(parsed, list) else [parsed]
+            parsed: Any = json.loads(raw_tools)
+            items = (
+                cast(list[Any], parsed)
+                if isinstance(parsed, list)
+                else [parsed]
+            )
         except Exception:
             return []
     elif isinstance(raw_tools, Iterable):
-        items = list(raw_tools)
+        items = list(cast(Iterable[Any], raw_tools))
     else:
         items = [raw_tools]
 
     tool_results: list[tuple[str, Any]] = []
-    for item in items:
+    for item_raw in items:
+        item: Any = item_raw
         if isinstance(item, str):
             try:
                 item = json.loads(item)
@@ -420,15 +426,16 @@ def _extract_continue_tool_results(
             item = tool_exec
 
         if isinstance(item, dict):
-            call_id = item.get("tool_call_id") or item.get("id")
+            item_dict = cast(dict[str, Any], item)
+            call_id = item_dict.get("tool_call_id") or item_dict.get("id")
             if not call_id:
                 continue
-            resp = item.get("result")
+            resp: Any = item_dict.get("result")
             if resp is None:
                 resp = (
-                    {"confirmed": item["confirmed"]}
-                    if "confirmed" in item
-                    else item
+                    {"confirmed": item_dict["confirmed"]}
+                    if "confirmed" in item_dict
+                    else item_dict
                 )
             tool_results.append((str(call_id), resp))
         else:

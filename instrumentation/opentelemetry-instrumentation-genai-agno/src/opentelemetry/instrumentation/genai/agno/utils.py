@@ -202,34 +202,30 @@ def prepare_tool_definitions(
         if isinstance(tool, str):
             try:
                 parsed_tool: Any = json.loads(tool)
-                if isinstance(parsed_tool, dict):
-                    tool = cast(dict[str, Any], parsed_tool)
-                elif isinstance(parsed_tool, list):
-                    sub_defs = prepare_tool_definitions(
-                        cast(list[Any], parsed_tool)
-                    )
-                    if sub_defs:
-                        for defn in sub_defs:
-                            _add_def(
-                                str(_get_property_value(defn, "name") or ""),
-                                _get_property_value(defn, "description"),
-                                _get_property_value(defn, "parameters"),
-                            )
-                    continue
-                else:
-                    continue
             except Exception:
                 continue
 
+            if isinstance(parsed_tool, list):
+                sub_defs = prepare_tool_definitions(
+                    cast(list[Any], parsed_tool)
+                )
+                if sub_defs:
+                    for defn in sub_defs:
+                        _add_def(
+                            str(_get_property_value(defn, "name") or ""),
+                            _get_property_value(defn, "description"),
+                            _get_property_value(defn, "parameters"),
+                        )
+                continue
+            if not isinstance(parsed_tool, dict):
+                continue
+            tool = cast(dict[str, Any], parsed_tool)
+
         # Skip tool execution records (which have tool_call_id)
-        if isinstance(tool, dict) and "tool_call_id" in cast(
-            dict[str, Any], tool
-        ):
-            continue
-        if (
-            not isinstance(tool, dict)
-            and getattr(cast(object, tool), "tool_call_id", None) is not None
-        ):
+        if isinstance(tool, dict):
+            if "tool_call_id" in tool:
+                continue
+        elif getattr(tool, "tool_call_id", None) is not None:
             continue
 
         if isinstance(tool, dict):
