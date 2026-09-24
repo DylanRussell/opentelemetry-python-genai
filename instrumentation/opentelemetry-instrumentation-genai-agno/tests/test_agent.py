@@ -1832,6 +1832,13 @@ def test_agent_continue_run_positional_run_id_not_recorded_as_input(
     span_exporter,
 ) -> None:
     """Test that a positional string run ID in continue_run is not captured as user input."""
+    import agno.agent
+
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "Agent.continue_run kwargs not supported in this version of agno"
+        )
+
     agent = Agent(
         name="test-run-id-agent",
         model=MockModel(id="mock-model"),
@@ -1863,6 +1870,13 @@ def test_agent_continue_run_tools_arg_not_used_as_tool_definitions(
     span_exporter,
 ) -> None:
     """Test that tools argument passed to continue_run is not parsed as tool definitions."""
+    import agno.agent
+
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "Agent.continue_run kwargs not supported in this version of agno"
+        )
+
     agent = Agent(
         name="test-no-tools-agent",
         model=MockModel(id="mock-model"),
