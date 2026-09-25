@@ -60,9 +60,11 @@ class _FallbackNP:
 
 @pytest.fixture(autouse=True)
 def _ensure_embedder_np(monkeypatch: pytest.MonkeyPatch) -> None:
+    embedder_np = getattr(dspy.clients.embedding, "np", None)
     try:
-        _ = dspy.clients.embedding.np.array
-    except ImportError:
+        if embedder_np is None or getattr(embedder_np, "array", None) is None:
+            monkeypatch.setattr(dspy.clients.embedding, "np", _FallbackNP())
+    except (ImportError, AttributeError):
         monkeypatch.setattr(dspy.clients.embedding, "np", _FallbackNP())
 
 
@@ -386,3 +388,30 @@ def test_embedder_copy_and_deepcopy(
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 2
+
+
+def test_embedder_constructor_kwargs_on_instance(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+    ):
+        embedder = dspy.Embedder(_custom_embed_fn, caching=False)
+        embedder.kwargs = {
+            "api_base": "https://init.example.com:8443",
+            "encoding_format": "base64",
+        }
+        embedder("hello")
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    attrs = spans[0].attributes or {}
+    assert attrs.get(server_attributes.SERVER_ADDRESS) == "init.example.com"
+    assert attrs.get(server_attributes.SERVER_PORT) == 8443
+    assert attrs.get(GenAI.GEN_AI_REQUEST_ENCODING_FORMATS) == ("base64",)

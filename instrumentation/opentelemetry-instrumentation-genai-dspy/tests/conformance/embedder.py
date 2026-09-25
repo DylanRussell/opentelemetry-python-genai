@@ -71,9 +71,14 @@ class EmbedderScenario(Scenario):
     ) -> None:
         import dspy.clients.embedding
 
+        embedder_np = getattr(dspy.clients.embedding, "np", None)
         try:
-            _ = dspy.clients.embedding.np.array
-        except ImportError:
+            if (
+                embedder_np is None
+                or getattr(embedder_np, "array", None) is None
+            ):
+                dspy.clients.embedding.np = _FallbackNP()
+        except (ImportError, AttributeError):
             dspy.clients.embedding.np = _FallbackNP()
 
         with instrument(

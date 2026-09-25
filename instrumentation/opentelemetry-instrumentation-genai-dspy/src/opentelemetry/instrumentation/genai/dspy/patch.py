@@ -558,6 +558,9 @@ def _start_embedding_invocation(
     provider, request_model = resolve_embedder_provider_and_model(instance)
 
     merged_kwargs: dict[str, object] = {}
+    init_kwargs: object = getattr(instance, "kwargs", None)
+    if is_mapping(init_kwargs):
+        merged_kwargs.update(init_kwargs)
     default_kwargs: object = getattr(instance, "default_kwargs", None)
     if is_mapping(default_kwargs):
         merged_kwargs.update(default_kwargs)
