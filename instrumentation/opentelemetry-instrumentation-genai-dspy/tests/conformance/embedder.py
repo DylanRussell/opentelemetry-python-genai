@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import dspy
-
 from opentelemetry.instrumentation.genai.dspy import DSPyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
