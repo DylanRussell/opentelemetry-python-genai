@@ -20,6 +20,7 @@ from opentelemetry.util.genai.types import (
 
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
+    from dspy.clients.embedding import Embedder
     from dspy.primitives.prediction import Prediction
 
 SENTINEL_TOOL_NAMES: frozenset[str] = frozenset({"finish", "submit"})
@@ -84,8 +85,17 @@ def parse_provider_and_model(
     return None, model_str.strip() or None
 
 
+_MODEL_PREFIX_TO_PROVIDER: tuple[tuple[str, str], ...] = (
+    ("text-embedding-", GenAiProviderNameValues.OPENAI.value),
+    ("embed-", GenAiProviderNameValues.COHERE.value),
+    ("amazon.titan-embed", GenAiProviderNameValues.AWS_BEDROCK.value),
+    ("gemini-embedding", GenAiProviderNameValues.GCP_GEMINI.value),
+    ("mistral-embed", GenAiProviderNameValues.MISTRAL_AI.value),
+)
+
+
 def resolve_embedder_provider_and_model(
-    instance: object,
+    instance: Embedder,
 ) -> tuple[str, str | None]:
     """Resolve (gen_ai.provider.name, gen_ai.request.model) from a DSPy Embedder."""
     model = getattr(instance, "model", None)
@@ -97,27 +107,16 @@ def resolve_embedder_provider_and_model(
                 model_name,
             )
         model_lower = (model_name or "").lower()
-        if model_lower.startswith("text-embedding-"):
-            return GenAiProviderNameValues.OPENAI.value, model_name
-        if model_lower.startswith("embed-"):
-            return GenAiProviderNameValues.COHERE.value, model_name
-        if model_lower.startswith("amazon.titan-embed"):
-            return GenAiProviderNameValues.AWS_BEDROCK.value, model_name
-        if model_lower.startswith("gemini-embedding"):
-            return GenAiProviderNameValues.GCP_GEMINI.value, model_name
-        if model_lower.startswith("mistral-embed"):
-            return GenAiProviderNameValues.MISTRAL_AI.value, model_name
+        for prefix, provider in _MODEL_PREFIX_TO_PROVIDER:
+            if model_lower.startswith(prefix):
+                return provider, model_name
         return "dspy", model_name
 
     if callable(model):
         bound_self = getattr(model, "__self__", None)
         model_name_attr = (
             getattr(model, "model_name", None)
-            or (
-                getattr(bound_self, "model_name", None)
-                if bound_self is not None
-                else None
-            )
+            or getattr(bound_self, "model_name", None)
             or getattr(model, "__name__", None)
             or type(model).__name__
         )
