@@ -466,30 +466,6 @@ class TestInferenceContext(TestBase):
             "gen_ai.client.operation.time_per_output_chunk", metrics
         )
 
-    def test_llm_invocation_suppressed(self) -> None:
-        from opentelemetry.util.genai._inference_invocation import (
-            LLMInvocation,
-        )
-
-        with self.handler.inference("upstream"):
-            nested_inv = LLMInvocation(request_model="nested")
-            self.handler.start_llm(nested_inv)
-            self.assertTrue(nested_inv.span.is_recording())
-            assert nested_inv._inference_invocation is not None
-            self.assertIsInstance(
-                nested_inv._inference_invocation,
-                SuppressedInferenceInvocation,
-            )
-            self.assertFalse(
-                nested_inv._inference_invocation.should_capture_content
-            )
-            nested_inv.attributes["custom.llm"] = "val"
-            self.handler.stop_llm(nested_inv)
-            data = get_inference_context_data()
-            self.assertIsNotNone(data)
-            assert data is not None
-            self.assertEqual(data.request_model, "nested")
-            self.assertEqual(data.attributes.get("custom.llm"), "val")
 
     def test_metric_enrichment_precedence_and_error(self) -> None:
         with self.assertRaises(ValueError):

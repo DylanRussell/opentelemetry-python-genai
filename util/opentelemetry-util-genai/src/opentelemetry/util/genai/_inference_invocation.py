@@ -16,8 +16,6 @@ from opentelemetry.semconv._incubating.attributes import (
 )
 from opentelemetry.semconv.attributes import server_attributes
 from opentelemetry.trace import (
-    INVALID_SPAN,
-    Span,
     SpanKind,
     Tracer,
 )
@@ -978,4 +976,3 @@ class LLMInvocation:
     seed: int | None = None
     server_address: str | None = None
     server_port: int | None = None
-

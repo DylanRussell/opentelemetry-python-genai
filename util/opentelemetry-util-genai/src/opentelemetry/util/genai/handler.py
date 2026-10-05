@@ -167,7 +167,6 @@ class TelemetryHandler:
         """
         return self._capture_content
 
-
     def retrieval(
         self,
         *,
