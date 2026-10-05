@@ -66,6 +66,7 @@ from opentelemetry.util.genai.types import (
     InputMessage,
     OutputMessage,
     Role,
+    SystemInstructionPart,
     TextPart,
     ToolCallResponsePart,
 )
@@ -360,93 +361,6 @@ def _set_invocation_input(
             ]
 
 
-def _extract_continue_input(
-    wrapped: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> Any:
-    for param in (
-        "input",
-        "additional_instructions",
-        "additionalInstructions",
-    ):
-        val = get_argument(param, wrapped, args, kwargs)
-        if val is not None:
-            return val
-    return None
-
-
-def _extract_continue_tool_results(
-    wrapped: Callable[..., Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> list[tuple[str, Any]]:
-    """Extract tool call results passed to continue_run.
-
-    In Agno, tool results can be passed as:
-    - ``tools``: JSON string (e.g. from the continue-run REST API) or list of
-      tool execution dicts / ToolExecution objects
-    - ``updated_tools``: list of ToolExecution objects or dicts
-    - ``requirements``: list of RunRequirement objects containing tool_execution
-    """
-    raw_tools: Any = (
-        get_argument("tools", wrapped, args, kwargs)
-        or get_argument("updated_tools", wrapped, args, kwargs)
-        or get_argument("requirements", wrapped, args, kwargs)
-    )
-    if not raw_tools:
-        return []
-
-    items: list[Any]
-    if isinstance(raw_tools, str):
-        try:
-            parsed: Any = json.loads(raw_tools)
-            items = (
-                cast(list[Any], parsed)
-                if isinstance(parsed, list)
-                else [parsed]
-            )
-        except Exception:
-            return []
-    elif isinstance(raw_tools, Iterable):
-        items = list(cast(Iterable[Any], raw_tools))
-    else:
-        items = [raw_tools]
-
-    tool_results: list[tuple[str, Any]] = []
-    for item_raw in items:
-        item: Any = item_raw
-        if isinstance(item, str):
-            try:
-                item = json.loads(item)
-            except Exception:
-                pass
-
-        if (tool_exec := getattr(item, "tool_execution", None)) is not None:
-            item = tool_exec
-
-        call_id = _get_property_value(
-            item, "tool_call_id"
-        ) or _get_property_value(item, "id")
-        if not call_id:
-            continue
-
-        resp: Any = _get_property_value(item, "result")
-        if resp is None:
-            confirmed = _get_property_value(item, "confirmed")
-            if confirmed is not None:
-                resp = {"confirmed": confirmed}
-            elif isinstance(item, dict):
-                resp = cast(dict[str, Any], item)
-            else:
-                to_dict = getattr(item, "to_dict", None)
-                resp = to_dict() if callable(to_dict) else str(item)
-
-        tool_results.append((str(call_id), resp))
-
-    return tool_results
-
-
 def _extract_continue_session_id(
     instance: Agent | Team | Workflow,
     wrapped: Callable[..., Any],
@@ -478,23 +392,75 @@ def _set_continue_invocation_input(
         return
     messages: list[InputMessage] = []
 
-    tool_results = _extract_continue_tool_results(wrapped, args, kwargs)
-    for call_id, resp in tool_results:
-        messages.append(
-            InputMessage(
-                role=Role.TOOL.value,
-                parts=[
-                    # format_content dumps structured objects to JSON strings (potentially
-                    # double JSON-encoded when serialized to spans); strings are kept as-is.
-                    ToolCallResponsePart(
-                        id=call_id,
-                        response=format_content(resp),
-                    )
-                ],
-            )
-        )
+    # In Agno, tool results can be passed as:
+    # - tools: JSON string or list of tool execution dicts / ToolExecution objects
+    # - updated_tools: list of ToolExecution objects or dicts
+    # - requirements: list of RunRequirement objects containing tool_execution
+    raw_tools: Any = (
+        get_argument("tools", wrapped, args, kwargs)
+        or get_argument("updated_tools", wrapped, args, kwargs)
+        or get_argument("requirements", wrapped, args, kwargs)
+    )
+    if raw_tools:
+        items: list[Any]
+        if isinstance(raw_tools, str):
+            try:
+                parsed: Any = json.loads(raw_tools)
+                items = (
+                    cast(list[Any], parsed)
+                    if isinstance(parsed, list)
+                    else [parsed]
+                )
+            except Exception:
+                items = []
+        elif isinstance(raw_tools, Iterable):
+            items = list(cast(Iterable[Any], raw_tools))
+        else:
+            items = [raw_tools]
 
-    input_val = _extract_continue_input(wrapped, args, kwargs)
+        for item_raw in items:
+            item: Any = item_raw
+            if isinstance(item, str):
+                try:
+                    item = json.loads(item)
+                except Exception:
+                    pass
+
+            if (
+                tool_exec := getattr(item, "tool_execution", None)
+            ) is not None:
+                item = tool_exec
+
+            call_id = _get_property_value(
+                item, "tool_call_id"
+            ) or _get_property_value(item, "id")
+            if not call_id:
+                continue
+
+            resp: Any = _get_property_value(item, "result")
+            if resp is None:
+                confirmed = _get_property_value(item, "confirmed")
+                if confirmed is not None:
+                    resp = {"confirmed": confirmed}
+                elif isinstance(item, dict):
+                    resp = cast(dict[str, Any], item)
+                else:
+                    to_dict = getattr(item, "to_dict", None)
+                    resp = to_dict() if callable(to_dict) else str(item)
+
+            messages.append(
+                InputMessage(
+                    role=Role.TOOL.value,
+                    parts=[
+                        ToolCallResponsePart(
+                            id=str(call_id),
+                            response=resp,
+                        )
+                    ],
+                )
+            )
+
+    input_val = get_argument("input", wrapped, args, kwargs)
     if input_val is not None:
         content_str = _extract_input_content(input_val)
         if content_str:
@@ -506,6 +472,18 @@ def _set_continue_invocation_input(
             )
 
     invocation.input_messages = messages
+
+    if isinstance(invocation, LocalAgentInvocation):
+        instructions_val = get_argument(
+            "additional_instructions", wrapped, args, kwargs
+        ) or get_argument("additionalInstructions", wrapped, args, kwargs)
+        if instructions_val is not None:
+            instr_str = _extract_input_content(instructions_val)
+            if instr_str:
+                instructions: list[SystemInstructionPart] = [
+                    TextPart(content=instr_str)
+                ]
+                invocation.system_instruction = instructions
 
 
 def _extract_finish_reason(result: object) -> str:
