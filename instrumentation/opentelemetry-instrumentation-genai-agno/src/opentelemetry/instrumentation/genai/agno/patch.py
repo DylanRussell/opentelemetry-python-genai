@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from agno.agent import Agent, RunOutput
     from agno.knowledge.document.base import Document
     from agno.knowledge.knowledge import Knowledge
+    from agno.models.response import ToolExecution
     from agno.run.workflow import WorkflowRunOutput
     from agno.team import Team, TeamRunOutput
     from agno.tools.function import FunctionCall, FunctionExecutionResult
@@ -381,6 +382,72 @@ def _extract_continue_session_id(
     return None
 
 
+def _to_tool_executions(raw_tools: Any) -> list[ToolExecution]:
+    """Normalize raw tools/requirements into a list of Agno ToolExecution instances."""
+    if not raw_tools:
+        return []
+
+    from agno.models.response import ToolExecution
+
+    items: list[Any]
+    if isinstance(raw_tools, str):
+        try:
+            parsed: Any = json.loads(raw_tools)
+            items = (
+                cast(list[Any], parsed)
+                if isinstance(parsed, list)
+                else [parsed]
+            )
+        except Exception:
+            return []
+    elif isinstance(raw_tools, Iterable):
+        items = list(cast(Iterable[Any], raw_tools))
+    else:
+        items = [raw_tools]
+
+    tool_executions: list[ToolExecution] = []
+    for item_raw in items:
+        item: Any = item_raw
+        if isinstance(item, str):
+            try:
+                item = json.loads(item)
+            except Exception:
+                pass
+
+        if (tool_exec := getattr(item, "tool_execution", None)) is not None:
+            item = tool_exec
+
+        # Agno populates tool_call_id on paused tools; without an ID the result
+        # cannot be correlated to a prior tool call.
+        if isinstance(item, ToolExecution):
+            if item.tool_call_id:
+                tool_executions.append(item)
+            continue
+
+        call_id = _get_property_value(
+            item, "tool_call_id"
+        ) or _get_property_value(item, "id")
+        if not call_id:
+            continue
+
+        resp: Any = _get_property_value(item, "result")
+        confirmed: Any = _get_property_value(item, "confirmed")
+        tool_name = _get_property_value(
+            item, "tool_name"
+        ) or _get_property_value(item, "name")
+
+        tool_executions.append(
+            ToolExecution(
+                tool_call_id=str(call_id),
+                tool_name=str(tool_name) if tool_name else None,
+                result=resp,
+                confirmed=bool(confirmed) if confirmed is not None else None,
+            )
+        )
+
+    return tool_executions
+
+
 def _set_continue_invocation_input(
     invocation: LocalAgentInvocation | WorkflowInvocation,
     wrapped: Callable[..., Any],
@@ -401,64 +468,28 @@ def _set_continue_invocation_input(
         or get_argument("updated_tools", wrapped, args, kwargs)
         or get_argument("requirements", wrapped, args, kwargs)
     )
-    if raw_tools:
-        items: list[Any]
-        if isinstance(raw_tools, str):
-            try:
-                parsed: Any = json.loads(raw_tools)
-                items = (
-                    cast(list[Any], parsed)
-                    if isinstance(parsed, list)
-                    else [parsed]
-                )
-            except Exception:
-                items = []
-        elif isinstance(raw_tools, Iterable):
-            items = list(cast(Iterable[Any], raw_tools))
-        else:
-            items = [raw_tools]
+    for tool_exec in _to_tool_executions(raw_tools):
+        resp: Any = tool_exec.result
+        # In Agno HITL confirmation, the user approves/denies the tool call.
+        # When confirmed=True without a result, Agno executes the tool during
+        # this continued run (emitting an execute_tool child span).
+        if resp is None and tool_exec.confirmed is not None:
+            resp = {"confirmed": tool_exec.confirmed}
+        elif resp is None:
+            to_dict = getattr(tool_exec, "to_dict", None)
+            resp = to_dict() if callable(to_dict) else str(tool_exec)
 
-        for item_raw in items:
-            item: Any = item_raw
-            if isinstance(item, str):
-                try:
-                    item = json.loads(item)
-                except Exception:
-                    pass
-
-            if (
-                tool_exec := getattr(item, "tool_execution", None)
-            ) is not None:
-                item = tool_exec
-
-            call_id = _get_property_value(
-                item, "tool_call_id"
-            ) or _get_property_value(item, "id")
-            if not call_id:
-                continue
-
-            resp: Any = _get_property_value(item, "result")
-            if resp is None:
-                confirmed = _get_property_value(item, "confirmed")
-                if confirmed is not None:
-                    resp = {"confirmed": confirmed}
-                elif isinstance(item, dict):
-                    resp = cast(dict[str, Any], item)
-                else:
-                    to_dict = getattr(item, "to_dict", None)
-                    resp = to_dict() if callable(to_dict) else str(item)
-
-            messages.append(
-                InputMessage(
-                    role=Role.TOOL.value,
-                    parts=[
-                        ToolCallResponsePart(
-                            id=str(call_id),
-                            response=resp,
-                        )
-                    ],
-                )
+        messages.append(
+            InputMessage(
+                role=Role.TOOL.value,
+                parts=[
+                    ToolCallResponsePart(
+                        id=tool_exec.tool_call_id,
+                        response=resp,
+                    )
+                ],
             )
+        )
 
     input_val = get_argument("input", wrapped, args, kwargs)
     if input_val is not None:
