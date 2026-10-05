@@ -27,6 +27,8 @@ from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace.status import StatusCode
 from opentelemetry.util.genai._context import (
     INFERENCE_CONTEXT_KEY,
+    InferenceContextData,
+    InferenceData,
     InferenceNonContentCaptureData,
     get_inference_context_data,
     set_inference_context_data,
@@ -36,8 +38,13 @@ from opentelemetry.util.genai._inference_invocation import (
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
-    InferenceContentData,
     InferenceInvocation,
+)
+from opentelemetry.util.genai.types import (
+    FunctionToolDefinition,
+    InputMessage,
+    OutputMessage,
+    TextPart,
 )
 
 
@@ -67,11 +74,15 @@ class TestInferenceContext(TestBase):
             "opentelemetry.genai.inference_context",
         )
 
+    def test_inference_data_backward_compatibility_aliases(self) -> None:
+        self.assertIs(InferenceContextData, InferenceData)
+        self.assertIs(InferenceNonContentCaptureData, InferenceData)
+
     def test_get_inference_context_data_none_by_default(self) -> None:
         self.assertIsNone(get_inference_context_data())
 
     def test_set_and_get_inference_context_data(self) -> None:
-        data = InferenceNonContentCaptureData(request_model="gpt-4o")
+        data = InferenceData(request_model="gpt-4o")
         ctx = set_inference_context_data(data)
         self.assertIs(get_inference_context_data(ctx), data)
         self.assertIsNone(get_inference_context_data())
@@ -84,7 +95,7 @@ class TestInferenceContext(TestBase):
         self.assertIsNone(get_inference_context_data())
 
     def test_in_place_mutation_of_inference_context_data(self) -> None:
-        data = InferenceNonContentCaptureData(input_tokens=1)
+        data = InferenceData(input_tokens=1)
         ctx = set_inference_context_data(data)
         token = attach(ctx)
         try:
@@ -115,14 +126,14 @@ class TestInferenceContext(TestBase):
             data = get_inference_context_data()
             self.assertIsNotNone(data)
             assert data is not None
-            self.assertEqual(data, InferenceNonContentCaptureData())
+            self.assertEqual(data, InferenceData())
 
             # Setting fields on outer does not mutate context object
             invocation.data.input_tokens = 42
             invocation.data.output_tokens = 84
             invocation.data.temperature = 0.7
             invocation.data.response_model = "gpt-4o-mini-2024-07-18"
-            self.assertEqual(data, InferenceNonContentCaptureData())
+            self.assertEqual(data, InferenceData())
 
         self.assertIsNone(get_inference_context_data())
 
@@ -653,7 +664,7 @@ class TestInferenceContext(TestBase):
             self.assertNotIsInstance(root, SuppressedInferenceInvocation)
             self.assertEqual(
                 get_inference_context_data(),
-                InferenceNonContentCaptureData(),
+                InferenceData(),
             )
 
             with self.handler.inference(
@@ -857,9 +868,8 @@ class TestInferenceContext(TestBase):
 
     def test_dataclass_prototype_architecture(self) -> None:
         with self.handler.inference("openai", request_model="gpt-4o") as inv:
-            # Underlying dataclass instances exist
-            self.assertIsInstance(inv.data, InferenceNonContentCaptureData)
-            self.assertIsInstance(inv.content, InferenceContentData)
+            # Underlying dataclass instance exists
+            self.assertIsInstance(inv.data, InferenceData)
 
             # Dictionary references are shared
             self.assertIs(inv.attributes, inv.data.attributes)
@@ -873,22 +883,136 @@ class TestInferenceContext(TestBase):
             inv.data.response_model = "gpt-4o-2024-08-06"
             self.assertEqual(inv.data.response_model, "gpt-4o-2024-08-06")
 
-            # Content access on inv.content
+            # Content access on inv.data
             from opentelemetry.util.genai.types import InputMessage, TextPart
 
-            inv.content.input_messages.append(
+            inv.data.input_messages.append(
                 InputMessage(role="user", parts=[TextPart(content="hello")])
             )
-            self.assertEqual(len(inv.content.input_messages), 1)
+            self.assertEqual(len(inv.data.input_messages), 1)
 
-            # Content fields are not present on inv.data
-            self.assertFalse(hasattr(inv.data, "input_messages"))
-            self.assertFalse(hasattr(inv.data, "output_messages"))
-            self.assertFalse(hasattr(inv.data, "system_instruction"))
-            self.assertFalse(hasattr(inv.data, "tool_definitions"))
+            # Content fields are present on inv.data
+            self.assertTrue(hasattr(inv.data, "input_messages"))
+            self.assertTrue(hasattr(inv.data, "output_messages"))
+            self.assertTrue(hasattr(inv.data, "system_instruction"))
+            self.assertTrue(hasattr(inv.data, "tool_definitions"))
+            self.assertTrue(hasattr(inv.data, "prompt_variables"))
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        from opentelemetry.util.genai.types import (
+            FunctionToolDefinition,
+            InputMessage,
+            OutputMessage,
+            TextPart,
+        )
+
+        with self.handler.inference("openai", request_model="gpt-4o") as outer:
+            outer.data.input_messages = [
+                InputMessage(
+                    role="user", parts=[TextPart(content="outer prompt")]
+                )
+            ]
+            outer.data.output_messages = [
+                OutputMessage(
+                    role="assistant",
+                    parts=[TextPart(content="outer response")],
+                )
+            ]
+            outer.data.system_instruction = [
+                TextPart(content="outer instruction")
+            ]
+            outer.data.prompt_variables = {"var": "outer"}
+            outer.data.tool_definitions = []
+
+            inner_data = InferenceData(
+                input_tokens=100,
+                output_tokens=50,
+                input_messages=[
+                    InputMessage(
+                        role="user", parts=[TextPart(content="inner prompt")]
+                    )
+                ],
+                output_messages=[
+                    OutputMessage(
+                        role="assistant",
+                        parts=[TextPart(content="inner response")],
+                    )
+                ],
+                system_instruction=[TextPart(content="inner instruction")],
+                prompt_variables={"var": "inner"},
+                tool_definitions=[
+                    FunctionToolDefinition(
+                        name="inner_tool", description="desc", parameters={}
+                    )
+                ],
+            )
+
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields are enriched
+            self.assertEqual(outer.data.input_tokens, 100)
+            self.assertEqual(outer.data.output_tokens, 50)
+
+            # Content fields are NOT overridden by inner
+            self.assertEqual(len(outer.data.input_messages), 1)
+            first_in_part = outer.data.input_messages[0].parts[0]
+            self.assertIsInstance(first_in_part, TextPart)
+            assert isinstance(first_in_part, TextPart)
+            self.assertEqual(first_in_part.content, "outer prompt")
+
+            self.assertEqual(len(outer.data.output_messages), 1)
+            first_out_part = outer.data.output_messages[0].parts[0]
+            self.assertIsInstance(first_out_part, TextPart)
+            assert isinstance(first_out_part, TextPart)
+            self.assertEqual(first_out_part.content, "outer response")
+
+            self.assertEqual(outer.data.prompt_variables, {"var": "outer"})
+            self.assertEqual(outer.data.tool_definitions, [])
+            self.assertEqual(len(outer.data.system_instruction), 1)
+            first_sys_part = outer.data.system_instruction[0]
+            self.assertIsInstance(first_sys_part, TextPart)
+            assert isinstance(first_sys_part, TextPart)
+            self.assertEqual(first_sys_part.content, "outer instruction")
+
+    def test_enrich_from_context_does_not_override_empty_content(self) -> None:
+        from opentelemetry.util.genai.types import (
+            FunctionToolDefinition,
+            InputMessage,
+            TextPart,
+        )
+
+        with self.handler.inference("openai", request_model="gpt-4o") as outer:
+            self.assertEqual(outer.data.input_messages, [])
+            self.assertIsNone(outer.data.prompt_variables)
+            self.assertIsNone(outer.data.tool_definitions)
+
+            inner_data = InferenceData(
+                input_tokens=100,
+                input_messages=[
+                    InputMessage(
+                        role="user", parts=[TextPart(content="inner prompt")]
+                    )
+                ],
+                prompt_variables={"var": "inner"},
+                tool_definitions=[
+                    FunctionToolDefinition(
+                        name="inner_tool", description="desc", parameters={}
+                    )
+                ],
+            )
+
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields are enriched
+            self.assertEqual(outer.data.input_tokens, 100)
+
+            # Content fields remain default / empty
+            self.assertEqual(outer.data.input_messages, [])
+            self.assertIsNone(outer.data.prompt_variables)
+            self.assertIsNone(outer.data.tool_definitions)
 
     def test_inference_context_data_merge(self) -> None:
-        base = InferenceNonContentCaptureData(
+        base = InferenceData(
             provider="openai",
             request_model="gpt-4o",
             temperature=0.5,
@@ -896,7 +1020,7 @@ class TestInferenceContext(TestBase):
             attributes={"a": 1, "shared": "base"},
             metric_attributes={"m1": "v1"},
         )
-        incoming = InferenceNonContentCaptureData(
+        incoming = InferenceData(
             request_model="gpt-4o-mini",
             temperature=0.9,
             output_tokens=20,
@@ -905,7 +1029,7 @@ class TestInferenceContext(TestBase):
         )
 
         # Merge with overwrite=True (inner publishing to context)
-        dest = InferenceNonContentCaptureData()
+        dest = InferenceData()
         dest.merge(base, overwrite=True)
         dest.merge(incoming, overwrite=True)
         self.assertEqual(dest.provider, "openai")
@@ -920,7 +1044,7 @@ class TestInferenceContext(TestBase):
         self.assertEqual(dest.metric_attributes["m2"], "v2")
 
         # Merge with overwrite=False (outer enriching from context)
-        outer = InferenceNonContentCaptureData(
+        outer = InferenceData(
             provider="openai",
             request_model="gpt-4o",
             temperature=0.2,  # outer explicitly set temperature
@@ -935,3 +1059,161 @@ class TestInferenceContext(TestBase):
             outer.attributes["shared"], "outer"
         )  # preserved outer
         self.assertEqual(outer.attributes["a"], 1)  # enriched from inner
+
+    def test_inference_invocation_property_delegation_to_data(self) -> None:
+        with self.handler.inference(
+            "test-provider",
+            request_model="test-model",
+            server_address="custom.server.com",
+            server_port=42,
+        ) as inv:
+            # Content fields
+            msg = InputMessage(role="user", parts=["hi"])
+            inv.input_messages.append(msg)
+            self.assertEqual(inv.data.input_messages, [msg])
+            self.assertEqual(inv.input_messages, [msg])
+
+            out_msg = OutputMessage(
+                role="assistant", parts=["hello"], finish_reason="stop"
+            )
+            inv.output_messages = [out_msg]
+            self.assertEqual(inv.data.output_messages, [out_msg])
+            self.assertEqual(inv.output_messages, [out_msg])
+
+            sys_inst = [TextPart(type="text", content="be helpful")]
+            inv.system_instruction = sys_inst
+            self.assertEqual(inv.data.system_instruction, sys_inst)
+            self.assertEqual(inv.system_instruction, sys_inst)
+
+            tools = [
+                FunctionToolDefinition(
+                    name="test_tool", description="a tool", parameters={}
+                )
+            ]
+            inv.tool_definitions = tools
+            self.assertEqual(inv.data.tool_definitions, tools)
+            self.assertEqual(inv.tool_definitions, tools)
+
+            vars_map = {"k": "v"}
+            inv.prompt_variables = vars_map
+            self.assertEqual(inv.data.prompt_variables, vars_map)
+            self.assertEqual(inv.prompt_variables, vars_map)
+
+            # Model and server properties
+            self.assertEqual(inv.provider, "test-provider")
+            self.assertEqual(inv.request_model, "test-model")
+            self.assertEqual(inv.server_address, "custom.server.com")
+            self.assertEqual(inv.server_port, 42)
+
+            inv.response_model = "resp-model"
+            self.assertEqual(inv.data.response_model, "resp-model")
+            self.assertEqual(inv.response_model, "resp-model")
+            self.assertEqual(inv.response_model_name, "resp-model")
+
+            inv.response_model_name = "resp-model-2"
+            self.assertEqual(inv.data.response_model, "resp-model-2")
+            self.assertEqual(inv.response_model, "resp-model-2")
+
+            inv.response_id = "resp-123"
+            self.assertEqual(inv.data.response_id, "resp-123")
+            self.assertEqual(inv.response_id, "resp-123")
+
+            inv.finish_reasons = ["stop"]
+            self.assertEqual(inv.data.finish_reasons, ["stop"])
+            self.assertEqual(inv.finish_reasons, ["stop"])
+
+            # Hyperparameters
+            inv.temperature = 0.7
+            inv.top_p = 0.95
+            inv.top_k = 50
+            inv.frequency_penalty = 0.1
+            inv.presence_penalty = 0.2
+            inv.max_tokens = 500
+            inv.stop_sequences = ["\n"]
+            inv.seed = 123
+            inv.request_choice_count = 2
+            inv.output_type = "json"
+            inv.request_stream = True
+            inv.ttfc_seconds = 0.15
+
+            self.assertEqual(inv.data.temperature, 0.7)
+            self.assertEqual(inv.data.top_p, 0.95)
+            self.assertEqual(inv.data.top_k, 50)
+            self.assertEqual(inv.data.frequency_penalty, 0.1)
+            self.assertEqual(inv.data.presence_penalty, 0.2)
+            self.assertEqual(inv.data.max_tokens, 500)
+            self.assertEqual(inv.data.stop_sequences, ["\n"])
+            self.assertEqual(inv.data.seed, 123)
+            self.assertEqual(inv.data.request_choice_count, 2)
+            self.assertEqual(inv.data.output_type, "json")
+            self.assertTrue(inv.data.request_stream)
+            self.assertEqual(inv.data.ttfc_seconds, 0.15)
+
+            # Tokens
+            inv.input_tokens = 100
+            inv.output_tokens = 200
+            inv.thinking_tokens = 50
+            inv.cache_write_input_tokens = 30
+            self.assertEqual(inv.data.input_tokens, 100)
+            self.assertEqual(inv.data.output_tokens, 200)
+            self.assertEqual(inv.data.thinking_tokens, 50)
+            self.assertEqual(inv.data.cache_write_input_tokens, 30)
+            self.assertEqual(inv.cache_creation_input_tokens, 30)
+
+            inv.cache_creation_input_tokens = 40
+            self.assertEqual(inv.data.cache_write_input_tokens, 40)
+            self.assertEqual(inv.cache_write_input_tokens, 40)
+
+            inv.cache_read_input_tokens = 25
+            self.assertEqual(inv.data.cache_read_input_tokens, 25)
+
+            # Modality tokens
+            inv.text_input_tokens = 10
+            inv.image_input_tokens = 20
+            inv.audio_input_tokens = 30
+            inv.text_output_tokens = 40
+            inv.image_output_tokens = 50
+            inv.audio_output_tokens = 60
+            inv.text_cache_read_input_tokens = 70
+            inv.image_cache_read_input_tokens = 80
+            inv.audio_cache_read_input_tokens = 90
+
+            self.assertEqual(inv.data.text_input_tokens, 10)
+            self.assertEqual(inv.data.image_input_tokens, 20)
+            self.assertEqual(inv.data.audio_input_tokens, 30)
+            self.assertEqual(inv.data.text_output_tokens, 40)
+            self.assertEqual(inv.data.image_output_tokens, 50)
+            self.assertEqual(inv.data.audio_output_tokens, 60)
+            self.assertEqual(inv.data.text_cache_read_input_tokens, 70)
+            self.assertEqual(inv.data.image_cache_read_input_tokens, 80)
+            self.assertEqual(inv.data.audio_cache_read_input_tokens, 90)
+
+            # Other fields
+            inv.reasoning_level = "high"
+            inv.previous_response_id = "prev-id"
+            inv.conversation_compacted = True
+            inv.prompt_name = "test-prompt"
+            inv.prompt_version = "1.0"
+
+            self.assertEqual(inv.data.reasoning_level, "high")
+            self.assertEqual(inv.data.previous_response_id, "prev-id")
+            self.assertTrue(inv.data.conversation_compacted)
+            self.assertEqual(inv.data.prompt_name, "test-prompt")
+            self.assertEqual(inv.data.prompt_version, "1.0")
+
+            # Attributes and metric attributes
+            inv.attributes["custom_span_attr"] = "span_val"
+            self.assertEqual(
+                inv.data.attributes["custom_span_attr"], "span_val"
+            )
+
+            inv.metric_attributes["custom_metric_attr"] = "metric_val"
+            self.assertEqual(
+                inv.data.metric_attributes["custom_metric_attr"], "metric_val"
+            )
+
+            # Stream private attribute alias
+            inv._request_stream = False
+            self.assertFalse(inv.request_stream)
+            inv._request_stream = True
+            self.assertTrue(inv.request_stream)

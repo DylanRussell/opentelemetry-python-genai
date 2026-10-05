@@ -22,14 +22,17 @@ from opentelemetry.util.genai._agent_invocation import (
     LocalAgentInvocation,
     RemoteAgentInvocation,
 )
+from opentelemetry.util.genai._context import (
+    InferenceContextData,
+    InferenceData,
+    InferenceNonContentCaptureData,
+)
 from opentelemetry.util.genai._embedding_invocation import EmbeddingInvocation
 from opentelemetry.util.genai._fetch_response_invocation import (
     FetchResponseInvocation,
 )
 from opentelemetry.util.genai._inference_invocation import (
-    InferenceContentData,
     InferenceInvocation,
-    InferenceNonContentCaptureData,
 )
 from opentelemetry.util.genai._invocation import (
     ContextToken,
@@ -47,7 +50,8 @@ __all__ = [
     "Error",
     "FetchResponseInvocation",
     "GenAIInvocation",
-    "InferenceContentData",
+    "InferenceContextData",
+    "InferenceData",
     "InferenceInvocation",
     "InferenceNonContentCaptureData",
     "LocalAgentInvocation",
