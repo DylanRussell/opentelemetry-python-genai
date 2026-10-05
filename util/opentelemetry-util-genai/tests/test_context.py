@@ -466,7 +466,6 @@ class TestInferenceContext(TestBase):
             "gen_ai.client.operation.time_per_output_chunk", metrics
         )
 
-
     def test_metric_enrichment_precedence_and_error(self) -> None:
         with self.assertRaises(ValueError):
             with self.handler.inference(
