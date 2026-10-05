@@ -17,9 +17,10 @@ from collections.abc import (
     Callable,
     Iterable,
     Iterator,
+    Mapping,
     Sequence,
 )
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from agno.agent import Agent, RunOutput
@@ -32,6 +33,12 @@ if TYPE_CHECKING:
     from agno.workflow import Workflow
 
     AgnoRunOutput = RunOutput | TeamRunOutput | WorkflowRunOutput
+
+    class _HasToolExecution(Protocol):
+        tool_execution: ToolExecution | None
+
+    RawToolItem = ToolExecution | _HasToolExecution | Mapping[str, object]
+    RawTools = str | Iterable[RawToolItem] | RawToolItem
 
 from wrapt import register_post_import_hook, wrap_function_wrapper
 
@@ -382,32 +389,31 @@ def _extract_continue_session_id(
     return None
 
 
-def _to_tool_executions(raw_tools: Any) -> list[ToolExecution]:
+def _to_tool_executions(raw_tools: RawTools | None) -> list[ToolExecution]:
     """Normalize raw tools/requirements into a list of Agno ToolExecution instances."""
     if not raw_tools:
         return []
 
     from agno.models.response import ToolExecution
 
-    items: list[Any]
+    items: Iterable[RawToolItem | object]
     if isinstance(raw_tools, str):
         try:
-            parsed: Any = json.loads(raw_tools)
+            parsed: object = json.loads(raw_tools)
             items = (
-                cast(list[Any], parsed)
+                cast(list[object], parsed)
                 if isinstance(parsed, list)
                 else [parsed]
             )
         except Exception:
             return []
     elif isinstance(raw_tools, Iterable):
-        items = list(cast(Iterable[Any], raw_tools))
+        items = raw_tools
     else:
         items = [raw_tools]
 
     tool_executions: list[ToolExecution] = []
-    for item_raw in items:
-        item: Any = item_raw
+    for item in items:
         if isinstance(item, str):
             try:
                 item = json.loads(item)
@@ -463,10 +469,11 @@ def _set_continue_invocation_input(
     # - tools: JSON string or list of tool execution dicts / ToolExecution objects
     # - updated_tools: list of ToolExecution objects or dicts
     # - requirements: list of RunRequirement objects containing tool_execution
-    raw_tools: Any = (
+    raw_tools: RawTools | None = cast(
+        "RawTools | None",
         get_argument("tools", wrapped, args, kwargs)
         or get_argument("updated_tools", wrapped, args, kwargs)
-        or get_argument("requirements", wrapped, args, kwargs)
+        or get_argument("requirements", wrapped, args, kwargs),
     )
     for tool_exec in _to_tool_executions(raw_tools):
         resp: Any = tool_exec.result
