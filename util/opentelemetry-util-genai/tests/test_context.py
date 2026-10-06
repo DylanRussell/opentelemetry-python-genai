@@ -6,7 +6,13 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-from opentelemetry.context import Context, attach, detach
+from opentelemetry.context import (
+    Context,
+    attach,
+    detach,
+    get_value,
+    set_value,
+)
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
@@ -25,19 +31,13 @@ from opentelemetry.semconv.attributes import (
 )
 from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace.status import StatusCode
-from opentelemetry.util.genai._context import (
-    INFERENCE_CONTEXT_KEY,
-    InferenceContextData,
-    InferenceData,
-    InferenceNonContentCaptureData,
-    get_inference_context_data,
-    set_inference_context_data,
-)
 from opentelemetry.util.genai._inference_invocation import (
     SuppressedInferenceInvocation,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
+    CLIENT_INFERENCE_CONTEXT_KEY,
+    InferenceData,
     InferenceInvocation,
 )
 from opentelemetry.util.genai.types import (
@@ -46,6 +46,19 @@ from opentelemetry.util.genai.types import (
     OutputMessage,
     TextPart,
 )
+
+
+def get_inference_context_data(
+    context: Context | None = None,
+) -> InferenceData | None:
+    data = get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context)
+    return data if isinstance(data, InferenceData) else None
+
+
+def set_inference_context_data(
+    data: InferenceData, context: Context | None = None
+) -> Context:
+    return set_value(CLIENT_INFERENCE_CONTEXT_KEY, data, context=context)
 
 
 class TestInferenceContext(TestBase):
@@ -70,45 +83,43 @@ class TestInferenceContext(TestBase):
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
-            INFERENCE_CONTEXT_KEY,
-            "opentelemetry.genai.inference_context",
+            CLIENT_INFERENCE_CONTEXT_KEY,
+            "opentelemetry.genai.client.inference.context",
         )
 
-    def test_inference_data_backward_compatibility_aliases(self) -> None:
-        self.assertIs(InferenceContextData, InferenceData)
-        self.assertIs(InferenceNonContentCaptureData, InferenceData)
-
     def test_get_inference_context_data_none_by_default(self) -> None:
-        self.assertIsNone(get_inference_context_data())
+        self.assertIsNone(get_value(CLIENT_INFERENCE_CONTEXT_KEY))
 
     def test_set_and_get_inference_context_data(self) -> None:
         data = InferenceData(request_model="gpt-4o")
-        ctx = set_inference_context_data(data)
-        self.assertIs(get_inference_context_data(ctx), data)
-        self.assertIsNone(get_inference_context_data())
+        ctx = set_value(CLIENT_INFERENCE_CONTEXT_KEY, data)
+        self.assertIs(
+            get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=ctx), data
+        )
+        self.assertIsNone(get_value(CLIENT_INFERENCE_CONTEXT_KEY))
 
         token = attach(ctx)
         try:
-            self.assertIs(get_inference_context_data(), data)
+            self.assertIs(get_value(CLIENT_INFERENCE_CONTEXT_KEY), data)
         finally:
             detach(token)
-        self.assertIsNone(get_inference_context_data())
+        self.assertIsNone(get_value(CLIENT_INFERENCE_CONTEXT_KEY))
 
     def test_in_place_mutation_of_inference_context_data(self) -> None:
-        data = InferenceData(input_tokens=1)
+        data = InferenceData(usage_input_tokens=1)
         ctx = set_inference_context_data(data)
         token = attach(ctx)
         try:
             current = get_inference_context_data()
             self.assertIsNotNone(current)
             assert current is not None
-            current.input_tokens = 10
-            current.output_tokens = 20
+            current.usage_input_tokens = 10
+            current.usage_output_tokens = 20
 
             after = get_inference_context_data()
             assert after is not None
-            self.assertEqual(after.input_tokens, 10)
-            self.assertEqual(after.output_tokens, 20)
+            self.assertEqual(after.usage_input_tokens, 10)
+            self.assertEqual(after.usage_output_tokens, 20)
             self.assertIs(after, data)
         finally:
             detach(token)
@@ -129,9 +140,9 @@ class TestInferenceContext(TestBase):
             self.assertEqual(data, InferenceData())
 
             # Setting fields on outer does not mutate context object
-            invocation.data.input_tokens = 42
-            invocation.data.output_tokens = 84
-            invocation.data.temperature = 0.7
+            invocation.data.usage_input_tokens = 42
+            invocation.data.usage_output_tokens = 84
+            invocation.data.request_temperature = 0.7
             invocation.data.response_model = "gpt-4o-mini-2024-07-18"
             self.assertEqual(data, InferenceData())
 
@@ -142,7 +153,7 @@ class TestInferenceContext(TestBase):
             "openai", request_model="gpt-4o-mini"
         ) as invocation:
             self.assertNotIsInstance(invocation, SuppressedInferenceInvocation)
-            invocation.data.input_tokens = 10
+            invocation.data.usage_input_tokens = 10
             # did not call publish_to_context()
 
         # Span attributes were populated automatically upon finish
@@ -210,8 +221,8 @@ class TestInferenceContext(TestBase):
                     self.assertGreater(nested_inv._monotonic_start_s, 0.0)
                     self.assertTrue(nested_inv.span.is_recording())
                     self.assertFalse(nested_inv.should_capture_content)
-                    nested_inv.data.input_tokens = 15
-                    nested_inv.data.output_tokens = 25
+                    nested_inv.data.usage_input_tokens = 15
+                    nested_inv.data.usage_output_tokens = 25
                     nested_inv.data.response_model = "gpt-4o-2024-08-06"
                     nested_inv.attributes["custom.downstream"] = "enriched"
                     nested_inv.metric_attributes[
@@ -231,8 +242,8 @@ class TestInferenceContext(TestBase):
                     data.response_model,
                     "gpt-4o-2024-08-06",
                 )
-                self.assertEqual(data.input_tokens, 15)
-                self.assertEqual(data.output_tokens, 25)
+                self.assertEqual(data.usage_input_tokens, 15)
+                self.assertEqual(data.usage_output_tokens, 25)
                 self.assertEqual(
                     data.attributes.get("custom.downstream"), "enriched"
                 )
@@ -474,15 +485,15 @@ class TestInferenceContext(TestBase):
                 server_address="proxy.internal",
                 server_port=8080,
             ) as root_inv:
-                root_inv.data.input_tokens = 10
+                root_inv.data.usage_input_tokens = 10
                 with self.handler.inference(
                     "openai",
                     request_model="gpt-4o",
                     server_address="api.openai.com",
                     server_port=443,
                 ) as inner_inv:
-                    inner_inv.data.input_tokens = 99
-                    inner_inv.data.output_tokens = 50
+                    inner_inv.data.usage_input_tokens = 99
+                    inner_inv.data.usage_output_tokens = 50
                     inner_inv.data.response_model = "gpt-4o-2024-08-06"
                     raise ValueError("network reset")
 
@@ -549,8 +560,8 @@ class TestInferenceContext(TestBase):
             server_address="proxy.example.com",
             server_port=8080,
         ) as root:
-            root.data.temperature = 0.2
-            root.data.input_tokens = 10
+            root.data.request_temperature = 0.2
+            root.data.usage_input_tokens = 10
             root.attributes["custom.shared"] = "root-value"
 
             with self.handler.inference(
@@ -561,9 +572,9 @@ class TestInferenceContext(TestBase):
             ) as inner:
                 self.assertIsInstance(inner, SuppressedInferenceInvocation)
                 # Overwrite shared fields downstream
-                inner.data.temperature = 0.9
-                inner.data.input_tokens = 100
-                inner.data.output_tokens = 50
+                inner.data.request_temperature = 0.9
+                inner.data.usage_input_tokens = 100
+                inner.data.usage_output_tokens = 50
                 inner.data.response_id = "resp-123"
                 inner.attributes["custom.shared"] = "downstream-value"
                 inner.attributes["custom.downstream_only"] = "downstream-only"
@@ -571,9 +582,9 @@ class TestInferenceContext(TestBase):
             # While still in root context, context reflects downstream writes
             data = get_inference_context_data()
             assert data is not None
-            self.assertEqual(data.temperature, 0.9)
-            self.assertEqual(data.input_tokens, 100)
-            self.assertEqual(data.output_tokens, 50)
+            self.assertEqual(data.request_temperature, 0.9)
+            self.assertEqual(data.usage_input_tokens, 100)
+            self.assertEqual(data.usage_output_tokens, 50)
             self.assertEqual(data.response_id, "resp-123")
             self.assertEqual(
                 data.attributes.get("custom.downstream_only"),
@@ -647,15 +658,15 @@ class TestInferenceContext(TestBase):
                 request_model="model-1",
             ) as inner1:
                 self.assertIsInstance(inner1, SuppressedInferenceInvocation)
-                inner1.data.input_tokens = 10
-                inner1.data.output_tokens = 20
+                inner1.data.usage_input_tokens = 10
+                inner1.data.usage_output_tokens = 20
                 inner1.data.response_model = "resp-model-1"
 
             # After inner1 finishes, context has inner1's attributes
             data = get_inference_context_data()
             assert data is not None
             self.assertEqual(data.request_model, "model-1")
-            self.assertEqual(data.input_tokens, 10)
+            self.assertEqual(data.usage_input_tokens, 10)
             self.assertEqual(data.response_model, "resp-model-1")
 
             with self.handler.inference(
@@ -663,16 +674,16 @@ class TestInferenceContext(TestBase):
                 request_model="model-2",
             ) as inner2:
                 self.assertIsInstance(inner2, SuppressedInferenceInvocation)
-                inner2.data.input_tokens = 30
-                inner2.data.output_tokens = 40
+                inner2.data.usage_input_tokens = 30
+                inner2.data.usage_output_tokens = 40
                 inner2.data.response_model = "resp-model-2"
 
             # After inner2 finishes, inner2 overwrites inner1
             data = get_inference_context_data()
             assert data is not None
             self.assertEqual(data.request_model, "model-2")
-            self.assertEqual(data.input_tokens, 30)
-            self.assertEqual(data.output_tokens, 40)
+            self.assertEqual(data.usage_input_tokens, 30)
+            self.assertEqual(data.usage_output_tokens, 40)
             self.assertEqual(data.response_model, "resp-model-2")
 
         # After root finishes, root reconciles with context (inner2's values)
@@ -713,7 +724,6 @@ class TestInferenceContext(TestBase):
                 inner_inv.metric_attributes["root.metric"] = "inner_shadowed"
 
             data = get_inference_context_data()
-            assert data is not None
             self.assertEqual(
                 data.metric_attributes["inner.metric"], "inner_val"
             )
@@ -738,8 +748,8 @@ class TestInferenceContext(TestBase):
                 "downstream", request_model="gpt-4o"
             )
             self.assertIsInstance(inner_inv, SuppressedInferenceInvocation)
-            inner_inv.data.input_tokens = 15
-            inner_inv.data.output_tokens = 25
+            inner_inv.data.usage_input_tokens = 15
+            inner_inv.data.usage_output_tokens = 25
             inner_inv.data.response_model = "gpt-4o-2024-08-06"
 
             # Finish inner_inv in a clean/detached context (simulating separate async task or thread)
@@ -752,8 +762,8 @@ class TestInferenceContext(TestBase):
 
             data = get_inference_context_data()
             assert data is not None
-            self.assertEqual(data.input_tokens, 15)
-            self.assertEqual(data.output_tokens, 25)
+            self.assertEqual(data.usage_input_tokens, 15)
+            self.assertEqual(data.usage_output_tokens, 25)
             self.assertEqual(data.response_model, "gpt-4o-2024-08-06")
 
     def test_all_non_content_attributes_on_context_and_not_in_attributes_dict(
@@ -765,24 +775,24 @@ class TestInferenceContext(TestBase):
             with self.handler.inference(
                 "inner-provider", request_model="inner-model"
             ) as inner:
-                inner.data.temperature = 0.7
-                inner.data.top_p = 0.95
-                inner.data.top_k = 40
-                inner.data.frequency_penalty = 0.5
-                inner.data.presence_penalty = 0.2
-                inner.data.max_tokens = 2048
-                inner.data.stop_sequences = ["\n", "STOP"]
-                inner.data.seed = 42
+                inner.data.request_temperature = 0.7
+                inner.data.request_top_p = 0.95
+                inner.data.request_top_k = 40
+                inner.data.request_frequency_penalty = 0.5
+                inner.data.request_presence_penalty = 0.2
+                inner.data.request_max_tokens = 2048
+                inner.data.request_stop_sequences = ["\n", "STOP"]
+                inner.data.request_seed = 42
                 inner.data.request_choice_count = 1
                 inner.data.output_type = "json"
                 inner.data.response_id = "resp-xyz"
-                inner.data.finish_reasons = ["stop"]
-                inner.data.input_tokens = 120
-                inner.data.output_tokens = 60
-                inner.data.thinking_tokens = 30
-                inner.data.cache_read_input_tokens = 10
-                inner.data.cache_write_input_tokens = 5
-                inner.data.reasoning_level = "high"
+                inner.data.response_finish_reasons = ["stop"]
+                inner.data.usage_input_tokens = 120
+                inner.data.usage_output_tokens = 60
+                inner.data.usage_reasoning_output_tokens = 30
+                inner.data.usage_cache_read_input_tokens = 10
+                inner.data.usage_cache_write_input_tokens = 5
+                inner.data.request_reasoning_level = "high"
                 inner.data.prompt_name = "test-prompt"
                 inner.data.prompt_version = "v1"
                 inner.attributes["custom.foo"] = "bar"
@@ -791,24 +801,24 @@ class TestInferenceContext(TestBase):
             self.assertIsNotNone(data)
             assert data is not None
             # Standard non-content attributes are on typed fields
-            self.assertEqual(data.temperature, 0.7)
-            self.assertEqual(data.top_p, 0.95)
-            self.assertEqual(data.top_k, 40)
-            self.assertEqual(data.frequency_penalty, 0.5)
-            self.assertEqual(data.presence_penalty, 0.2)
-            self.assertEqual(data.max_tokens, 2048)
-            self.assertEqual(data.stop_sequences, ["\n", "STOP"])
-            self.assertEqual(data.seed, 42)
+            self.assertEqual(data.request_temperature, 0.7)
+            self.assertEqual(data.request_top_p, 0.95)
+            self.assertEqual(data.request_top_k, 40)
+            self.assertEqual(data.request_frequency_penalty, 0.5)
+            self.assertEqual(data.request_presence_penalty, 0.2)
+            self.assertEqual(data.request_max_tokens, 2048)
+            self.assertEqual(data.request_stop_sequences, ["\n", "STOP"])
+            self.assertEqual(data.request_seed, 42)
             self.assertEqual(data.request_choice_count, 1)
             self.assertEqual(data.output_type, "json")
             self.assertEqual(data.response_id, "resp-xyz")
-            self.assertEqual(data.finish_reasons, ["stop"])
-            self.assertEqual(data.input_tokens, 120)
-            self.assertEqual(data.output_tokens, 60)
-            self.assertEqual(data.thinking_tokens, 30)
-            self.assertEqual(data.cache_read_input_tokens, 10)
-            self.assertEqual(data.cache_write_input_tokens, 5)
-            self.assertEqual(data.reasoning_level, "high")
+            self.assertEqual(data.response_finish_reasons, ["stop"])
+            self.assertEqual(data.usage_input_tokens, 120)
+            self.assertEqual(data.usage_output_tokens, 60)
+            self.assertEqual(data.usage_reasoning_output_tokens, 30)
+            self.assertEqual(data.usage_cache_read_input_tokens, 10)
+            self.assertEqual(data.usage_cache_write_input_tokens, 5)
+            self.assertEqual(data.request_reasoning_level, "high")
             self.assertEqual(data.prompt_name, "test-prompt")
             self.assertEqual(data.prompt_version, "v1")
 
@@ -851,10 +861,10 @@ class TestInferenceContext(TestBase):
             self.assertIs(inv.metric_attributes, inv.data.metric_attributes)
 
             # Context fields are on inv.data
-            inv.data.input_tokens = 100
-            self.assertEqual(inv.data.input_tokens, 100)
-            inv.data.output_tokens = 50
-            self.assertEqual(inv.data.output_tokens, 50)
+            inv.data.usage_input_tokens = 100
+            self.assertEqual(inv.data.usage_input_tokens, 100)
+            inv.data.usage_output_tokens = 50
+            self.assertEqual(inv.data.usage_output_tokens, 50)
             inv.data.response_model = "gpt-4o-2024-08-06"
             self.assertEqual(inv.data.response_model, "gpt-4o-2024-08-06")
 
@@ -869,9 +879,9 @@ class TestInferenceContext(TestBase):
             # Content fields are present on inv.data
             self.assertTrue(hasattr(inv.data, "input_messages"))
             self.assertTrue(hasattr(inv.data, "output_messages"))
-            self.assertTrue(hasattr(inv.data, "system_instruction"))
+            self.assertTrue(hasattr(inv.data, "system_instructions"))
             self.assertTrue(hasattr(inv.data, "tool_definitions"))
-            self.assertTrue(hasattr(inv.data, "prompt_variables"))
+            self.assertTrue(hasattr(inv.data, "prompt_variable"))
 
     def test_enrich_from_context_does_not_override_content(self) -> None:
         from opentelemetry.util.genai.types import (
@@ -893,15 +903,15 @@ class TestInferenceContext(TestBase):
                     parts=[TextPart(content="outer response")],
                 )
             ]
-            outer.data.system_instruction = [
+            outer.data.system_instructions = [
                 TextPart(content="outer instruction")
             ]
-            outer.data.prompt_variables = {"var": "outer"}
+            outer.data.prompt_variable = {"var": "outer"}
             outer.data.tool_definitions = []
 
             inner_data = InferenceData(
-                input_tokens=100,
-                output_tokens=50,
+                usage_input_tokens=100,
+                usage_output_tokens=50,
                 input_messages=[
                     InputMessage(
                         role="user", parts=[TextPart(content="inner prompt")]
@@ -913,8 +923,8 @@ class TestInferenceContext(TestBase):
                         parts=[TextPart(content="inner response")],
                     )
                 ],
-                system_instruction=[TextPart(content="inner instruction")],
-                prompt_variables={"var": "inner"},
+                system_instructions=[TextPart(content="inner instruction")],
+                prompt_variable={"var": "inner"},
                 tool_definitions=[
                     FunctionToolDefinition(
                         name="inner_tool", description="desc", parameters={}
@@ -925,8 +935,8 @@ class TestInferenceContext(TestBase):
             outer.enrich_from_context(inner_data)
 
             # Non-content fields are enriched
-            self.assertEqual(outer.data.input_tokens, 100)
-            self.assertEqual(outer.data.output_tokens, 50)
+            self.assertEqual(outer.data.usage_input_tokens, 100)
+            self.assertEqual(outer.data.usage_output_tokens, 50)
 
             # Content fields are NOT overridden by inner
             self.assertEqual(len(outer.data.input_messages), 1)
@@ -941,10 +951,10 @@ class TestInferenceContext(TestBase):
             assert isinstance(first_out_part, TextPart)
             self.assertEqual(first_out_part.content, "outer response")
 
-            self.assertEqual(outer.data.prompt_variables, {"var": "outer"})
+            self.assertEqual(outer.data.prompt_variable, {"var": "outer"})
             self.assertEqual(outer.data.tool_definitions, [])
-            self.assertEqual(len(outer.data.system_instruction), 1)
-            first_sys_part = outer.data.system_instruction[0]
+            self.assertEqual(len(outer.data.system_instructions), 1)
+            first_sys_part = outer.data.system_instructions[0]
             self.assertIsInstance(first_sys_part, TextPart)
             assert isinstance(first_sys_part, TextPart)
             self.assertEqual(first_sys_part.content, "outer instruction")
@@ -958,17 +968,17 @@ class TestInferenceContext(TestBase):
 
         with self.handler.inference("openai", request_model="gpt-4o") as outer:
             self.assertEqual(outer.data.input_messages, [])
-            self.assertIsNone(outer.data.prompt_variables)
+            self.assertIsNone(outer.data.prompt_variable)
             self.assertIsNone(outer.data.tool_definitions)
 
             inner_data = InferenceData(
-                input_tokens=100,
+                usage_input_tokens=100,
                 input_messages=[
                     InputMessage(
                         role="user", parts=[TextPart(content="inner prompt")]
                     )
                 ],
-                prompt_variables={"var": "inner"},
+                prompt_variable={"var": "inner"},
                 tool_definitions=[
                     FunctionToolDefinition(
                         name="inner_tool", description="desc", parameters={}
@@ -979,26 +989,26 @@ class TestInferenceContext(TestBase):
             outer.enrich_from_context(inner_data)
 
             # Non-content fields are enriched
-            self.assertEqual(outer.data.input_tokens, 100)
+            self.assertEqual(outer.data.usage_input_tokens, 100)
 
             # Content fields remain default / empty
             self.assertEqual(outer.data.input_messages, [])
-            self.assertIsNone(outer.data.prompt_variables)
+            self.assertIsNone(outer.data.prompt_variable)
             self.assertIsNone(outer.data.tool_definitions)
 
     def test_inference_context_data_merge(self) -> None:
         base = InferenceData(
-            provider="openai",
+            provider_name="openai",
             request_model="gpt-4o",
-            temperature=0.5,
-            input_tokens=10,
+            request_temperature=0.5,
+            usage_input_tokens=10,
             attributes={"a": 1, "shared": "base"},
             metric_attributes={"m1": "v1"},
         )
         incoming = InferenceData(
             request_model="gpt-4o-mini",
-            temperature=0.9,
-            output_tokens=20,
+            request_temperature=0.9,
+            usage_output_tokens=20,
             attributes={"b": 2, "shared": "incoming"},
             metric_attributes={"m2": "v2"},
         )
@@ -1007,11 +1017,11 @@ class TestInferenceContext(TestBase):
         dest = InferenceData()
         dest.merge(base, overwrite=True)
         dest.merge(incoming, overwrite=True)
-        self.assertEqual(dest.provider, "openai")
+        self.assertEqual(dest.provider_name, "openai")
         self.assertEqual(dest.request_model, "gpt-4o-mini")  # overwritten
-        self.assertEqual(dest.temperature, 0.9)  # overwritten
-        self.assertEqual(dest.input_tokens, 10)
-        self.assertEqual(dest.output_tokens, 20)
+        self.assertEqual(dest.request_temperature, 0.9)  # overwritten
+        self.assertEqual(dest.usage_input_tokens, 10)
+        self.assertEqual(dest.usage_output_tokens, 20)
         self.assertEqual(dest.attributes["shared"], "incoming")  # overwritten
         self.assertEqual(dest.attributes["a"], 1)
         self.assertEqual(dest.attributes["b"], 2)
@@ -1020,16 +1030,16 @@ class TestInferenceContext(TestBase):
 
         # Merge with overwrite=False (outer enriching from context)
         outer = InferenceData(
-            provider="openai",
+            provider_name="openai",
             request_model="gpt-4o",
-            temperature=0.2,  # outer explicitly set temperature
+            request_temperature=0.2,  # outer explicitly set temperature
             attributes={"custom": "outer", "shared": "outer"},
         )
         outer.merge(dest, overwrite=False)
         self.assertEqual(outer.request_model, "gpt-4o")  # preserved outer
-        self.assertEqual(outer.temperature, 0.2)  # preserved outer
-        self.assertEqual(outer.input_tokens, 10)  # enriched from inner
-        self.assertEqual(outer.output_tokens, 20)  # enriched from inner
+        self.assertEqual(outer.request_temperature, 0.2)  # preserved outer
+        self.assertEqual(outer.usage_input_tokens, 10)  # enriched from inner
+        self.assertEqual(outer.usage_output_tokens, 20)  # enriched from inner
         self.assertEqual(
             outer.attributes["shared"], "outer"
         )  # preserved outer
@@ -1057,8 +1067,9 @@ class TestInferenceContext(TestBase):
 
             sys_inst = [TextPart(type="text", content="be helpful")]
             inv.system_instruction = sys_inst
-            self.assertEqual(inv.data.system_instruction, sys_inst)
+            self.assertEqual(inv.data.system_instructions, sys_inst)
             self.assertEqual(inv.system_instruction, sys_inst)
+            self.assertEqual(inv.system_instructions, sys_inst)
 
             tools = [
                 FunctionToolDefinition(
@@ -1071,14 +1082,27 @@ class TestInferenceContext(TestBase):
 
             vars_map = {"k": "v"}
             inv.prompt_variables = vars_map
-            self.assertEqual(inv.data.prompt_variables, vars_map)
+            self.assertEqual(inv.data.prompt_variable, vars_map)
             self.assertEqual(inv.prompt_variables, vars_map)
+            self.assertEqual(inv.prompt_variable, vars_map)
 
             # Model and server properties
             self.assertEqual(inv.provider, "test-provider")
+            self.assertEqual(inv.provider_name, "test-provider")
             self.assertEqual(inv.request_model, "test-model")
             self.assertEqual(inv.server_address, "custom.server.com")
             self.assertEqual(inv.server_port, 42)
+
+            with self.assertRaises(AttributeError):
+                setattr(inv, "provider", "other")
+            with self.assertRaises(AttributeError):
+                setattr(inv, "provider_name", "other")
+            with self.assertRaises(AttributeError):
+                setattr(inv, "request_model", "other")
+            with self.assertRaises(AttributeError):
+                setattr(inv, "server_address", "other")
+            with self.assertRaises(AttributeError):
+                setattr(inv, "server_port", 8080)
 
             inv.response_model = "resp-model"
             self.assertEqual(inv.data.response_model, "resp-model")
@@ -1094,7 +1118,7 @@ class TestInferenceContext(TestBase):
             self.assertEqual(inv.response_id, "resp-123")
 
             inv.finish_reasons = ["stop"]
-            self.assertEqual(inv.data.finish_reasons, ["stop"])
+            self.assertEqual(inv.data.response_finish_reasons, ["stop"])
             self.assertEqual(inv.finish_reasons, ["stop"])
 
             # Hyperparameters
@@ -1111,36 +1135,36 @@ class TestInferenceContext(TestBase):
             inv.request_stream = True
             inv.ttfc_seconds = 0.15
 
-            self.assertEqual(inv.data.temperature, 0.7)
-            self.assertEqual(inv.data.top_p, 0.95)
-            self.assertEqual(inv.data.top_k, 50)
-            self.assertEqual(inv.data.frequency_penalty, 0.1)
-            self.assertEqual(inv.data.presence_penalty, 0.2)
-            self.assertEqual(inv.data.max_tokens, 500)
-            self.assertEqual(inv.data.stop_sequences, ["\n"])
-            self.assertEqual(inv.data.seed, 123)
+            self.assertEqual(inv.data.request_temperature, 0.7)
+            self.assertEqual(inv.data.request_top_p, 0.95)
+            self.assertEqual(inv.data.request_top_k, 50)
+            self.assertEqual(inv.data.request_frequency_penalty, 0.1)
+            self.assertEqual(inv.data.request_presence_penalty, 0.2)
+            self.assertEqual(inv.data.request_max_tokens, 500)
+            self.assertEqual(inv.data.request_stop_sequences, ["\n"])
+            self.assertEqual(inv.data.request_seed, 123)
             self.assertEqual(inv.data.request_choice_count, 2)
             self.assertEqual(inv.data.output_type, "json")
             self.assertTrue(inv.data.request_stream)
-            self.assertEqual(inv.data.ttfc_seconds, 0.15)
+            self.assertEqual(inv.data.response_time_to_first_chunk, 0.15)
 
             # Tokens
             inv.input_tokens = 100
             inv.output_tokens = 200
             inv.thinking_tokens = 50
             inv.cache_write_input_tokens = 30
-            self.assertEqual(inv.data.input_tokens, 100)
-            self.assertEqual(inv.data.output_tokens, 200)
-            self.assertEqual(inv.data.thinking_tokens, 50)
-            self.assertEqual(inv.data.cache_write_input_tokens, 30)
+            self.assertEqual(inv.data.usage_input_tokens, 100)
+            self.assertEqual(inv.data.usage_output_tokens, 200)
+            self.assertEqual(inv.data.usage_reasoning_output_tokens, 50)
+            self.assertEqual(inv.data.usage_cache_write_input_tokens, 30)
             self.assertEqual(inv.cache_creation_input_tokens, 30)
 
             inv.cache_creation_input_tokens = 40
-            self.assertEqual(inv.data.cache_write_input_tokens, 40)
+            self.assertEqual(inv.data.usage_cache_write_input_tokens, 40)
             self.assertEqual(inv.cache_write_input_tokens, 40)
 
             inv.cache_read_input_tokens = 25
-            self.assertEqual(inv.data.cache_read_input_tokens, 25)
+            self.assertEqual(inv.data.usage_cache_read_input_tokens, 25)
 
             # Modality tokens
             inv.text_input_tokens = 10
@@ -1153,15 +1177,15 @@ class TestInferenceContext(TestBase):
             inv.image_cache_read_input_tokens = 80
             inv.audio_cache_read_input_tokens = 90
 
-            self.assertEqual(inv.data.text_input_tokens, 10)
-            self.assertEqual(inv.data.image_input_tokens, 20)
-            self.assertEqual(inv.data.audio_input_tokens, 30)
-            self.assertEqual(inv.data.text_output_tokens, 40)
-            self.assertEqual(inv.data.image_output_tokens, 50)
-            self.assertEqual(inv.data.audio_output_tokens, 60)
-            self.assertEqual(inv.data.text_cache_read_input_tokens, 70)
-            self.assertEqual(inv.data.image_cache_read_input_tokens, 80)
-            self.assertEqual(inv.data.audio_cache_read_input_tokens, 90)
+            self.assertEqual(inv.data.usage_text_input_tokens, 10)
+            self.assertEqual(inv.data.usage_image_input_tokens, 20)
+            self.assertEqual(inv.data.usage_audio_input_tokens, 30)
+            self.assertEqual(inv.data.usage_text_output_tokens, 40)
+            self.assertEqual(inv.data.usage_image_output_tokens, 50)
+            self.assertEqual(inv.data.usage_audio_output_tokens, 60)
+            self.assertEqual(inv.data.usage_text_cache_read_input_tokens, 70)
+            self.assertEqual(inv.data.usage_image_cache_read_input_tokens, 80)
+            self.assertEqual(inv.data.usage_audio_cache_read_input_tokens, 90)
 
             # Other fields
             inv.reasoning_level = "high"
@@ -1170,8 +1194,8 @@ class TestInferenceContext(TestBase):
             inv.prompt_name = "test-prompt"
             inv.prompt_version = "1.0"
 
-            self.assertEqual(inv.data.reasoning_level, "high")
-            self.assertEqual(inv.data.previous_response_id, "prev-id")
+            self.assertEqual(inv.data.request_reasoning_level, "high")
+            self.assertEqual(inv.data.request_previous_response_id, "prev-id")
             self.assertTrue(inv.data.conversation_compacted)
             self.assertEqual(inv.data.prompt_name, "test-prompt")
             self.assertEqual(inv.data.prompt_version, "1.0")
@@ -1192,3 +1216,18 @@ class TestInferenceContext(TestBase):
             self.assertFalse(inv.request_stream)
             inv._request_stream = True
             self.assertTrue(inv.request_stream)
+
+    def test_suppressed_inference_invocation_with_explicit_context(
+        self,
+    ) -> None:
+        data = InferenceData()
+        ctx = set_inference_context_data(data)
+        self.assertIsNone(get_inference_context_data())
+        with self.handler.inference(
+            "downstream", request_model="gpt-4o", context=ctx
+        ) as inv:
+            self.assertIsInstance(inv, SuppressedInferenceInvocation)
+            inv.input_tokens = 12
+            inv.output_tokens = 24
+        self.assertEqual(data.usage_input_tokens, 12)
+        self.assertEqual(data.usage_output_tokens, 24)

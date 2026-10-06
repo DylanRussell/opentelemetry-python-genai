@@ -43,15 +43,15 @@ from opentelemetry._logs import (
     LoggerProvider,
     get_logger,
 )
-from opentelemetry.context import Context
+from opentelemetry.context import Context, get_value
 from opentelemetry.metrics import Meter, MeterProvider, get_meter
 from opentelemetry.semconv.schemas import Schemas
 from opentelemetry.trace import (
     TracerProvider,
     get_tracer,
 )
-from opentelemetry.util.genai._context import get_inference_context_data
 from opentelemetry.util.genai._inference_invocation import (
+    CLIENT_INFERENCE_CONTEXT_KEY,
     SuppressedInferenceInvocation,
 )
 from opentelemetry.util.genai._instruments import _Instruments
@@ -233,7 +233,8 @@ class TelemetryHandler:
         """
         invocation_cls: type[InferenceInvocation] = (
             SuppressedInferenceInvocation
-            if get_inference_context_data() is not None
+            if get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context)
+            is not None
             else InferenceInvocation
         )
         return invocation_cls(

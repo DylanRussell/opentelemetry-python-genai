@@ -341,6 +341,10 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         finally:
             self.suspend()
             self.span.end()
+            if self._context_key is not None:
+                self._span_context = set_value(
+                    self._context_key, None, context=self._span_context
+                )
 
     def stop(self) -> None:
         """Finalize the invocation successfully and end its span."""
