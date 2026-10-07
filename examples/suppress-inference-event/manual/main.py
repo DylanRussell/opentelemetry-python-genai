@@ -43,13 +43,14 @@ class DropGenAiEventsProcessor(LogRecordProcessor):
             return self._processor.enabled(event_name=event_name, **kwargs)
         return True
 
-    def on_emit(self, log_record: Any) -> None:
+    def on_emit(self, log_data: Any) -> None:
+        record = getattr(log_data, "log_record", log_data)
         if (
-            getattr(log_record, "event_name", None)
+            getattr(record, "event_name", None)
             == "gen_ai.client.inference.operation.details"
         ):
             return
-        self._processor.on_emit(log_record)
+        self._processor.on_emit(log_data)
 
     def shutdown(self) -> None:
         self._processor.shutdown()

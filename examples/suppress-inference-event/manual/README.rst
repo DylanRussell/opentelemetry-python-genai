@@ -19,6 +19,8 @@ with a custom processor:
 
 .. code-block:: python
 
+    from typing import Any
+
     from opentelemetry.sdk._logs import LogRecordProcessor
 
 
@@ -35,13 +37,14 @@ with a custom processor:
                 return self._processor.enabled(event_name=event_name, **kwargs)
             return True
 
-        def on_emit(self, log_record: Any) -> None:
+        def on_emit(self, log_data: Any) -> None:
+            record = getattr(log_data, "log_record", log_data)
             if (
-                getattr(log_record, "event_name", None)
+                getattr(record, "event_name", None)
                 == "gen_ai.client.inference.operation.details"
             ):
                 return
-            self._processor.on_emit(log_record)
+            self._processor.on_emit(log_data)
 
         def shutdown(self) -> None:
             self._processor.shutdown()
@@ -56,8 +59,8 @@ How It Works
   checks ``enabled(event_name=...)`` before constructing and emitting the event.
   Returning ``False`` prevents unnecessary payload building.
 - **Filtering on** ``on_emit()``: If an event record is emitted, ``on_emit()``
-  inspects the ``event_name`` attribute and drops the record before forwarding to
-  the underlying batch processor or exporter.
+  inspects the wrapped record's ``event_name`` attribute and drops the record
+  before forwarding to the underlying batch processor or exporter.
 
 Setup
 -----
