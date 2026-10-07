@@ -21,7 +21,10 @@ with a custom processor:
 
     from typing import Any
 
-    from opentelemetry.sdk._logs import LogRecordProcessor
+    from opentelemetry.sdk._logs import (
+        LogRecordProcessor,
+        ReadWriteLogRecord,
+    )
 
 
     class DropGenAiEventsProcessor(LogRecordProcessor):
@@ -33,18 +36,12 @@ with a custom processor:
         ) -> bool:
             if event_name == "gen_ai.client.inference.operation.details":
                 return False
-            if hasattr(self._processor, "enabled"):
-                return self._processor.enabled(event_name=event_name, **kwargs)
-            return True
+            return self._processor.enabled(event_name=event_name, **kwargs)
 
-        def on_emit(self, log_data: Any) -> None:
-            record = getattr(log_data, "log_record", log_data)
-            if (
-                getattr(record, "event_name", None)
-                == "gen_ai.client.inference.operation.details"
-            ):
+        def on_emit(self, log_record: ReadWriteLogRecord) -> None:
+            if not self.enabled(event_name=log_record.log_record.event_name):
                 return
-            self._processor.on_emit(log_data)
+            self._processor.on_emit(log_record)
 
         def shutdown(self) -> None:
             self._processor.shutdown()
@@ -59,7 +56,7 @@ How It Works
   checks ``enabled(event_name=...)`` before constructing and emitting the event.
   Returning ``False`` prevents unnecessary payload building.
 - **Filtering on** ``on_emit()``: If an event record is emitted, ``on_emit()``
-  inspects the wrapped record's ``event_name`` attribute and drops the record
+  delegates to ``enabled()`` with the record's ``event_name`` and drops the record
   before forwarding to the underlying batch processor or exporter.
 
 Setup

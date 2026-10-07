@@ -18,7 +18,11 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
     OTLPSpanExporter,
 )
 from opentelemetry.instrumentation.genai.openai import OpenAIInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider, LogRecordProcessor
+from opentelemetry.sdk._logs import (
+    LoggerProvider,
+    LogRecordProcessor,
+    ReadWriteLogRecord,
+)
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -39,18 +43,12 @@ class DropGenAiEventsProcessor(LogRecordProcessor):
     def enabled(self, *, event_name: str | None = None, **kwargs: Any) -> bool:
         if event_name == "gen_ai.client.inference.operation.details":
             return False
-        if hasattr(self._processor, "enabled"):
-            return self._processor.enabled(event_name=event_name, **kwargs)
-        return True
+        return self._processor.enabled(event_name=event_name, **kwargs)
 
-    def on_emit(self, log_data: Any) -> None:
-        record = getattr(log_data, "log_record", log_data)
-        if (
-            getattr(record, "event_name", None)
-            == "gen_ai.client.inference.operation.details"
-        ):
+    def on_emit(self, log_record: ReadWriteLogRecord) -> None:
+        if not self.enabled(event_name=log_record.log_record.event_name):
             return
-        self._processor.on_emit(log_data)
+        self._processor.on_emit(log_record)
 
     def shutdown(self) -> None:
         self._processor.shutdown()
