@@ -31,6 +31,9 @@ from opentelemetry.semconv.attributes import (
 )
 from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace.status import StatusCode
+from opentelemetry.util.genai._conversation_context import (
+    with_conversation_id,
+)
 from opentelemetry.util.genai._inference_invocation import (
     SuppressedInferenceInvocation,
 )
@@ -41,6 +44,7 @@ from opentelemetry.util.genai.invocation import (
     InferenceInvocation,
 )
 from opentelemetry.util.genai.types import (
+    ContentCapturingMode,
     FunctionToolDefinition,
     InputMessage,
     OutputMessage,
@@ -1069,7 +1073,6 @@ class TestInferenceContext(TestBase):
             inv.system_instruction = sys_inst
             self.assertEqual(inv.data.system_instructions, sys_inst)
             self.assertEqual(inv.system_instruction, sys_inst)
-            self.assertEqual(inv.system_instructions, sys_inst)
 
             tools = [
                 FunctionToolDefinition(
@@ -1084,11 +1087,9 @@ class TestInferenceContext(TestBase):
             inv.prompt_variables = vars_map
             self.assertEqual(inv.data.prompt_variable, vars_map)
             self.assertEqual(inv.prompt_variables, vars_map)
-            self.assertEqual(inv.prompt_variable, vars_map)
 
             # Model and server properties
             self.assertEqual(inv.provider, "test-provider")
-            self.assertEqual(inv.provider_name, "test-provider")
             self.assertEqual(inv.request_model, "test-model")
             self.assertEqual(inv.server_address, "custom.server.com")
             self.assertEqual(inv.server_port, 42)
@@ -1096,22 +1097,15 @@ class TestInferenceContext(TestBase):
             with self.assertRaises(AttributeError):
                 setattr(inv, "provider", "other")
             with self.assertRaises(AttributeError):
-                setattr(inv, "provider_name", "other")
-            with self.assertRaises(AttributeError):
                 setattr(inv, "request_model", "other")
             with self.assertRaises(AttributeError):
                 setattr(inv, "server_address", "other")
             with self.assertRaises(AttributeError):
                 setattr(inv, "server_port", 8080)
 
-            inv.response_model = "resp-model"
+            inv.response_model_name = "resp-model"
             self.assertEqual(inv.data.response_model, "resp-model")
-            self.assertEqual(inv.response_model, "resp-model")
             self.assertEqual(inv.response_model_name, "resp-model")
-
-            inv.response_model_name = "resp-model-2"
-            self.assertEqual(inv.data.response_model, "resp-model-2")
-            self.assertEqual(inv.response_model, "resp-model-2")
 
             inv.response_id = "resp-123"
             self.assertEqual(inv.data.response_id, "resp-123")
@@ -1231,3 +1225,113 @@ class TestInferenceContext(TestBase):
             inv.output_tokens = 24
         self.assertEqual(data.usage_input_tokens, 12)
         self.assertEqual(data.usage_output_tokens, 24)
+
+    def test_finish_reasons_append_is_recorded(self) -> None:
+        with self.handler.inference("openai", request_model="m") as inv:
+            inv.finish_reasons = []
+            inv.finish_reasons.append("stop")
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_RESPONSE_FINISH_REASONS),
+            ("stop",),
+        )
+
+    def test_stop_sequences_append_is_recorded(self) -> None:
+        with self.handler.inference("openai", request_model="m") as inv:
+            inv.stop_sequences = []
+            inv.stop_sequences.append("stop")
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_REQUEST_STOP_SEQUENCES), ("stop",)
+        )
+
+    @patch(
+        "opentelemetry.util.genai.handler.get_content_capturing_mode",
+        return_value=ContentCapturingMode.SPAN_AND_EVENT,
+    )
+    def test_tool_definitions_append_is_recorded(
+        self, _mock_cap: object
+    ) -> None:
+        handler = TelemetryHandler(tracer_provider=self.tracer_provider)
+        tool = FunctionToolDefinition(
+            name="test_tool", description="a tool", parameters={}
+        )
+        with handler.inference("openai", request_model="m") as inv:
+            inv.tool_definitions = []
+            inv.tool_definitions.append(tool)
+        self.assertEqual(inv.data.tool_definitions, [tool])
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertIn(GenAI.GEN_AI_TOOL_DEFINITIONS, span.attributes)
+
+    def test_conversation_id_root_explicit_precedence_over_inner(self) -> None:
+        with self.handler.inference(
+            "proxy-provider", conversation_id="conv-root"
+        ):
+            with self.handler.inference(
+                "downstream-provider", conversation_id="conv-inner"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedInferenceInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_CONVERSATION_ID), "conv-root"
+        )
+
+    def test_conversation_id_root_ambient_precedence_over_inner(self) -> None:
+        token = attach(with_conversation_id("conv-ambient"))
+        try:
+            with self.handler.inference("proxy-provider"):
+                with self.handler.inference(
+                    "downstream-provider", conversation_id="conv-inner"
+                ) as inner:
+                    self.assertIsInstance(inner, SuppressedInferenceInvocation)
+            (span,) = self.span_exporter.get_finished_spans()
+            self.assertEqual(
+                span.attributes.get(GenAI.GEN_AI_CONVERSATION_ID),
+                "conv-ambient",
+            )
+        finally:
+            detach(token)
+
+    def test_conversation_id_root_set_after_start_precedence_over_inner(
+        self,
+    ) -> None:
+        with self.handler.inference("proxy-provider") as root:
+            root.conversation_id = "conv-late-root"
+            with self.handler.inference(
+                "downstream-provider", conversation_id="conv-inner"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedInferenceInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_CONVERSATION_ID), "conv-late-root"
+        )
+
+    def test_conversation_id_inner_enriches_root_when_root_has_none(
+        self,
+    ) -> None:
+        with self.handler.inference("proxy-provider"):
+            with self.handler.inference(
+                "downstream-provider", conversation_id="conv-inner"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedInferenceInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_CONVERSATION_ID), "conv-inner"
+        )
+
+    def test_conversation_id_inner_set_after_start_enriches_root(self) -> None:
+        with self.handler.inference("proxy-provider"):
+            with self.handler.inference("downstream-provider") as inner:
+                self.assertIsInstance(inner, SuppressedInferenceInvocation)
+                inner.conversation_id = "conv-inner-late"
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_CONVERSATION_ID),
+            "conv-inner-late",
+        )
+
+    def test_non_inference_data_in_context_does_not_suppress(self) -> None:
+        ctx = set_value(CLIENT_INFERENCE_CONTEXT_KEY, "invalid-data")
+        with self.handler.inference("openai", context=ctx) as inv:
+            self.assertNotIsInstance(inv, SuppressedInferenceInvocation)
+            self.assertIsInstance(inv, InferenceInvocation)

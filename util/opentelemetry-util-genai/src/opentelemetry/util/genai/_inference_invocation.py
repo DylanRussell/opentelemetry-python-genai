@@ -115,7 +115,6 @@ def _should_emit_event(
 CLIENT_INFERENCE_CONTEXT_KEY: Final[str] = (
     "opentelemetry.genai.client.inference.context"
 )
-_CLIENT_INFERENCE_CONTEXT_KEY = CLIENT_INFERENCE_CONTEXT_KEY
 
 
 @dataclass
@@ -141,12 +140,12 @@ class InferenceData:
     request_previous_response_id: str | None = None
     request_reasoning_level: str | None = None
     request_seed: int | None = None
-    request_stop_sequences: Sequence[str] | None = None
+    request_stop_sequences: list[str] | None = None
     request_stream: bool | None = None
     request_temperature: float | None = None
     request_top_k: int | None = None
     request_top_p: float | None = None
-    response_finish_reasons: Sequence[str] | None = None
+    response_finish_reasons: list[str] | None = None
     response_id: str | None = None
     response_model: str | None = None
     response_time_to_first_chunk: float | None = None
@@ -155,7 +154,7 @@ class InferenceData:
     system_instructions: (
         Sequence[SystemInstructionPart] | Sequence[MessagePart] | None
     ) = None
-    tool_definitions: Sequence[ToolDefinition] | None = None
+    tool_definitions: list[ToolDefinition] | None = None
     usage_audio_cache_read_input_tokens: int | None = None
     usage_audio_input_tokens: int | None = None
     usage_audio_output_tokens: int | None = None
@@ -295,20 +294,8 @@ class InferenceInvocation(GenAIInvocation):
         return self.data.provider_name
 
     @property
-    def provider_name(self) -> str | None:
-        return self.data.provider_name
-
-    @property
     def request_model(self) -> str | None:
         return self.data.request_model
-
-    @property
-    def response_model(self) -> str | None:
-        return self.data.response_model
-
-    @response_model.setter
-    def response_model(self, value: str | None) -> None:
-        self.data.response_model = value
 
     @property
     def response_model_name(self) -> str | None:
@@ -336,27 +323,13 @@ class InferenceInvocation(GenAIInvocation):
 
     @property
     def finish_reasons(self) -> list[str] | None:
-        return (
-            list(self.data.response_finish_reasons)
-            if self.data.response_finish_reasons is not None
-            else None
-        )
+        return self.data.response_finish_reasons
 
     @finish_reasons.setter
     def finish_reasons(self, value: Sequence[str] | None) -> None:
-        self.data.response_finish_reasons = value
-
-    @property
-    def response_finish_reasons(self) -> list[str] | None:
-        return (
-            list(self.data.response_finish_reasons)
-            if self.data.response_finish_reasons is not None
-            else None
+        self.data.response_finish_reasons = (
+            list(value) if value is not None else None
         )
-
-    @response_finish_reasons.setter
-    def response_finish_reasons(self, value: Sequence[str] | None) -> None:
-        self.data.response_finish_reasons = value
 
     @property
     def input_tokens(self) -> int | None:
@@ -364,14 +337,6 @@ class InferenceInvocation(GenAIInvocation):
 
     @input_tokens.setter
     def input_tokens(self, value: int | None) -> None:
-        self.data.usage_input_tokens = value
-
-    @property
-    def usage_input_tokens(self) -> int | None:
-        return self.data.usage_input_tokens
-
-    @usage_input_tokens.setter
-    def usage_input_tokens(self, value: int | None) -> None:
         self.data.usage_input_tokens = value
 
     @property
@@ -383,27 +348,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_output_tokens = value
 
     @property
-    def usage_output_tokens(self) -> int | None:
-        return self.data.usage_output_tokens
-
-    @usage_output_tokens.setter
-    def usage_output_tokens(self, value: int | None) -> None:
-        self.data.usage_output_tokens = value
-
-    @property
     def thinking_tokens(self) -> int | None:
         return self.data.usage_reasoning_output_tokens
 
     @thinking_tokens.setter
     def thinking_tokens(self, value: int | None) -> None:
-        self.data.usage_reasoning_output_tokens = value
-
-    @property
-    def usage_reasoning_output_tokens(self) -> int | None:
-        return self.data.usage_reasoning_output_tokens
-
-    @usage_reasoning_output_tokens.setter
-    def usage_reasoning_output_tokens(self, value: int | None) -> None:
         self.data.usage_reasoning_output_tokens = value
 
     @property
@@ -415,27 +364,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.request_temperature = value
 
     @property
-    def request_temperature(self) -> float | None:
-        return self.data.request_temperature
-
-    @request_temperature.setter
-    def request_temperature(self, value: float | None) -> None:
-        self.data.request_temperature = value
-
-    @property
     def top_p(self) -> float | None:
         return self.data.request_top_p
 
     @top_p.setter
     def top_p(self, value: float | None) -> None:
-        self.data.request_top_p = value
-
-    @property
-    def request_top_p(self) -> float | None:
-        return self.data.request_top_p
-
-    @request_top_p.setter
-    def request_top_p(self, value: float | None) -> None:
         self.data.request_top_p = value
 
     @property
@@ -447,27 +380,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.request_top_k = value
 
     @property
-    def request_top_k(self) -> int | None:
-        return self.data.request_top_k
-
-    @request_top_k.setter
-    def request_top_k(self, value: int | None) -> None:
-        self.data.request_top_k = value
-
-    @property
     def frequency_penalty(self) -> float | None:
         return self.data.request_frequency_penalty
 
     @frequency_penalty.setter
     def frequency_penalty(self, value: float | None) -> None:
-        self.data.request_frequency_penalty = value
-
-    @property
-    def request_frequency_penalty(self) -> float | None:
-        return self.data.request_frequency_penalty
-
-    @request_frequency_penalty.setter
-    def request_frequency_penalty(self, value: float | None) -> None:
         self.data.request_frequency_penalty = value
 
     @property
@@ -479,14 +396,6 @@ class InferenceInvocation(GenAIInvocation):
         self.data.request_presence_penalty = value
 
     @property
-    def request_presence_penalty(self) -> float | None:
-        return self.data.request_presence_penalty
-
-    @request_presence_penalty.setter
-    def request_presence_penalty(self, value: float | None) -> None:
-        self.data.request_presence_penalty = value
-
-    @property
     def max_tokens(self) -> int | None:
         return self.data.request_max_tokens
 
@@ -495,36 +404,14 @@ class InferenceInvocation(GenAIInvocation):
         self.data.request_max_tokens = value
 
     @property
-    def request_max_tokens(self) -> int | None:
-        return self.data.request_max_tokens
-
-    @request_max_tokens.setter
-    def request_max_tokens(self, value: int | None) -> None:
-        self.data.request_max_tokens = value
-
-    @property
     def stop_sequences(self) -> list[str] | None:
-        return (
-            list(self.data.request_stop_sequences)
-            if self.data.request_stop_sequences is not None
-            else None
-        )
+        return self.data.request_stop_sequences
 
     @stop_sequences.setter
     def stop_sequences(self, value: Sequence[str] | None) -> None:
-        self.data.request_stop_sequences = value
-
-    @property
-    def request_stop_sequences(self) -> list[str] | None:
-        return (
-            list(self.data.request_stop_sequences)
-            if self.data.request_stop_sequences is not None
-            else None
+        self.data.request_stop_sequences = (
+            list(value) if value is not None else None
         )
-
-    @request_stop_sequences.setter
-    def request_stop_sequences(self, value: Sequence[str] | None) -> None:
-        self.data.request_stop_sequences = value
 
     @property
     def seed(self) -> int | None:
@@ -532,14 +419,6 @@ class InferenceInvocation(GenAIInvocation):
 
     @seed.setter
     def seed(self, value: int | None) -> None:
-        self.data.request_seed = value
-
-    @property
-    def request_seed(self) -> int | None:
-        return self.data.request_seed
-
-    @request_seed.setter
-    def request_seed(self, value: int | None) -> None:
         self.data.request_seed = value
 
     @property
@@ -580,27 +459,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.response_time_to_first_chunk = value
 
     @property
-    def response_time_to_first_chunk(self) -> float | None:
-        return self.data.response_time_to_first_chunk
-
-    @response_time_to_first_chunk.setter
-    def response_time_to_first_chunk(self, value: float | None) -> None:
-        self.data.response_time_to_first_chunk = value
-
-    @property
     def cache_write_input_tokens(self) -> int | None:
         return self.data.usage_cache_write_input_tokens
 
     @cache_write_input_tokens.setter
     def cache_write_input_tokens(self, value: int | None) -> None:
-        self.data.usage_cache_write_input_tokens = value
-
-    @property
-    def usage_cache_write_input_tokens(self) -> int | None:
-        return self.data.usage_cache_write_input_tokens
-
-    @usage_cache_write_input_tokens.setter
-    def usage_cache_write_input_tokens(self, value: int | None) -> None:
         self.data.usage_cache_write_input_tokens = value
 
     @property
@@ -624,27 +487,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_cache_read_input_tokens = value
 
     @property
-    def usage_cache_read_input_tokens(self) -> int | None:
-        return self.data.usage_cache_read_input_tokens
-
-    @usage_cache_read_input_tokens.setter
-    def usage_cache_read_input_tokens(self, value: int | None) -> None:
-        self.data.usage_cache_read_input_tokens = value
-
-    @property
     def text_input_tokens(self) -> int | None:
         return self.data.usage_text_input_tokens
 
     @text_input_tokens.setter
     def text_input_tokens(self, value: int | None) -> None:
-        self.data.usage_text_input_tokens = value
-
-    @property
-    def usage_text_input_tokens(self) -> int | None:
-        return self.data.usage_text_input_tokens
-
-    @usage_text_input_tokens.setter
-    def usage_text_input_tokens(self, value: int | None) -> None:
         self.data.usage_text_input_tokens = value
 
     @property
@@ -656,27 +503,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_image_input_tokens = value
 
     @property
-    def usage_image_input_tokens(self) -> int | None:
-        return self.data.usage_image_input_tokens
-
-    @usage_image_input_tokens.setter
-    def usage_image_input_tokens(self, value: int | None) -> None:
-        self.data.usage_image_input_tokens = value
-
-    @property
     def audio_input_tokens(self) -> int | None:
         return self.data.usage_audio_input_tokens
 
     @audio_input_tokens.setter
     def audio_input_tokens(self, value: int | None) -> None:
-        self.data.usage_audio_input_tokens = value
-
-    @property
-    def usage_audio_input_tokens(self) -> int | None:
-        return self.data.usage_audio_input_tokens
-
-    @usage_audio_input_tokens.setter
-    def usage_audio_input_tokens(self, value: int | None) -> None:
         self.data.usage_audio_input_tokens = value
 
     @property
@@ -688,27 +519,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_text_output_tokens = value
 
     @property
-    def usage_text_output_tokens(self) -> int | None:
-        return self.data.usage_text_output_tokens
-
-    @usage_text_output_tokens.setter
-    def usage_text_output_tokens(self, value: int | None) -> None:
-        self.data.usage_text_output_tokens = value
-
-    @property
     def image_output_tokens(self) -> int | None:
         return self.data.usage_image_output_tokens
 
     @image_output_tokens.setter
     def image_output_tokens(self, value: int | None) -> None:
-        self.data.usage_image_output_tokens = value
-
-    @property
-    def usage_image_output_tokens(self) -> int | None:
-        return self.data.usage_image_output_tokens
-
-    @usage_image_output_tokens.setter
-    def usage_image_output_tokens(self, value: int | None) -> None:
         self.data.usage_image_output_tokens = value
 
     @property
@@ -720,27 +535,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_audio_output_tokens = value
 
     @property
-    def usage_audio_output_tokens(self) -> int | None:
-        return self.data.usage_audio_output_tokens
-
-    @usage_audio_output_tokens.setter
-    def usage_audio_output_tokens(self, value: int | None) -> None:
-        self.data.usage_audio_output_tokens = value
-
-    @property
     def text_cache_read_input_tokens(self) -> int | None:
         return self.data.usage_text_cache_read_input_tokens
 
     @text_cache_read_input_tokens.setter
     def text_cache_read_input_tokens(self, value: int | None) -> None:
-        self.data.usage_text_cache_read_input_tokens = value
-
-    @property
-    def usage_text_cache_read_input_tokens(self) -> int | None:
-        return self.data.usage_text_cache_read_input_tokens
-
-    @usage_text_cache_read_input_tokens.setter
-    def usage_text_cache_read_input_tokens(self, value: int | None) -> None:
         self.data.usage_text_cache_read_input_tokens = value
 
     @property
@@ -752,27 +551,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.usage_image_cache_read_input_tokens = value
 
     @property
-    def usage_image_cache_read_input_tokens(self) -> int | None:
-        return self.data.usage_image_cache_read_input_tokens
-
-    @usage_image_cache_read_input_tokens.setter
-    def usage_image_cache_read_input_tokens(self, value: int | None) -> None:
-        self.data.usage_image_cache_read_input_tokens = value
-
-    @property
     def audio_cache_read_input_tokens(self) -> int | None:
         return self.data.usage_audio_cache_read_input_tokens
 
     @audio_cache_read_input_tokens.setter
     def audio_cache_read_input_tokens(self, value: int | None) -> None:
-        self.data.usage_audio_cache_read_input_tokens = value
-
-    @property
-    def usage_audio_cache_read_input_tokens(self) -> int | None:
-        return self.data.usage_audio_cache_read_input_tokens
-
-    @usage_audio_cache_read_input_tokens.setter
-    def usage_audio_cache_read_input_tokens(self, value: int | None) -> None:
         self.data.usage_audio_cache_read_input_tokens = value
 
     @property
@@ -784,27 +567,11 @@ class InferenceInvocation(GenAIInvocation):
         self.data.request_reasoning_level = value
 
     @property
-    def request_reasoning_level(self) -> str | None:
-        return self.data.request_reasoning_level
-
-    @request_reasoning_level.setter
-    def request_reasoning_level(self, value: str | None) -> None:
-        self.data.request_reasoning_level = value
-
-    @property
     def previous_response_id(self) -> str | None:
         return self.data.request_previous_response_id
 
     @previous_response_id.setter
     def previous_response_id(self, value: str | None) -> None:
-        self.data.request_previous_response_id = value
-
-    @property
-    def request_previous_response_id(self) -> str | None:
-        return self.data.request_previous_response_id
-
-    @request_previous_response_id.setter
-    def request_previous_response_id(self, value: str | None) -> None:
         self.data.request_previous_response_id = value
 
     @property
@@ -862,9 +629,10 @@ class InferenceInvocation(GenAIInvocation):
         self.data.output_messages = value
 
     @property
-    def system_instructions(
+    def system_instruction(
         self,
     ) -> list[SystemInstructionPart] | list[MessagePart]:
+        """System instructions for the model. Passing ``MessagePart`` is deprecated; use ``SystemInstructionPart``."""
         if isinstance(self.data.system_instructions, list):
             return self.data.system_instructions
         instructions = (
@@ -875,26 +643,14 @@ class InferenceInvocation(GenAIInvocation):
         self.data.system_instructions = instructions
         return instructions
 
-    @system_instructions.setter
-    def system_instructions(
-        self,
-        value: Sequence[SystemInstructionPart] | Sequence[MessagePart] | None,
-    ) -> None:
-        self.data.system_instructions = value
-
-    @property
-    def system_instruction(
-        self,
-    ) -> list[SystemInstructionPart] | list[MessagePart]:
-        """System instructions for the model. Passing ``MessagePart`` is deprecated; use ``SystemInstructionPart``."""
-        return self.system_instructions
-
     @system_instruction.setter
     def system_instruction(
         self,
         value: Sequence[SystemInstructionPart] | Sequence[MessagePart] | None,
     ) -> None:
-        self.data.system_instructions = value
+        self.data.system_instructions = (
+            list(value) if value is not None else None
+        )
 
     @property
     def prompt_variables(self) -> Mapping[str, object] | None:
@@ -905,24 +661,12 @@ class InferenceInvocation(GenAIInvocation):
         self.data.prompt_variable = value
 
     @property
-    def prompt_variable(self) -> Mapping[str, object] | None:
-        return self.data.prompt_variable
-
-    @prompt_variable.setter
-    def prompt_variable(self, value: Mapping[str, object] | None) -> None:
-        self.data.prompt_variable = value
-
-    @property
     def tool_definitions(self) -> list[ToolDefinition] | None:
-        return (
-            list(self.data.tool_definitions)
-            if self.data.tool_definitions is not None
-            else None
-        )
+        return self.data.tool_definitions
 
     @tool_definitions.setter
     def tool_definitions(self, value: Sequence[ToolDefinition] | None) -> None:
-        self.data.tool_definitions = value
+        self.data.tool_definitions = list(value) if value is not None else None
 
     def set_input_tokens(self, entries: ModalityTokens | None) -> None:
         """Record the per-modality breakdown of the input tokens.
@@ -985,7 +729,7 @@ class InferenceInvocation(GenAIInvocation):
         return get_content_attributes(
             input_messages=self.input_messages,
             output_messages=self.output_messages,
-            system_instruction=self.system_instructions,
+            system_instruction=self.system_instruction,
             tool_definitions=self.tool_definitions,
             prompt_variables=self.prompt_variables,
             for_span=for_span,
@@ -1018,7 +762,7 @@ class InferenceInvocation(GenAIInvocation):
             (server_attributes.SERVER_PORT, self.data.server_port),
             (
                 GenAI.GEN_AI_CONVERSATION_ID,
-                self.data.conversation_id or self.conversation_id,
+                self.conversation_id or self.data.conversation_id,
             ),
             (GenAI.GEN_AI_REQUEST_STREAM, self.request_stream),
             (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.data.request_temperature),
@@ -1197,7 +941,7 @@ class InferenceInvocation(GenAIInvocation):
         self._call_completion_hook(
             inputs=self.input_messages,
             outputs=self.output_messages,
-            system_instruction=self.system_instructions,
+            system_instruction=self.system_instruction,
             tool_definitions=self.tool_definitions,
             log_record=log_record,
         )
@@ -1283,6 +1027,7 @@ class SuppressedInferenceInvocation(InferenceInvocation):
 
     def publish_to_context(self, data: InferenceData) -> None:
         """Publish invocation attributes to the active inference context."""
+        self.data.conversation_id = self.conversation_id
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
         if self._request_stream is not None:

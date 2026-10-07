@@ -52,6 +52,7 @@ from opentelemetry.trace import (
 )
 from opentelemetry.util.genai._inference_invocation import (
     CLIENT_INFERENCE_CONTEXT_KEY,
+    InferenceData,
     SuppressedInferenceInvocation,
 )
 from opentelemetry.util.genai._instruments import _Instruments
@@ -233,8 +234,10 @@ class TelemetryHandler:
         """
         invocation_cls: type[InferenceInvocation] = (
             SuppressedInferenceInvocation
-            if get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context)
-            is not None
+            if isinstance(
+                get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context),
+                InferenceData,
+            )
             else InferenceInvocation
         )
         return invocation_cls(
