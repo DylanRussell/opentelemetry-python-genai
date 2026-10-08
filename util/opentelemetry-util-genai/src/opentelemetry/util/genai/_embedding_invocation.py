@@ -208,6 +208,16 @@ class EmbeddingInvocation(GenAIInvocation):
         self.data.metric_attributes = self.metric_attributes
         optional_attrs = (
             (
+                GenAI.GEN_AI_PROVIDER_NAME,
+                self.data.provider_name or self._provider,
+            ),
+            (
+                GenAI.GEN_AI_REQUEST_MODEL,
+                self.data.request_model or self._request_model,
+            ),
+            (server_attributes.SERVER_ADDRESS, self.data.server_address),
+            (server_attributes.SERVER_PORT, self.data.server_port),
+            (
                 GenAI.GEN_AI_EMBEDDINGS_DIMENSION_COUNT,
                 self.data.embeddings_dimension_count,
             ),

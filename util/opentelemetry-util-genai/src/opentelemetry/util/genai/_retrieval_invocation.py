@@ -253,11 +253,22 @@ class RetrievalInvocation(GenAIInvocation):
             self.enrich_from_context(ctx_data)
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
-        attributes: dict[str, AttributeValue] = {}
-        if self.data.retrieval_top_k is not None:
-            attributes[_GEN_AI_RETRIEVAL_TOP_K] = int(
-                self.data.retrieval_top_k
-            )
+        optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
+            (GenAI.GEN_AI_DATA_SOURCE_ID, self.data.data_source_id),
+            (GenAI.GEN_AI_PROVIDER_NAME, self.data.provider_name),
+            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
+            (server_attributes.SERVER_ADDRESS, self.data.server_address),
+            (server_attributes.SERVER_PORT, self.data.server_port),
+            (
+                _GEN_AI_RETRIEVAL_TOP_K,
+                int(self.data.retrieval_top_k)
+                if self.data.retrieval_top_k is not None
+                else None,
+            ),
+        )
+        attributes: dict[str, AttributeValue] = {
+            k: v for k, v in optional_attrs if v is not None
+        }
         attributes.update(self._get_content_attributes_for_span())
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)

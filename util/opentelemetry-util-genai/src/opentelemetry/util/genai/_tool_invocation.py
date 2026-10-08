@@ -228,6 +228,7 @@ class ToolInvocation(GenAIInvocation):
         self.data.metric_attributes = self.metric_attributes
         capture_content_on_span = self._should_capture_content_on_span
         optional_attrs = (
+            (GenAI.GEN_AI_TOOL_TYPE, self.data.tool_type),
             (GenAI.GEN_AI_TOOL_CALL_ID, self.data.tool_call_id),
             (GenAI.GEN_AI_TOOL_DESCRIPTION, self.data.tool_description),
             (GenAI.GEN_AI_AGENT_NAME, self.data.agent_name),

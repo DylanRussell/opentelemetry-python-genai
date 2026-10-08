@@ -198,6 +198,8 @@ class WorkflowInvocation(GenAIInvocation):
         conv_id = self.conversation_id or self.data.conversation_id
         if conv_id is not None:
             attributes[GenAI.GEN_AI_CONVERSATION_ID] = conv_id
+        if self.data.workflow_name is not None:
+            attributes[GenAI.GEN_AI_WORKFLOW_NAME] = self.data.workflow_name
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
         self._call_completion_hook(

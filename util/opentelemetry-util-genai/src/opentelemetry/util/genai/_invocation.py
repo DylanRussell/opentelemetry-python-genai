@@ -171,6 +171,7 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             GenAI.GEN_AI_OPERATION_NAME: operation_name,
             **(start_attributes or {}),
         }
+        self._start_span: bool = start_span
         if start_span:
             self.span: Span = self._tracer.start_span(
                 name=span_name,
@@ -289,6 +290,9 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
         is_first_chunk = self._ttfc_seconds is None
         if is_first_chunk:
             self._ttfc_seconds = delta
+
+        if not self._start_span:
+            return
 
         attributes = self._get_metric_attributes()
         if is_first_chunk:

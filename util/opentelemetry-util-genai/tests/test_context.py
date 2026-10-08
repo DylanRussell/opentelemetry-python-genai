@@ -104,7 +104,17 @@ def set_inference_context_data(
     return set_value(CLIENT_INFERENCE_CONTEXT_KEY, data, context=context)
 
 
-class TestInferenceContext(TestBase):
+class BaseContextTest(TestBase):
+    def _harvest_metrics(self) -> dict[str, list[object]]:
+        metrics = self.get_sorted_metrics()
+        metrics_by_name: dict[str, list[object]] = {}
+        for metric in metrics or []:
+            points = getattr(metric.data, "data_points", None) or []
+            metrics_by_name.setdefault(metric.name, []).extend(points)
+        return metrics_by_name
+
+
+class TestInferenceContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -115,14 +125,6 @@ class TestInferenceContext(TestBase):
             tracer_provider=self.tracer_provider,
             meter_provider=self.meter_provider,
         )
-
-    def _harvest_metrics(self) -> dict[str, list[object]]:
-        metrics = self.get_sorted_metrics()
-        metrics_by_name: dict[str, list[object]] = {}
-        for metric in metrics or []:
-            points = getattr(metric.data, "data_points", None) or []
-            metrics_by_name.setdefault(metric.name, []).extend(points)
-        return metrics_by_name
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
@@ -1376,7 +1378,7 @@ class TestInferenceContext(TestBase):
             self.assertIsInstance(inv, InferenceInvocation)
 
 
-class TestEmbeddingContext(TestBase):
+class TestEmbeddingContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -1557,8 +1559,27 @@ class TestEmbeddingContext(TestBase):
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
+    def test_nested_embedding_enrichment_applies_server_and_model_to_span(
+        self,
+    ) -> None:
+        with self.handler.embedding("root-provider"):
+            with self.handler.embedding(
+                "inner-provider",
+                request_model="inner-model",
+                server_address="embed.inner.com",
+                server_port=8443,
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedEmbeddingInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "inner-model")
+        self.assertEqual(
+            attrs.get(server_attributes.SERVER_ADDRESS), "embed.inner.com"
+        )
+        self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 8443)
 
-class TestToolContext(TestBase):
+
+class TestToolContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -1684,8 +1705,19 @@ class TestToolContext(TestBase):
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
+    def test_nested_tool_enrichment_applies_tool_type_to_span(self) -> None:
+        with self.handler.tool("root-tool"):
+            with self.handler.tool(
+                "inner-tool", tool_type="function"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedToolInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_TOOL_TYPE), "function"
+        )
 
-class TestRetrievalContext(TestBase):
+
+class TestRetrievalContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -1817,8 +1849,34 @@ class TestRetrievalContext(TestBase):
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
+    def test_nested_retrieval_enrichment_applies_non_content_fields_to_span(
+        self,
+    ) -> None:
+        with self.handler.retrieval():
+            with self.handler.retrieval(
+                data_source_id="inner-ds",
+                provider="inner-provider",
+                request_model="inner-model",
+                server_address="search.inner.com",
+                server_port=9200,
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedRetrievalInvocation)
+                inner.top_k = 5
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_DATA_SOURCE_ID), "inner-ds")
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_PROVIDER_NAME), "inner-provider"
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "inner-model")
+        self.assertEqual(
+            attrs.get(server_attributes.SERVER_ADDRESS), "search.inner.com"
+        )
+        self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 9200)
+        self.assertEqual(attrs.get("gen_ai.retrieval.top_k"), 5)
 
-class TestWorkflowContext(TestBase):
+
+class TestWorkflowContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -1944,8 +2002,19 @@ class TestWorkflowContext(TestBase):
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
+    def test_nested_workflow_enrichment_applies_workflow_name_to_span(
+        self,
+    ) -> None:
+        with self.handler.workflow():
+            with self.handler.workflow("inner-workflow") as inner:
+                self.assertIsInstance(inner, SuppressedWorkflowInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_WORKFLOW_NAME), "inner-workflow"
+        )
 
-class TestAgentContext(TestBase):
+
+class TestAgentContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -2157,8 +2226,60 @@ class TestAgentContext(TestBase):
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
 
+    def test_nested_agent_enrichment_applies_agent_name_and_model_to_span(
+        self,
+    ) -> None:
+        with self.handler.invoke_local_agent():
+            with self.handler.invoke_local_agent(
+                agent_name="InnerAgent", request_model="inner-model"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedLocalAgentInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_AGENT_NAME), "InnerAgent")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "inner-model")
 
-class TestFetchResponseContext(TestBase):
+    def test_nested_remote_agent_enrichment_applies_server_attributes_to_span(
+        self,
+    ) -> None:
+        with self.handler.invoke_remote_agent("root-provider"):
+            with self.handler.invoke_remote_agent(
+                "inner-provider",
+                request_model="inner-model",
+                server_address="agent.inner.com",
+                server_port=8080,
+                agent_name="InnerRemoteAgent",
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedRemoteAgentInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_AGENT_NAME), "InnerRemoteAgent"
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "inner-model")
+        self.assertEqual(
+            attrs.get(server_attributes.SERVER_ADDRESS), "agent.inner.com"
+        )
+        self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 8080)
+
+    def test_suppressed_remote_agent_does_not_emit_streaming_metrics(
+        self,
+    ) -> None:
+        with self.handler.invoke_remote_agent("root-provider"):
+            with self.handler.invoke_remote_agent("inner-provider") as inner:
+                self.assertIsInstance(inner, SuppressedRemoteAgentInvocation)
+                inner.record_stream_chunk()
+                inner.record_stream_chunk()
+        metrics = self._harvest_metrics()
+        self.assertNotIn(
+            "gen_ai.client.operation.time_to_first_chunk", metrics
+        )
+        self.assertNotIn(
+            "gen_ai.client.operation.time_per_output_chunk", metrics
+        )
+
+
+class TestFetchResponseContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
         self.span_exporter = InMemorySpanExporter()
@@ -2315,3 +2436,50 @@ class TestFetchResponseContext(TestBase):
 
         (span,) = self.span_exporter.get_finished_spans()
         self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+    def test_nested_fetch_response_enrichment_applies_stream_and_server_to_span(
+        self,
+    ) -> None:
+        with self.handler.fetch_response(
+            "root-provider", response_id="resp-1"
+        ):
+            with self.handler.fetch_response(
+                "inner-provider",
+                response_id="resp-2",
+                server_address="fetch.inner.com",
+                server_port=443,
+                request_stream=True,
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedFetchResponseInvocation)
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(
+            attrs.get(server_attributes.SERVER_ADDRESS), "fetch.inner.com"
+        )
+        self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 443)
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_STREAM), True)
+
+    def test_suppressed_fetch_response_does_not_emit_streaming_metrics(
+        self,
+    ) -> None:
+        with self.handler.fetch_response(
+            "root-provider", response_id="resp-1"
+        ):
+            with self.handler.fetch_response(
+                "inner-provider", response_id="resp-2"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedFetchResponseInvocation)
+                inner.record_stream_chunk()
+                inner.record_stream_chunk()
+                self.assertTrue(inner.data.request_stream)
+        metrics = self._harvest_metrics()
+        self.assertNotIn(
+            "gen_ai.client.operation.time_to_first_chunk", metrics
+        )
+        self.assertNotIn(
+            "gen_ai.client.operation.time_per_output_chunk", metrics
+        )
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(
+            span.attributes.get(GenAI.GEN_AI_REQUEST_STREAM), True
+        )

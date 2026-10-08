@@ -985,17 +985,9 @@ class SuppressedInferenceInvocation(InferenceInvocation):
         )
 
     def _on_stream_chunk(self, chunk_at: float) -> None:
-        last_chunk_at = (
-            self._stream_last_chunk_at
-            if self._stream_last_chunk_at is not None
-            else self._monotonic_start_s
-        )
-        self._stream_last_chunk_at = chunk_at
-        delta = max(chunk_at - last_chunk_at, 0.0)
-        if self._ttfc_seconds is None:
-            self._ttfc_seconds = delta
-            self.data.response_time_to_first_chunk = delta
+        super()._on_stream_chunk(chunk_at)
         self.data.request_stream = True
+        self.data.response_time_to_first_chunk = self._ttfc_seconds
 
     def publish_to_context(self, data: InferenceData) -> None:
         """Publish invocation attributes to the active inference context."""

@@ -326,6 +326,13 @@ class FetchResponseInvocation(GenAIInvocation):
 
     def _get_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
+            (
+                GenAI.GEN_AI_PROVIDER_NAME,
+                self.data.provider_name or self._provider,
+            ),
+            (server_attributes.SERVER_ADDRESS, self.data.server_address),
+            (server_attributes.SERVER_PORT, self.data.server_port),
+            (GenAI.GEN_AI_REQUEST_STREAM, self.request_stream),
             (_GEN_AI_REQUEST_STREAM_CURSOR, self.data.request_stream_cursor),
             (
                 GenAI.GEN_AI_RESPONSE_FINISH_REASONS,
@@ -410,10 +417,16 @@ class SuppressedFetchResponseInvocation(FetchResponseInvocation):
             _attach_to_context=_attach_to_context,
         )
 
+    def _on_stream_chunk(self, chunk_at: float) -> None:
+        super()._on_stream_chunk(chunk_at)
+        self.data.request_stream = True
+
     def publish_to_context(self, data: FetchResponseData) -> None:
         """Publish invocation attributes to the active fetch response context."""
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
+        if self._request_stream is not None:
+            self.data.request_stream = self._request_stream
         data.merge(self.data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:

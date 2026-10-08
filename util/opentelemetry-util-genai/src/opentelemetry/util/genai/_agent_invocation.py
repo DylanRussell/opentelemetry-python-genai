@@ -367,6 +367,7 @@ class AgentInvocation(GenAIInvocation, ABC):
 
     def _get_agent_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
+            (GenAI.GEN_AI_AGENT_NAME, self.data.agent_name),
             (GenAI.GEN_AI_AGENT_DESCRIPTION, self.data.agent_description),
         )
         return {k: v for k, v in optional_attrs if v is not None}
@@ -376,6 +377,7 @@ class AgentInvocation(GenAIInvocation, ABC):
         optional_attrs = (
             (GenAI.GEN_AI_CONVERSATION_ID, conv_id),
             (GenAI.GEN_AI_DATA_SOURCE_ID, self.data.data_source_id),
+            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
             (GenAI.GEN_AI_OUTPUT_TYPE, self.data.output_type),
             (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.data.request_temperature),
             (GenAI.GEN_AI_REQUEST_TOP_P, self.data.request_top_p),
@@ -652,15 +654,25 @@ class RemoteAgentInvocation(AgentInvocation):
         self.data.usage_cache_read_input_tokens = value
 
     def _get_agent_attributes(self) -> dict[str, AttributeValue]:
+        attrs = super()._get_agent_attributes()
         optional_attrs = (
             (GenAI.GEN_AI_AGENT_ID, self.data.agent_id),
-            (GenAI.GEN_AI_AGENT_DESCRIPTION, self.data.agent_description),
             (GenAI.GEN_AI_AGENT_VERSION, self.data.agent_version),
         )
-        return {k: v for k, v in optional_attrs if v is not None}
+        attrs.update({k: v for k, v in optional_attrs if v is not None})
+        return attrs
 
     def _get_request_attributes(self) -> dict[str, AttributeValue]:
         attrs = super()._get_request_attributes()
+        optional_attrs = (
+            (
+                GenAI.GEN_AI_PROVIDER_NAME,
+                self.data.provider_name or self._provider,
+            ),
+            (server_attributes.SERVER_ADDRESS, self.data.server_address),
+            (server_attributes.SERVER_PORT, self.data.server_port),
+        )
+        attrs.update({k: v for k, v in optional_attrs if v is not None})
         if self.data.request_previous_response_id is not None:
             attrs[_GEN_AI_REQUEST_PREVIOUS_RESPONSE_ID] = (
                 self.data.request_previous_response_id
