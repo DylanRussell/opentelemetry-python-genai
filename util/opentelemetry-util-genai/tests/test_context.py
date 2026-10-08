@@ -31,23 +31,62 @@ from opentelemetry.semconv.attributes import (
 )
 from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace.status import StatusCode
+from opentelemetry.util.genai._agent_invocation import (
+    SuppressedLocalAgentInvocation,
+    SuppressedRemoteAgentInvocation,
+)
 from opentelemetry.util.genai._conversation_context import (
     with_conversation_id,
+)
+from opentelemetry.util.genai._embedding_invocation import (
+    SuppressedEmbeddingInvocation,
+)
+from opentelemetry.util.genai._fetch_response_invocation import (
+    SuppressedFetchResponseInvocation,
 )
 from opentelemetry.util.genai._inference_invocation import (
     SuppressedInferenceInvocation,
 )
+from opentelemetry.util.genai._retrieval_invocation import (
+    SuppressedRetrievalInvocation,
+)
+from opentelemetry.util.genai._tool_invocation import (
+    SuppressedToolInvocation,
+)
+from opentelemetry.util.genai._workflow_invocation import (
+    SuppressedWorkflowInvocation,
+)
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
+    AGENT_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
+    EMBEDDING_CONTEXT_KEY,
+    FETCH_RESPONSE_CONTEXT_KEY,
+    RETRIEVAL_CONTEXT_KEY,
+    TOOL_CONTEXT_KEY,
+    WORKFLOW_CONTEXT_KEY,
+    AgentData,
+    EmbeddingData,
+    EmbeddingInvocation,
+    FetchResponseData,
+    FetchResponseInvocation,
     InferenceData,
     InferenceInvocation,
+    LocalAgentInvocation,
+    RemoteAgentInvocation,
+    RetrievalData,
+    RetrievalInvocation,
+    ToolData,
+    ToolInvocation,
+    WorkflowData,
+    WorkflowInvocation,
 )
 from opentelemetry.util.genai.types import (
     ContentCapturingMode,
     FunctionToolDefinition,
     InputMessage,
     OutputMessage,
+    RetrievalDocument,
     TextPart,
 )
 
@@ -1335,3 +1374,944 @@ class TestInferenceContext(TestBase):
         with self.handler.inference("openai", context=ctx) as inv:
             self.assertNotIsInstance(inv, SuppressedInferenceInvocation)
             self.assertIsInstance(inv, InferenceInvocation)
+
+
+class TestEmbeddingContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(
+            EMBEDDING_CONTEXT_KEY,
+            "opentelemetry.genai.embedding.context",
+        )
+
+    def test_embedding_context_data_merge(self) -> None:
+        data1 = EmbeddingData(
+            request_model="model-1",
+            embeddings_dimension_count=512,
+            attributes={"k1": "v1"},
+        )
+        data2 = EmbeddingData(
+            request_model="model-2",
+            response_model="model-resp",
+            usage_input_tokens=100,
+            attributes={"k1": "v2", "k2": "v3"},
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.request_model, "model-2")
+        self.assertEqual(data1.embeddings_dimension_count, 512)
+        self.assertEqual(data1.response_model, "model-resp")
+        self.assertEqual(data1.usage_input_tokens, 100)
+        self.assertEqual(data1.attributes, {"k1": "v2", "k2": "v3"})
+
+        # overwrite=False preserves existing values
+        data3 = EmbeddingData(
+            request_model="root-model", embeddings_dimension_count=256
+        )
+        data4 = EmbeddingData(
+            request_model="inner-model",
+            response_model="inner-resp",
+            usage_input_tokens=50,
+        )
+        data3.merge(data4, overwrite=False)
+        self.assertEqual(data3.request_model, "root-model")
+        self.assertEqual(data3.embeddings_dimension_count, 256)
+        self.assertEqual(data3.response_model, "inner-resp")
+        self.assertEqual(data3.usage_input_tokens, 50)
+
+    def test_embedding_invocation_property_delegation_to_data(self) -> None:
+        inv = self.handler.embedding(
+            "test-provider",
+            request_model="text-embedding-3-small",
+            server_address="api.openai.com",
+            server_port=443,
+        )
+        self.assertEqual(inv.provider, "test-provider")
+        self.assertEqual(inv.request_model, "text-embedding-3-small")
+        self.assertEqual(inv.server_address, "api.openai.com")
+        self.assertEqual(inv.server_port, 443)
+
+        inv.response_model_name = "text-embedding-3-small-v1"
+        self.assertEqual(inv.data.response_model, "text-embedding-3-small-v1")
+        self.assertEqual(inv.response_model_name, "text-embedding-3-small-v1")
+
+        inv.dimension_count = 1536
+        self.assertEqual(inv.data.embeddings_dimension_count, 1536)
+        self.assertEqual(inv.dimension_count, 1536)
+
+        inv.encoding_formats = ["float", "base64"]
+        self.assertEqual(
+            inv.data.request_encoding_formats, ["float", "base64"]
+        )
+        self.assertEqual(inv.encoding_formats, ["float", "base64"])
+
+        inv.input_tokens = 42
+        self.assertEqual(inv.data.usage_input_tokens, 42)
+        self.assertEqual(inv.input_tokens, 42)
+        inv.stop()
+
+    def test_embedding_invocation_outer_sets_empty_object_on_context(
+        self,
+    ) -> None:
+        self.assertIsNone(get_value(EMBEDDING_CONTEXT_KEY))
+        with self.handler.embedding(
+            "openai", request_model="text-embedding-3-small"
+        ) as inv:
+            self.assertIsInstance(inv, EmbeddingInvocation)
+            self.assertNotIsInstance(inv, SuppressedEmbeddingInvocation)
+            ctx_data = get_value(EMBEDDING_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, EmbeddingData)
+        self.assertIsNone(get_value(EMBEDDING_CONTEXT_KEY))
+
+    def test_nested_embedding_deduplication_and_enrichment(self) -> None:
+        with self.handler.embedding(
+            "root-provider", request_model="root-model"
+        ) as root:
+            self.assertIsInstance(root, EmbeddingInvocation)
+            self.assertNotIsInstance(root, SuppressedEmbeddingInvocation)
+
+            with self.handler.embedding(
+                "inner-provider", request_model="inner-model"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedEmbeddingInvocation)
+                inner.response_model_name = "actual-embed-model"
+                inner.dimension_count = 1024
+                inner.input_tokens = 50
+                inner.attributes["custom.attr"] = "inner-val"
+
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 1)
+        span = spans[0]
+        self.assertEqual(span.name, "embeddings root-model")
+        attrs = span.attributes
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_PROVIDER_NAME), "root-provider"
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_REQUEST_MODEL), "root-model")
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "actual-embed-model"
+        )
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_EMBEDDINGS_DIMENSION_COUNT), 1024
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 50)
+        self.assertEqual(attrs.get("custom.attr"), "inner-val")
+
+    def test_root_precedence_over_nested_embedding(self) -> None:
+        with self.handler.embedding(
+            "root-provider",
+            request_model="root-model",
+            server_address="root.example.com",
+            server_port=8080,
+        ) as root:
+            root.dimension_count = 512
+            root.input_tokens = 10
+            root.attributes["custom.attr"] = "root-val"
+
+            with self.handler.embedding(
+                "inner-provider",
+                request_model="inner-model",
+                server_address="inner.example.com",
+                server_port=443,
+            ) as inner:
+                inner.dimension_count = 1024
+                inner.input_tokens = 100
+                inner.response_model_name = "inner-resp"
+                inner.attributes["custom.attr"] = "inner-val"
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(
+            attrs.get(server_attributes.SERVER_ADDRESS), "root.example.com"
+        )
+        self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 8080)
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_EMBEDDINGS_DIMENSION_COUNT), 512
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 10)
+        self.assertEqual(attrs.get("custom.attr"), "root-val")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "inner-resp")
+
+    def test_nested_embedding_invocation_does_not_end_span_on_fail(
+        self,
+    ) -> None:
+        with self.handler.embedding(
+            "root-provider", request_model="root-model"
+        ) as root:
+            with self.assertRaises(ValueError):
+                with self.handler.embedding("inner-provider") as inner:
+                    self.assertIsInstance(inner, SuppressedEmbeddingInvocation)
+                    raise ValueError("inner failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+
+class TestToolContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(TOOL_CONTEXT_KEY, "opentelemetry.genai.tool.context")
+
+    def test_tool_context_data_merge(self) -> None:
+        data1 = ToolData(tool_name="tool-1", tool_type="function")
+        data2 = ToolData(
+            tool_name="tool-2",
+            tool_call_id="call-123",
+            tool_description="desc",
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.tool_name, "tool-2")
+        self.assertEqual(data1.tool_type, "function")
+        self.assertEqual(data1.tool_call_id, "call-123")
+        self.assertEqual(data1.tool_description, "desc")
+
+    def test_tool_invocation_property_delegation_to_data(self) -> None:
+        inv = self.handler.tool(
+            "calculator",
+            tool_type="function",
+            agent_name="MathAgent",
+        )
+        self.assertEqual(inv.name, "calculator")
+        self.assertEqual(inv.tool_type, "function")
+        self.assertEqual(inv.agent_name, "MathAgent")
+
+        inv.tool_call_id = "call-abc"
+        self.assertEqual(inv.data.tool_call_id, "call-abc")
+        self.assertEqual(inv.tool_call_id, "call-abc")
+
+        inv.tool_description = "A math tool"
+        self.assertEqual(inv.data.tool_description, "A math tool")
+        self.assertEqual(inv.tool_description, "A math tool")
+
+        inv.arguments = {"expr": "1+1"}
+        self.assertEqual(inv.data.tool_call_arguments, {"expr": "1+1"})
+        self.assertEqual(inv.arguments, {"expr": "1+1"})
+
+        inv.tool_result = 2
+        self.assertEqual(inv.data.tool_call_result, 2)
+        self.assertEqual(inv.tool_result, 2)
+        inv.stop()
+
+    def test_tool_invocation_outer_sets_empty_object_on_context(self) -> None:
+        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
+        with self.handler.tool("search") as inv:
+            self.assertIsInstance(inv, ToolInvocation)
+            self.assertNotIsInstance(inv, SuppressedToolInvocation)
+            ctx_data = get_value(TOOL_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, ToolData)
+        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
+
+    def test_nested_tool_deduplication_and_enrichment(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_ONLY"
+            },
+        ):
+            with self.handler.tool("root-tool") as root:
+                self.assertIsInstance(root, ToolInvocation)
+                self.assertNotIsInstance(root, SuppressedToolInvocation)
+
+                with self.handler.tool("inner-tool") as inner:
+                    self.assertIsInstance(inner, SuppressedToolInvocation)
+                    inner.tool_call_id = "inner-call-id"
+                    inner.tool_description = "inner tool desc"
+                    inner.arguments = {"query": "test"}
+                    inner.tool_result = "result"
+
+            (span,) = self.span_exporter.get_finished_spans()
+            attrs = span.attributes
+            self.assertEqual(attrs.get(GenAI.GEN_AI_TOOL_NAME), "root-tool")
+            self.assertEqual(
+                attrs.get(GenAI.GEN_AI_TOOL_CALL_ID), "inner-call-id"
+            )
+            self.assertEqual(
+                attrs.get(GenAI.GEN_AI_TOOL_DESCRIPTION), "inner tool desc"
+            )
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        with self.handler.tool("root-tool") as outer:
+            outer.data.tool_call_arguments = {"root_arg": 1}
+            outer.data.tool_call_result = "root_res"
+            outer.data.tool_description = "root_desc"
+
+            inner_data = ToolData(
+                tool_call_id="call-123",
+                tool_description="inner_desc",
+                tool_call_arguments={"inner_arg": 2},
+                tool_call_result="inner_res",
+            )
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields are enriched
+            self.assertEqual(outer.data.tool_call_id, "call-123")
+            # Outer non-content fields take precedence
+            self.assertEqual(outer.data.tool_description, "root_desc")
+            # Content fields are NOT overridden by inner
+            self.assertEqual(outer.data.tool_call_arguments, {"root_arg": 1})
+            self.assertEqual(outer.data.tool_call_result, "root_res")
+
+    def test_nested_tool_invocation_does_not_end_span_on_fail(self) -> None:
+        with self.handler.tool("root-tool") as root:
+            with self.assertRaises(ValueError):
+                with self.handler.tool("inner-tool") as inner:
+                    self.assertIsInstance(inner, SuppressedToolInvocation)
+                    raise ValueError("inner failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+
+class TestRetrievalContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(
+            RETRIEVAL_CONTEXT_KEY,
+            "opentelemetry.genai.retrieval.context",
+        )
+
+    def test_retrieval_context_data_merge(self) -> None:
+        data1 = RetrievalData(data_source_id="ds-1", retrieval_top_k=5)
+        data2 = RetrievalData(
+            data_source_id="ds-2",
+            retrieval_top_k=10,
+            retrieval_query_text="search query",
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.data_source_id, "ds-2")
+        self.assertEqual(data1.retrieval_top_k, 10)
+        self.assertEqual(data1.retrieval_query_text, "search query")
+
+    def test_retrieval_invocation_property_delegation_to_data(self) -> None:
+        inv = self.handler.retrieval(
+            data_source_id="my-ds",
+            provider="chroma",
+            request_model="all-MiniLM-L6-v2",
+            server_address="localhost",
+            server_port=8000,
+        )
+        self.assertEqual(inv.data_source_id, "my-ds")
+        self.assertEqual(inv.provider, "chroma")
+        self.assertEqual(inv.request_model, "all-MiniLM-L6-v2")
+        self.assertEqual(inv.server_address, "localhost")
+        self.assertEqual(inv.server_port, 8000)
+
+        inv.top_k = 15
+        self.assertEqual(inv.data.retrieval_top_k, 15)
+        self.assertEqual(inv.top_k, 15)
+
+        inv.query_text = "What is OpenTelemetry?"
+        self.assertEqual(
+            inv.data.retrieval_query_text, "What is OpenTelemetry?"
+        )
+        self.assertEqual(inv.query_text, "What is OpenTelemetry?")
+
+        doc = RetrievalDocument(id="doc-1", score=0.8)
+        inv.documents = [doc]
+        self.assertEqual(inv.data.retrieval_documents, [doc])
+        self.assertEqual(inv.documents, [doc])
+        inv.stop()
+
+    def test_retrieval_invocation_outer_sets_empty_object_on_context(
+        self,
+    ) -> None:
+        self.assertIsNone(get_value(RETRIEVAL_CONTEXT_KEY))
+        with self.handler.retrieval(data_source_id="ds-1") as inv:
+            self.assertIsInstance(inv, RetrievalInvocation)
+            self.assertNotIsInstance(inv, SuppressedRetrievalInvocation)
+            ctx_data = get_value(RETRIEVAL_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, RetrievalData)
+        self.assertIsNone(get_value(RETRIEVAL_CONTEXT_KEY))
+
+    def test_nested_retrieval_deduplication_and_enrichment(self) -> None:
+        with self.handler.retrieval(data_source_id="root-ds") as root:
+            self.assertIsInstance(root, RetrievalInvocation)
+            self.assertNotIsInstance(root, SuppressedRetrievalInvocation)
+
+            with self.handler.retrieval(data_source_id="inner-ds") as inner:
+                self.assertIsInstance(inner, SuppressedRetrievalInvocation)
+                inner.top_k = 20
+                inner.attributes["custom.retrieval"] = "val"
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_DATA_SOURCE_ID), "root-ds")
+        self.assertEqual(attrs.get("gen_ai.retrieval.top_k"), 20)
+        self.assertEqual(attrs.get("custom.retrieval"), "val")
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        with self.handler.retrieval(data_source_id="root-ds") as outer:
+            outer.data.retrieval_query_text = "root query"
+            outer.data.retrieval_documents = [
+                RetrievalDocument(id="root-doc", score=0.9)
+            ]
+            outer.data.retrieval_top_k = 5
+
+            inner_data = RetrievalData(
+                retrieval_top_k=10,
+                retrieval_query_text="inner query",
+                retrieval_documents=[
+                    RetrievalDocument(id="inner-doc", score=0.1)
+                ],
+                data_source_id="inner-ds",
+            )
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields: outer top_k preserved
+            self.assertEqual(outer.data.retrieval_top_k, 5)
+            # Inner non-content fields not on outer are enriched
+            self.assertEqual(outer.data.data_source_id, "root-ds")
+            # Content fields are NOT overridden by inner
+            self.assertEqual(outer.data.retrieval_query_text, "root query")
+            self.assertEqual(
+                outer.data.retrieval_documents,
+                [RetrievalDocument(id="root-doc", score=0.9)],
+            )
+
+    def test_nested_retrieval_invocation_does_not_end_span_on_fail(
+        self,
+    ) -> None:
+        with self.handler.retrieval(data_source_id="root-ds") as root:
+            with self.assertRaises(ValueError):
+                with self.handler.retrieval(
+                    data_source_id="inner-ds"
+                ) as inner:
+                    self.assertIsInstance(inner, SuppressedRetrievalInvocation)
+                    raise ValueError("inner failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+
+class TestWorkflowContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(
+            WORKFLOW_CONTEXT_KEY,
+            "opentelemetry.genai.workflow.context",
+        )
+
+    def test_workflow_context_data_merge(self) -> None:
+        data1 = WorkflowData(workflow_name="wf-1", conversation_id="conv-1")
+        data2 = WorkflowData(
+            workflow_name="wf-2",
+            conversation_id="conv-2",
+            attributes={"k": "v"},
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.workflow_name, "wf-2")
+        self.assertEqual(data1.conversation_id, "conv-2")
+        self.assertEqual(data1.attributes, {"k": "v"})
+
+    def test_workflow_invocation_property_delegation_to_data(self) -> None:
+        inv = self.handler.workflow("test-wf", conversation_id="conv-123")
+        self.assertEqual(inv.workflow_name, "test-wf")
+
+        msg_in = InputMessage(role="user", parts=[TextPart("hello")])
+        inv.input_messages.append(msg_in)
+        self.assertEqual(inv.data.input_messages, [msg_in])
+        self.assertEqual(inv.input_messages, [msg_in])
+
+        msg_out = OutputMessage(role="assistant", parts=[TextPart("world")])
+        inv.output_messages.append(msg_out)
+        self.assertEqual(inv.data.output_messages, [msg_out])
+        self.assertEqual(inv.output_messages, [msg_out])
+        inv.stop()
+
+    def test_workflow_invocation_outer_sets_empty_object_on_context(
+        self,
+    ) -> None:
+        self.assertIsNone(get_value(WORKFLOW_CONTEXT_KEY))
+        with self.handler.workflow("wf-root") as inv:
+            self.assertIsInstance(inv, WorkflowInvocation)
+            self.assertNotIsInstance(inv, SuppressedWorkflowInvocation)
+            ctx_data = get_value(WORKFLOW_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, WorkflowData)
+        self.assertIsNone(get_value(WORKFLOW_CONTEXT_KEY))
+
+    def test_nested_workflow_deduplication_and_enrichment(self) -> None:
+        with self.handler.workflow("root-wf") as root:
+            self.assertIsInstance(root, WorkflowInvocation)
+            self.assertNotIsInstance(root, SuppressedWorkflowInvocation)
+
+            with self.handler.workflow("inner-wf") as inner:
+                self.assertIsInstance(inner, SuppressedWorkflowInvocation)
+                inner.conversation_id = "inner-conv"
+                inner.attributes["custom.wf"] = "val"
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_WORKFLOW_NAME), "root-wf")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_CONVERSATION_ID), "inner-conv")
+        self.assertEqual(attrs.get("custom.wf"), "val")
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        with self.handler.workflow("root-wf") as outer:
+            outer.data.input_messages = [
+                InputMessage(role="user", parts=[TextPart("root in")])
+            ]
+            outer.data.output_messages = [
+                OutputMessage(role="assistant", parts=[TextPart("root out")])
+            ]
+            outer.data.conversation_id = "root-conv"
+
+            inner_data = WorkflowData(
+                workflow_name="inner-wf",
+                conversation_id="inner-conv",
+                input_messages=[
+                    InputMessage(role="user", parts=[TextPart("inner in")])
+                ],
+                output_messages=[
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("inner out")]
+                    )
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields: outer preserved
+            self.assertEqual(outer.data.conversation_id, "root-conv")
+            # Content fields are NOT overridden by inner
+            self.assertEqual(
+                outer.data.input_messages,
+                [InputMessage(role="user", parts=[TextPart("root in")])],
+            )
+            self.assertEqual(
+                outer.data.output_messages,
+                [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("root out")]
+                    )
+                ],
+            )
+
+    def test_nested_workflow_invocation_does_not_end_span_on_fail(
+        self,
+    ) -> None:
+        with self.handler.workflow("root-wf") as root:
+            with self.assertRaises(ValueError):
+                with self.handler.workflow("inner-wf") as inner:
+                    self.assertIsInstance(inner, SuppressedWorkflowInvocation)
+                    raise ValueError("inner failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+
+class TestAgentContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(
+            AGENT_CONTEXT_KEY, "opentelemetry.genai.agent.context"
+        )
+
+    def test_agent_context_data_merge(self) -> None:
+        data1 = AgentData(agent_name="agent-1", request_temperature=0.5)
+        data2 = AgentData(
+            agent_name="agent-2",
+            request_temperature=0.8,
+            usage_input_tokens=100,
+            provider_name="bedrock",
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.agent_name, "agent-2")
+        self.assertEqual(data1.request_temperature, 0.8)
+        self.assertEqual(data1.usage_input_tokens, 100)
+        self.assertEqual(data1.provider_name, "bedrock")
+
+    def test_agent_invocation_property_delegation_to_data(self) -> None:
+        local_inv = self.handler.invoke_local_agent(
+            agent_name="SupportAgent",
+            request_model="claude-3-haiku",
+            conversation_id="conv-support",
+        )
+        self.assertEqual(local_inv.agent_name, "SupportAgent")
+        local_inv.agent_description = "Support agent description"
+        self.assertEqual(
+            local_inv.data.agent_description, "Support agent description"
+        )
+        self.assertEqual(
+            local_inv.agent_description, "Support agent description"
+        )
+
+        local_inv.temperature = 0.3
+        self.assertEqual(local_inv.data.request_temperature, 0.3)
+        self.assertEqual(local_inv.temperature, 0.3)
+
+        local_inv.input_tokens = 50
+        local_inv.output_tokens = 150
+        self.assertEqual(local_inv.data.usage_input_tokens, 50)
+        self.assertEqual(local_inv.data.usage_output_tokens, 150)
+        local_inv.stop()
+
+        remote_inv = self.handler.invoke_remote_agent(
+            "aws.bedrock",
+            agent_name="BedrockAgent",
+            request_model="anthropic.claude-3",
+            server_address="bedrock.us-east-1.amazonaws.com",
+            server_port=443,
+        )
+        self.assertEqual(remote_inv.provider, "aws.bedrock")
+        self.assertEqual(remote_inv.agent_name, "BedrockAgent")
+        self.assertEqual(
+            remote_inv.server_address, "bedrock.us-east-1.amazonaws.com"
+        )
+        self.assertEqual(remote_inv.server_port, 443)
+
+        remote_inv.agent_id = "agent-xyz"
+        self.assertEqual(remote_inv.data.agent_id, "agent-xyz")
+        self.assertEqual(remote_inv.agent_id, "agent-xyz")
+
+        remote_inv.cache_write_input_tokens = 25
+        self.assertEqual(remote_inv.data.usage_cache_write_input_tokens, 25)
+        self.assertEqual(remote_inv.cache_write_input_tokens, 25)
+
+        remote_inv.cache_read_input_tokens = 75
+        self.assertEqual(remote_inv.data.usage_cache_read_input_tokens, 75)
+        self.assertEqual(remote_inv.cache_read_input_tokens, 75)
+        remote_inv.stop()
+
+    def test_agent_invocation_outer_sets_empty_object_on_context(self) -> None:
+        self.assertIsNone(get_value(AGENT_CONTEXT_KEY))
+        with self.handler.invoke_local_agent(agent_name="LocalRoot") as inv:
+            self.assertIsInstance(inv, LocalAgentInvocation)
+            self.assertNotIsInstance(inv, SuppressedLocalAgentInvocation)
+            ctx_data = get_value(AGENT_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, AgentData)
+        self.assertIsNone(get_value(AGENT_CONTEXT_KEY))
+
+    def test_nested_local_agent_deduplication_and_enrichment(self) -> None:
+        with self.handler.invoke_local_agent(agent_name="RootAgent") as root:
+            self.assertIsInstance(root, LocalAgentInvocation)
+            self.assertNotIsInstance(root, SuppressedLocalAgentInvocation)
+
+            with self.handler.invoke_local_agent(agent_name="SubAgent") as sub:
+                self.assertIsInstance(sub, SuppressedLocalAgentInvocation)
+                sub.agent_description = "Sub-agent description"
+                sub.input_tokens = 30
+                sub.output_tokens = 70
+                sub.attributes["custom.agent"] = "val"
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_AGENT_NAME), "RootAgent")
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_AGENT_DESCRIPTION), "Sub-agent description"
+        )
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 30)
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS), 70)
+        self.assertEqual(attrs.get("custom.agent"), "val")
+
+    def test_nested_remote_agent_deduplication_and_enrichment(self) -> None:
+        with self.handler.invoke_remote_agent(
+            "openai", agent_name="RootAssistant"
+        ) as root:
+            self.assertIsInstance(root, RemoteAgentInvocation)
+            self.assertNotIsInstance(root, SuppressedRemoteAgentInvocation)
+
+            with self.handler.invoke_remote_agent(
+                "openai", agent_name="InnerAssistant"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedRemoteAgentInvocation)
+                inner.agent_id = "asst-inner-123"
+                inner.input_tokens = 100
+                inner.output_tokens = 200
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_AGENT_NAME), "RootAssistant")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_AGENT_ID), "asst-inner-123")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 100)
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_OUTPUT_TOKENS), 200)
+
+    def test_local_agent_nesting_remote_agent_suppression(self) -> None:
+        with self.handler.invoke_local_agent(
+            agent_name="LocalManager"
+        ) as root:
+            self.assertIsInstance(root, LocalAgentInvocation)
+
+            with self.handler.invoke_remote_agent(
+                "openai", agent_name="RemoteWorker"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedRemoteAgentInvocation)
+                inner.agent_id = "asst-worker"
+                inner.input_tokens = 80
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_AGENT_NAME), "LocalManager")
+        self.assertEqual(attrs.get(GenAI.GEN_AI_USAGE_INPUT_TOKENS), 80)
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        with self.handler.invoke_local_agent(agent_name="RootAgent") as outer:
+            outer.data.input_messages = [
+                InputMessage(role="user", parts=[TextPart("root msg")])
+            ]
+            outer.data.output_messages = [
+                OutputMessage(role="assistant", parts=[TextPart("root out")])
+            ]
+            outer.data.agent_description = "root desc"
+
+            inner_data = AgentData(
+                agent_name="InnerAgent",
+                agent_description="inner desc",
+                usage_input_tokens=100,
+                input_messages=[
+                    InputMessage(role="user", parts=[TextPart("inner msg")])
+                ],
+                output_messages=[
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("inner out")]
+                    )
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields enriched
+            self.assertEqual(outer.data.usage_input_tokens, 100)
+            self.assertEqual(outer.data.agent_description, "root desc")
+            # Content fields are NOT overridden by inner
+            self.assertEqual(
+                outer.data.input_messages,
+                [InputMessage(role="user", parts=[TextPart("root msg")])],
+            )
+            self.assertEqual(
+                outer.data.output_messages,
+                [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("root out")]
+                    )
+                ],
+            )
+
+    def test_nested_agent_invocation_does_not_end_span_on_fail(self) -> None:
+        with self.handler.invoke_local_agent(agent_name="RootAgent") as root:
+            with self.assertRaises(ValueError):
+                with self.handler.invoke_local_agent(
+                    agent_name="InnerAgent"
+                ) as inner:
+                    self.assertIsInstance(
+                        inner, SuppressedLocalAgentInvocation
+                    )
+                    raise ValueError("agent failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
+
+
+class TestFetchResponseContext(TestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.span_exporter = InMemorySpanExporter()
+        self.tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter)
+        )
+        self.handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+        )
+
+    def test_context_key_constant_value(self) -> None:
+        self.assertEqual(
+            FETCH_RESPONSE_CONTEXT_KEY,
+            "opentelemetry.genai.fetch_response.context",
+        )
+
+    def test_fetch_response_context_data_merge(self) -> None:
+        data1 = FetchResponseData(
+            response_id="resp-1", response_status="pending"
+        )
+        data2 = FetchResponseData(
+            response_id="resp-2",
+            response_status="completed",
+            response_model="gpt-4o",
+        )
+        data1.merge(data2, overwrite=True)
+        self.assertEqual(data1.response_id, "resp-2")
+        self.assertEqual(data1.response_status, "completed")
+        self.assertEqual(data1.response_model, "gpt-4o")
+
+    def test_fetch_response_invocation_property_delegation_to_data(
+        self,
+    ) -> None:
+        inv = self.handler.fetch_response(
+            "openai",
+            response_id="resp-original",
+            server_address="api.openai.com",
+            server_port=443,
+        )
+        self.assertEqual(inv.provider, "openai")
+        self.assertEqual(inv.response_id, "resp-original")
+        self.assertEqual(inv.server_address, "api.openai.com")
+        self.assertEqual(inv.server_port, 443)
+
+        inv.response_model_name = "gpt-4o-mini"
+        self.assertEqual(inv.data.response_model, "gpt-4o-mini")
+        self.assertEqual(inv.response_model_name, "gpt-4o-mini")
+
+        inv.response_status = "completed"
+        self.assertEqual(inv.data.response_status, "completed")
+        self.assertEqual(inv.response_status, "completed")
+
+        inv.finish_reasons = ["stop"]
+        self.assertEqual(inv.data.response_finish_reasons, ["stop"])
+        self.assertEqual(inv.finish_reasons, ["stop"])
+
+        inv.stream_cursor = "cursor-123"
+        self.assertEqual(inv.data.request_stream_cursor, "cursor-123")
+        self.assertEqual(inv.stream_cursor, "cursor-123")
+        inv.stop()
+
+    def test_fetch_response_invocation_outer_sets_empty_object_on_context(
+        self,
+    ) -> None:
+        self.assertIsNone(get_value(FETCH_RESPONSE_CONTEXT_KEY))
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as inv:
+            self.assertIsInstance(inv, FetchResponseInvocation)
+            self.assertNotIsInstance(inv, SuppressedFetchResponseInvocation)
+            ctx_data = get_value(FETCH_RESPONSE_CONTEXT_KEY)
+            self.assertIsInstance(ctx_data, FetchResponseData)
+        self.assertIsNone(get_value(FETCH_RESPONSE_CONTEXT_KEY))
+
+    def test_nested_fetch_response_deduplication_and_enrichment(self) -> None:
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as root:
+            self.assertIsInstance(root, FetchResponseInvocation)
+            self.assertNotIsInstance(root, SuppressedFetchResponseInvocation)
+
+            with self.handler.fetch_response(
+                "openai", response_id="resp-inner"
+            ) as inner:
+                self.assertIsInstance(inner, SuppressedFetchResponseInvocation)
+                inner.response_model_name = "gpt-4o-2024-08-06"
+                inner.response_status = "completed"
+                inner.finish_reasons = ["stop"]
+                inner.attributes["custom.fetch"] = "val"
+
+        (span,) = self.span_exporter.get_finished_spans()
+        attrs = span.attributes
+        self.assertEqual(attrs.get(GenAI.GEN_AI_RESPONSE_ID), "resp-root")
+        self.assertEqual(
+            attrs.get(GenAI.GEN_AI_RESPONSE_MODEL), "gpt-4o-2024-08-06"
+        )
+        self.assertEqual(attrs.get("gen_ai.response.status"), "completed")
+        self.assertEqual(
+            list(attrs.get(GenAI.GEN_AI_RESPONSE_FINISH_REASONS) or []),
+            ["stop"],
+        )
+        self.assertEqual(attrs.get("custom.fetch"), "val")
+
+    def test_enrich_from_context_does_not_override_content(self) -> None:
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as outer:
+            outer.data.output_messages = [
+                OutputMessage(role="assistant", parts=[TextPart("root out")])
+            ]
+            outer.data.response_model = "root-model"
+
+            inner_data = FetchResponseData(
+                response_model="inner-model",
+                response_status="completed",
+                output_messages=[
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("inner out")]
+                    )
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+
+            # Non-content fields: outer preserved, inner enriched
+            self.assertEqual(outer.data.response_model, "root-model")
+            self.assertEqual(outer.data.response_status, "completed")
+            # Content fields are NOT overridden by inner
+            self.assertEqual(
+                outer.data.output_messages,
+                [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("root out")]
+                    )
+                ],
+            )
+
+    def test_nested_fetch_response_invocation_does_not_end_span_on_fail(
+        self,
+    ) -> None:
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as root:
+            with self.assertRaises(ValueError):
+                with self.handler.fetch_response(
+                    "openai", response_id="resp-inner"
+                ) as inner:
+                    self.assertIsInstance(
+                        inner, SuppressedFetchResponseInvocation
+                    )
+                    raise ValueError("fetch failure")
+            self.assertTrue(root.span.is_recording())
+            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
+
+        (span,) = self.span_exporter.get_finished_spans()
+        self.assertEqual(span.status.status_code, StatusCode.UNSET)
