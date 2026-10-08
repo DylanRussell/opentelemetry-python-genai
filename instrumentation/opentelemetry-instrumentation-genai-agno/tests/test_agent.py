@@ -1522,13 +1522,14 @@ def test_agent_continue_run_with_additional_instructions(
 
     spans = span_exporter.get_finished_spans()
     cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
+    system_instructions = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
     )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "user"
-    assert input_messages[0]["parts"][0]["content"] == "be more concise"
+    assert len(system_instructions) == 1
+    assert system_instructions[0]["type"] == "text"
+    assert system_instructions[0]["content"] == "be more concise"
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
 
 
 def test_agent_continue_run_with_additional_instructions_camel_case(
@@ -1567,13 +1568,81 @@ def test_agent_continue_run_with_additional_instructions_camel_case(
 
     spans = span_exporter.get_finished_spans()
     cont_span = spans[-1]
+    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
+    system_instructions = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
+    )
+    assert len(system_instructions) == 1
+    assert system_instructions[0]["type"] == "text"
+    assert system_instructions[0]["content"] == "steer output"
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
+
+
+def test_agent_continue_run_with_input_and_additional_instructions(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test Agent.continue_run with both input and additional_instructions parameters."""
+    if (
+        "additional_instructions"
+        not in inspect.signature(Agent.continue_run).parameters
+        or "input" not in inspect.signature(Agent.continue_run).parameters
+    ):
+        pytest.skip(
+            "Agent.continue_run does not support additional_instructions or input in this version of agno"
+        )
+
+    agent = Agent(
+        name="test-both-input-inst-agent", model=MockModel(id="mock-model")
+    )
+    mock_run_output = ModelResponse(content="Initial response")
+    mock_cont_output = ModelResponse(content="Continued response")
+
+    import agno.agent
+
+    if hasattr(agno.agent, "_run"):
+        dispatch_patch = patch(
+            "agno.agent._run.continue_run_dispatch",
+            return_value=mock_cont_output,
+        )
+    else:
+        dispatch_patch = patch(
+            "agno.agent.agent.continue_run_dispatch",
+            return_value=mock_cont_output,
+        )
+
+    with patch.object(Agent, "run", wraps=agent.run):
+        with patch(
+            "agno.models.base.Model.response", return_value=mock_run_output
+        ):
+            run_res = agent.run("hello")
+            assert run_res is not None
+
+        with dispatch_patch:
+            cont_res = agent.continue_run(
+                run_res,
+                input="user follow-up",
+                additional_instructions="be very concise",
+            )
+            assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
     input_messages = json.loads(
         cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
     )
     assert len(input_messages) == 1
     assert input_messages[0]["role"] == "user"
-    assert input_messages[0]["parts"][0]["content"] == "steer output"
+    assert input_messages[0]["parts"][0]["content"] == "user follow-up"
+
+    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
+    system_instructions = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
+    )
+    assert len(system_instructions) == 1
+    assert system_instructions[0]["type"] == "text"
+    assert system_instructions[0]["content"] == "be very concise"
 
 
 def test_agent_continue_run_with_tools_json_string_results(
@@ -1705,14 +1774,18 @@ def test_agent_continue_run_with_tools_json_string_and_additional_instructions(
     input_messages = json.loads(
         cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
     )
-    assert len(input_messages) == 2
+    assert len(input_messages) == 1
     assert input_messages[0]["role"] == "tool"
     assert input_messages[0]["parts"][0]["id"] == "call_hitl"
-    assert json.loads(input_messages[0]["parts"][0]["response"]) == {
-        "confirmed": True
-    }
-    assert input_messages[1]["role"] == "user"
-    assert input_messages[1]["parts"][0]["content"] == "proceed with caution"
+    assert input_messages[0]["parts"][0]["response"] == {"confirmed": True}
+
+    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
+    system_instructions = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
+    )
+    assert len(system_instructions) == 1
+    assert system_instructions[0]["type"] == "text"
+    assert system_instructions[0]["content"] == "proceed with caution"
 
 
 def test_agent_continue_run_with_tools_json_string_tool_definitions(
@@ -1819,9 +1892,108 @@ def test_agent_acontinue_run_with_tools_and_additional_instructions(
     input_messages = json.loads(
         cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
     )
-    assert len(input_messages) == 2
+    assert len(input_messages) == 1
     assert input_messages[0]["role"] == "tool"
     assert input_messages[0]["parts"][0]["id"] == "call_async_1"
     assert input_messages[0]["parts"][0]["response"] == "100"
-    assert input_messages[1]["role"] == "user"
-    assert input_messages[1]["parts"][0]["content"] == "async extra guidance"
+
+    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
+    system_instructions = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
+    )
+    assert len(system_instructions) == 1
+    assert system_instructions[0]["type"] == "text"
+    assert system_instructions[0]["content"] == "async extra guidance"
+
+
+def test_agent_continue_run_positional_run_id_not_recorded_as_input(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that a positional string run ID in continue_run is not captured as user input."""
+    import agno.agent
+
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "Agent.continue_run kwargs not supported in this version of agno"
+        )
+
+    agent = Agent(
+        name="test-run-id-agent",
+        model=MockModel(id="mock-model"),
+    )
+    mock_run_output = ModelResponse(content="Initial")
+    mock_cont_output = ModelResponse(content="Continued")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = agent.run("hello")
+        assert run_res is not None
+
+    with patch(
+        "agno.agent._run.continue_run_dispatch", return_value=mock_cont_output
+    ):
+        # Call with positional string run ID without input argument
+        cont_res = agent.continue_run("run-123")
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    # "run-123" must not be captured as a user input message
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
+
+
+def test_agent_continue_run_tools_arg_not_used_as_tool_definitions(
+    instrument_agno_content_capture,
+    span_exporter,
+) -> None:
+    """Test that tools argument passed to continue_run is not parsed as tool definitions."""
+    import agno.agent
+
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "Agent.continue_run kwargs not supported in this version of agno"
+        )
+
+    agent = Agent(
+        name="test-no-tools-agent",
+        model=MockModel(id="mock-model"),
+        tools=None,
+    )
+    mock_run_output = ModelResponse(content="Initial")
+    mock_cont_output = ModelResponse(content="Continued")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = agent.run("hello")
+        assert run_res is not None
+
+    tools_results = [
+        {
+            "tool_call_id": "call_1",
+            "tool_name": "calculator",
+            "result": "42",
+        }
+    ]
+
+    with patch(
+        "agno.agent._run.continue_run_dispatch", return_value=mock_cont_output
+    ):
+        cont_res = agent.continue_run(run_res, tools=tools_results)
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    cont_span = spans[-1]
+    # tool execution results must not be recorded as tool definitions
+    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS not in cont_span.attributes
+    # but should be captured as input messages (tool role)
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
+    input_messages = json.loads(
+        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(input_messages) == 1
+    assert input_messages[0]["role"] == "tool"
+    assert input_messages[0]["parts"][0]["id"] == "call_1"
+    assert input_messages[0]["parts"][0]["response"] == "42"
