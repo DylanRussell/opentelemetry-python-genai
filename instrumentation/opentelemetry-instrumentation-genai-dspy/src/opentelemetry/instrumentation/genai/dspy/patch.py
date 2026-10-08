@@ -69,7 +69,6 @@ _current_lm_history_entry: ContextVar[Any] = ContextVar(
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
     from dspy.clients.lm import LM
-    from dspy.core.types import LMResponse
     from dspy.dsp.colbertv2 import ColBERTv2
     from dspy.primitives.module import Module
     from dspy.primitives.prediction import Prediction
@@ -416,24 +415,40 @@ def _set_lm_invocation_response(
     handler: TelemetryHandler,
     invocation: InferenceInvocation,
     instance: LM,
-    result: LMResponse | list[dict[str, Any] | str],
+    result: object,
     history_entry: Any = None,
 ) -> None:
     if not isinstance(result, list):
-        if result.model:
-            invocation.response_model_name = str(result.model)
-        if result.response_id:
-            invocation.response_id = str(result.response_id)
+        model = getattr(result, "model", None)
+        if model:
+            invocation.response_model_name = str(model)
+        resp_id = getattr(result, "response_id", None) or getattr(
+            result, "id", None
+        )
+        if resp_id:
+            invocation.response_id = str(resp_id)
 
-        usage_dict = result.usage_as_dict()
-        if usage_dict:
-            apply_usage_to_invocation(invocation, usage_dict)
+        usage_as_dict = getattr(result, "usage_as_dict", None)
+        if callable(usage_as_dict):
+            usage_dict = usage_as_dict()
+            if isinstance(usage_dict, Mapping):
+                apply_usage_to_invocation(
+                    invocation, cast(Mapping[str, Any], usage_dict)
+                )
+        elif hasattr(result, "usage"):
+            apply_usage_to_invocation(invocation, getattr(result, "usage"))
 
-        finish_reasons = [
-            out.finish_reason for out in result.outputs if out.finish_reason
-        ]
-        if finish_reasons:
-            invocation.finish_reasons = finish_reasons
+        outputs = getattr(result, "outputs", None)
+        if isinstance(outputs, Sequence):
+            finish_reasons = [
+                str(fr)
+                for out in cast(Sequence[object], outputs)
+                if (fr := getattr(out, "finish_reason", None))
+            ]
+            if finish_reasons:
+                invocation.finish_reasons = finish_reasons
+        elif (fr := getattr(result, "finish_reason", None)) is not None:
+            invocation.finish_reasons = [str(fr)]
 
         if handler.should_capture_content():
             invocation.output_messages = extract_lm_output_messages(result)
@@ -500,7 +515,8 @@ def _set_lm_invocation_response(
 
     if handler.should_capture_content():
         invocation.output_messages = extract_lm_output_messages(
-            result, finish_reasons=choice_finish_reasons
+            cast(Sequence[object], result),
+            finish_reasons=choice_finish_reasons,
         )
 
 

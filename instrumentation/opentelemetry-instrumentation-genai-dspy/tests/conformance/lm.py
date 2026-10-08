@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest import mock
 
 import dspy
 
@@ -19,6 +18,14 @@ from opentelemetry.test_util_genai.conformance import (
     Scenario,
 )
 from opentelemetry.test_util_genai.instrumentor import instrument
+
+
+class AttrDict(dict):
+    """Dictionary supporting attribute access for cross-DSPy-version compatibility."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.__dict__ = self
 
 
 class FakeLM(dspy.LM):
@@ -43,21 +50,31 @@ class FakeLM(dspy.LM):
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         resp_text = self._responses[self._idx % len(self._responses)]
         self._idx += 1
-        mock_resp = mock.MagicMock()
-        mock_choice = mock.MagicMock()
-        mock_choice.message.content = str(resp_text)
-        mock_choice.message.reasoning_content = None
-        mock_choice.message.tool_calls = None
-        mock_choice.finish_reason = "stop"
-        mock_resp.choices = [mock_choice]
-        mock_resp.model = "gpt-4o-2024-05-13"
-        mock_resp.id = "chatcmpl-123"
-        mock_resp.usage = {
-            "prompt_tokens": 10,
-            "completion_tokens": 5,
-            "total_tokens": 15,
-        }
-        return mock_resp
+        choice = AttrDict(
+            {
+                "message": AttrDict(
+                    {
+                        "content": str(resp_text),
+                        "role": "assistant",
+                        "reasoning_content": None,
+                        "tool_calls": None,
+                    }
+                ),
+                "finish_reason": "stop",
+            }
+        )
+        return AttrDict(
+            {
+                "choices": [choice],
+                "model": "gpt-4o-2024-05-13",
+                "id": "chatcmpl-123",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            }
+        )
 
     async def aforward(self, *args: Any, **kwargs: Any) -> Any:
         return self.forward(*args, **kwargs)

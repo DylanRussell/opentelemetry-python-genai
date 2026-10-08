@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GenAiProviderNameValues,
@@ -32,7 +32,6 @@ from opentelemetry.util.genai.utils import decode_base64, image_from_url
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
     from dspy.clients.base_lm import BaseLM
-    from dspy.core.types import LMBasePart, LMMessage, LMResponse
     from dspy.primitives.prediction import Prediction
 
     from opentelemetry.util.genai.invocation import InferenceInvocation
@@ -68,6 +67,8 @@ def _is_sequence(val: object) -> TypeGuard[Sequence[object]]:
 
 def safe_int(val: object) -> int | None:
     """Safely convert a value to int or return None."""
+    if isinstance(val, bool):
+        return None
     if isinstance(val, (int, float, str, bytes)):
         try:
             return int(val)
@@ -78,6 +79,8 @@ def safe_int(val: object) -> int | None:
 
 def safe_float(val: object) -> float | None:
     """Safely convert a value to float or return None."""
+    if isinstance(val, bool):
+        return None
     if isinstance(val, (int, float, str, bytes)):
         try:
             return float(val)
@@ -169,7 +172,11 @@ def _extract_tool_call_part(
             args_raw = func.get("arguments")
         else:
             name = str(tc.get("name", ""))
-            args_raw = tc.get("args") or tc.get("arguments")
+            args_raw = tc.get("args")
+            if args_raw is None:
+                args_raw = tc.get("arguments")
+            if args_raw is None:
+                args_raw = tc.get("input")
 
         args = None
         if capture_content:
@@ -189,7 +196,11 @@ def _extract_tool_call_part(
         name = str(getattr(tc, "name", ""))
         args = None
         if capture_content:
-            args = getattr(tc, "args", None) or getattr(tc, "arguments", None)
+            args = getattr(tc, "args", None)
+            if args is None:
+                args = getattr(tc, "arguments", None)
+            if args is None:
+                args = getattr(tc, "input", None)
         return ToolCallRequestPart(
             id=str(call_id) if call_id else None,
             name=name,
@@ -225,7 +236,7 @@ def _to_bytes(data: object) -> bytes | None:
 
 
 def _extract_part(
-    p: LMBasePart | Mapping[str, object] | str | object,
+    p: object,
     capture_content: bool = True,
 ) -> MessagePart | None:
     """Extract a MessagePart from a part object or dictionary."""
@@ -380,7 +391,7 @@ def _extract_part(
 
 
 def _extract_single_message(
-    msg: LMMessage | Mapping[str, object] | object,
+    msg: object,
     capture_content: bool = True,
 ) -> InputMessage | None:
     if _is_mapping(msg):
@@ -531,7 +542,7 @@ def extract_lm_input_messages(
 
 
 def extract_lm_output_messages(
-    result: LMResponse | Sequence[Mapping[str, object] | str] | str,
+    result: object,
     finish_reason: str | None = None,
     finish_reasons: Sequence[str | None] | None = None,
     capture_content: bool = True,
@@ -547,49 +558,82 @@ def extract_lm_output_messages(
             )
         ]
 
-    if not isinstance(result, Sequence):
-        msgs: list[OutputMessage] = []
-        for idx, out in enumerate(result.outputs):
-            parts: list[MessagePart] = []
-            if out.parts:
-                for p in out.parts:
-                    extracted = _extract_part(
-                        p, capture_content=capture_content
+    if _is_mapping(result) or not isinstance(result, Sequence):
+        outputs = getattr(result, "outputs", None)
+        if isinstance(outputs, Sequence):
+            msgs: list[OutputMessage] = []
+            for idx, out in enumerate(cast(Sequence[object], outputs)):
+                parts: list[MessagePart] = []
+                out_parts = getattr(out, "parts", None)
+                if isinstance(out_parts, Sequence):
+                    for p in cast(Sequence[object], out_parts):
+                        extracted = _extract_part(
+                            p, capture_content=capture_content
+                        )
+                        if extracted:
+                            parts.append(extracted)
+                if not parts:
+                    text = getattr(out, "text", None)
+                    if isinstance(text, str):
+                        parts.append(TextPart(content=text))
+                    rc = getattr(out, "reasoning_content", None)
+                    if isinstance(rc, str) and rc:
+                        parts.append(ReasoningPart(content=rc))
+                    tcs = getattr(out, "tool_calls", None)
+                    if isinstance(tcs, Sequence):
+                        for tc in cast(Sequence[object], tcs):
+                            tcp = _extract_tool_call_part(
+                                tc, capture_content=capture_content
+                            )
+                            if tcp:
+                                parts.append(tcp)
+                fallback_fr = (
+                    finish_reasons[idx]
+                    if finish_reasons and idx < len(finish_reasons)
+                    else finish_reason
+                )
+                fr = getattr(out, "finish_reason", None) or fallback_fr
+                if parts:
+                    msgs.append(
+                        OutputMessage(
+                            role="assistant",
+                            parts=parts,
+                            finish_reason=str(fr) if fr else None,
+                        )
                     )
-                    if extracted:
-                        parts.append(extracted)
-            if not parts:
-                if out.text:
-                    parts.append(TextPart(content=out.text))
-                if (
-                    isinstance(out.reasoning_content, str)
-                    and out.reasoning_content
-                ):
-                    parts.append(ReasoningPart(content=out.reasoning_content))
-                for tc in out.tool_calls:
-                    tcp = _extract_tool_call_part(
-                        tc, capture_content=capture_content
-                    )
-                    if tcp:
-                        parts.append(tcp)
-            fallback_fr = (
-                finish_reasons[idx]
-                if finish_reasons and idx < len(finish_reasons)
-                else finish_reason
+            return msgs
+
+        message = getattr(result, "message", None)
+        if message is not None:
+            extracted_msg = _extract_single_message(
+                message, capture_content=capture_content
             )
-            fr = out.finish_reason or fallback_fr
-            if parts:
-                msgs.append(
+            if extracted_msg:
+                fr = getattr(result, "finish_reason", None) or finish_reason
+                return [
                     OutputMessage(
                         role="assistant",
-                        parts=parts,
+                        parts=extracted_msg.parts,
                         finish_reason=str(fr) if fr else None,
                     )
+                ]
+
+        text = getattr(result, "text", None)
+        if isinstance(text, str):
+            fr = getattr(result, "finish_reason", None) or finish_reason
+            return [
+                OutputMessage(
+                    role="assistant",
+                    parts=[TextPart(content=text)],
+                    finish_reason=str(fr) if fr else None,
                 )
-        return msgs
+            ]
+
+        return []
 
     msgs: list[OutputMessage] = []
-    for idx, item in enumerate(result):
+    seq_result = cast(Sequence[object], result)
+    for idx, item in enumerate(seq_result):
         fallback_fr = (
             finish_reasons[idx]
             if finish_reasons and idx < len(finish_reasons)
@@ -603,7 +647,7 @@ def extract_lm_output_messages(
                     finish_reason=str(fallback_fr) if fallback_fr else None,
                 )
             )
-        else:
+        elif _is_mapping(item):
             parts: list[MessagePart] = []
             raw_parts = item.get("parts")
             if _is_sequence(raw_parts):
@@ -649,31 +693,60 @@ def extract_lm_output_messages(
                     finish_reason=str(fr) if fr else None,
                 )
             )
+        else:
+            msgs.append(
+                OutputMessage(
+                    role="assistant",
+                    parts=[TextPart(content=str(item))],
+                    finish_reason=str(fallback_fr) if fallback_fr else None,
+                )
+            )
     return msgs
 
 
 def apply_usage_to_invocation(
     invocation: InferenceInvocation,
-    usage: Mapping[str, object],
+    usage: Mapping[str, object] | object,
 ) -> None:
-    """Apply token usage dictionary to an InferenceInvocation."""
-    in_tokens = usage.get("prompt_tokens")
-    if in_tokens is None:
-        in_tokens = usage.get("input_tokens")
-    invocation.input_tokens = _safe_int(in_tokens)
+    """Apply token usage dictionary or object to an InferenceInvocation."""
+    if _is_mapping(usage):
+        in_tokens = usage.get("prompt_tokens")
+        if in_tokens is None:
+            in_tokens = usage.get("input_tokens")
+        invocation.input_tokens = _safe_int(in_tokens)
 
-    out_tokens = usage.get("completion_tokens")
-    if out_tokens is None:
-        out_tokens = usage.get("output_tokens")
-    invocation.output_tokens = _safe_int(out_tokens)
+        out_tokens = usage.get("completion_tokens")
+        if out_tokens is None:
+            out_tokens = usage.get("output_tokens")
+        invocation.output_tokens = _safe_int(out_tokens)
 
-    invocation.thinking_tokens = _safe_int(usage.get("reasoning_tokens"))
-    invocation.cache_read_input_tokens = _safe_int(
-        usage.get("cache_read_tokens")
-    )
-    invocation.cache_write_input_tokens = _safe_int(
-        usage.get("cache_write_tokens")
-    )
+        invocation.thinking_tokens = _safe_int(usage.get("reasoning_tokens"))
+        invocation.cache_read_input_tokens = _safe_int(
+            usage.get("cache_read_tokens")
+        )
+        invocation.cache_write_input_tokens = _safe_int(
+            usage.get("cache_write_tokens")
+        )
+    else:
+        in_tokens = getattr(usage, "prompt_tokens", None)
+        if in_tokens is None:
+            in_tokens = getattr(usage, "input_tokens", None)
+        invocation.input_tokens = _safe_int(in_tokens)
+
+        out_tokens = getattr(usage, "completion_tokens", None)
+        if out_tokens is None:
+            out_tokens = getattr(usage, "output_tokens", None)
+        invocation.output_tokens = _safe_int(out_tokens)
+
+        invocation.thinking_tokens = _safe_int(
+            getattr(usage, "reasoning_tokens", None)
+        )
+        invocation.cache_read_input_tokens = _safe_int(
+            getattr(usage, "cache_read_tokens", None)
+        )
+        invocation.cache_write_input_tokens = _safe_int(
+            getattr(usage, "cache_write_tokens", None)
+        )
 
 
 def extract_input_content(input_args: Mapping[str, object]) -> str:

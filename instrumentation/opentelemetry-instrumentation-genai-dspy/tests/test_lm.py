@@ -31,6 +31,14 @@ from opentelemetry.test_util_genai.instrumentor import instrument
 from opentelemetry.trace import StatusCode
 
 
+class AttrDict(dict):
+    """Dictionary supporting attribute access for cross-DSPy-version compatibility."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
 class FakeLM(dspy.LM):
     """Test helper inheriting directly from dspy.LM."""
 
@@ -53,19 +61,31 @@ class FakeLM(dspy.LM):
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         resp_text = self._responses[self._idx % len(self._responses)]
         self._idx += 1
-        mock_resp = mock.MagicMock()
-        mock_choice = mock.MagicMock()
-        mock_choice.message.content = str(resp_text)
-        mock_choice.finish_reason = "stop"
-        mock_resp.choices = [mock_choice]
-        mock_resp.model = "gpt-4o-2024-05-13"
-        mock_resp.id = "chatcmpl-123"
-        mock_resp.usage = {
-            "prompt_tokens": 10,
-            "completion_tokens": 5,
-            "total_tokens": 15,
-        }
-        return mock_resp
+        choice = AttrDict(
+            {
+                "message": AttrDict(
+                    {
+                        "content": str(resp_text),
+                        "role": "assistant",
+                        "reasoning_content": None,
+                        "tool_calls": None,
+                    }
+                ),
+                "finish_reason": "stop",
+            }
+        )
+        return AttrDict(
+            {
+                "choices": [choice],
+                "model": "gpt-4o-2024-05-13",
+                "id": "chatcmpl-123",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            }
+        )
 
     async def aforward(self, *args: Any, **kwargs: Any) -> Any:
         return self.forward(*args, **kwargs)
@@ -192,10 +212,22 @@ def test_lm_call_typed_response(
         content_capture="SPAN_ONLY",
     ):
         lm = FakeLM(responses=["Rome"])
-        with dspy.context(experimental=True):
-            res = lm("Capital of Italy?")
-
-    assert hasattr(res, "outputs")
+        if hasattr(dspy, "lm15"):
+            req = dspy.lm15.Request(
+                model="openai/gpt-4o",
+                messages=[
+                    dspy.lm15.Message(
+                        role="user",
+                        parts=[dspy.lm15.TextPart(text="Capital of Italy?")],
+                    )
+                ],
+            )
+            res = lm(req)
+            assert hasattr(res, "text") or hasattr(res, "outputs")
+        else:
+            with dspy.context(experimental=True):
+                res = lm("Capital of Italy?")
+            assert hasattr(res, "outputs")
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -369,10 +401,22 @@ async def test_lm_acall_async_typed_response(
     span_exporter,
 ) -> None:
     lm = FakeLM(responses=["Ottawa"])
-    with dspy.context(experimental=True):
-        res = await lm.acall("Capital of Canada?")
-
-    assert hasattr(res, "outputs")
+    if hasattr(dspy, "lm15"):
+        req = dspy.lm15.Request(
+            model="openai/gpt-4o",
+            messages=[
+                dspy.lm15.Message(
+                    role="user",
+                    parts=[dspy.lm15.TextPart(text="Capital of Canada?")],
+                )
+            ],
+        )
+        res = await lm.acall(req)
+        assert hasattr(res, "text") or hasattr(res, "outputs")
+    else:
+        with dspy.context(experimental=True):
+            res = await lm.acall("Capital of Canada?")
+        assert hasattr(res, "outputs")
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -517,14 +561,6 @@ def test_copy_and_deepcopy_lm(
 
 
 def test_extract_message_rich_parts() -> None:
-    from dspy.core.types import (
-        LMMessage,
-        LMResponse,
-        LMTextPart,
-        LMThinkingPart,
-        LMToolCallPart,
-    )
-
     from opentelemetry.instrumentation.genai.dspy.utils import (
         _extract_single_message,
         extract_lm_output_messages,
@@ -576,15 +612,34 @@ def test_extract_message_rich_parts() -> None:
     assert isinstance(asst_msg.parts[2], TextPart)
     assert asst_msg.parts[2].content == "Let me check."
 
-    # 3. LMMessage object with thinking and tool call
-    lm_msg = LMMessage(
-        role="assistant",
-        parts=[
-            LMThinkingPart(text="Analyzing request"),
-            LMToolCallPart(id="call_99", name="fetch", args={"id": 1}),
-            LMTextPart(text="Done"),
-        ],
-    )
+    # 3. LMMessage / Message object with thinking and tool call
+    if hasattr(dspy, "lm15"):
+        lm_msg = dspy.lm15.Message(
+            role="assistant",
+            parts=[
+                dspy.lm15.ThinkingPart(text="Analyzing request"),
+                dspy.lm15.ToolCallPart(
+                    id="call_99", name="fetch", input={"id": 1}
+                ),
+                dspy.lm15.TextPart(text="Done"),
+            ],
+        )
+    else:
+        from dspy.core.types import (
+            LMMessage,
+            LMTextPart,
+            LMThinkingPart,
+            LMToolCallPart,
+        )
+
+        lm_msg = LMMessage(
+            role="assistant",
+            parts=[
+                LMThinkingPart(text="Analyzing request"),
+                LMToolCallPart(id="call_99", name="fetch", args={"id": 1}),
+                LMTextPart(text="Done"),
+            ],
+        )
     extracted_lm_msg = _extract_single_message(lm_msg)
     assert extracted_lm_msg is not None
     assert len(extracted_lm_msg.parts) == 3
@@ -596,12 +651,40 @@ def test_extract_message_rich_parts() -> None:
     assert isinstance(extracted_lm_msg.parts[2], TextPart)
     assert extracted_lm_msg.parts[2].content == "Done"
 
-    # 4. extract_lm_output_messages with LMResponse
-    lm_resp = LMResponse.from_text("Result text")
-    lm_resp.outputs[0].parts.insert(0, LMThinkingPart(text="Output thinking"))
-    lm_resp.outputs[0].parts.append(
-        LMToolCallPart(id="call_out", name="calc", args={"a": 2})
-    )
+    # 4. extract_lm_output_messages with LMResponse / Response
+    if hasattr(dspy, "lm15"):
+        lm_resp = dspy.lm15.Response(
+            id="chatcmpl-123",
+            model="gpt-4o",
+            message=dspy.lm15.Message(
+                role="assistant",
+                parts=[
+                    dspy.lm15.ThinkingPart(text="Output thinking"),
+                    dspy.lm15.TextPart(text="Result text"),
+                    dspy.lm15.ToolCallPart(
+                        id="call_out", name="calc", input={"a": 2}
+                    ),
+                ],
+            ),
+            finish_reason="tool_call",
+            usage=dspy.lm15.Usage(
+                input_tokens=10, output_tokens=5, total_tokens=15
+            ),
+        )
+    else:
+        from dspy.core.types import (
+            LMResponse,
+            LMThinkingPart,
+            LMToolCallPart,
+        )
+
+        lm_resp = LMResponse.from_text("Result text")
+        lm_resp.outputs[0].parts.insert(
+            0, LMThinkingPart(text="Output thinking")
+        )
+        lm_resp.outputs[0].parts.append(
+            LMToolCallPart(id="call_out", name="calc", args={"a": 2})
+        )
     output_msgs = extract_lm_output_messages(
         lm_resp, finish_reason="tool_calls"
     )
@@ -613,7 +696,7 @@ def test_extract_message_rich_parts() -> None:
     assert output_msgs[0].parts[1].content == "Result text"
     assert isinstance(output_msgs[0].parts[2], ToolCallRequestPart)
     assert output_msgs[0].parts[2].name == "calc"
-    assert output_msgs[0].finish_reason == "tool_calls"
+    assert output_msgs[0].finish_reason in ("tool_calls", "tool_call")
 
     # 5. extract_lm_output_messages with legacy dict item
     legacy_msgs = extract_lm_output_messages(
@@ -667,20 +750,8 @@ def test_extract_message_rich_parts() -> None:
 
 
 def test_extract_multimodal_and_generic_parts() -> None:
-    from dspy.core.types import (
-        LMAudioPart,
-        LMBinaryPart,
-        LMCitationPart,
-        LMDocumentPart,
-        LMImagePart,
-        LMMessage,
-        LMRefusalPart,
-        LMResponse,
-        LMSourcePart,
-        LMVideoPart,
-    )
-
     from opentelemetry.instrumentation.genai.dspy.utils import (
+        _extract_part,
         _extract_single_message,
         extract_lm_output_messages,
     )
@@ -691,23 +762,52 @@ def test_extract_multimodal_and_generic_parts() -> None:
     )
 
     # 1. UriPart for URL specified (image, audio, video, document, dict)
-    lm_msg = LMMessage(
-        role="user",
-        parts=[
-            LMImagePart(
-                url="https://example.com/img.png", media_type="image/png"
-            ),
-            LMAudioPart(
-                url="https://example.com/audio.mp3", media_type="audio/mp3"
-            ),
-            LMVideoPart(
-                url="https://example.com/video.mp4", media_type="video/mp4"
-            ),
-            LMDocumentPart(
-                url="https://example.com/doc.pdf", media_type="application/pdf"
-            ),
-        ],
-    )
+    if hasattr(dspy, "lm15"):
+        lm_msg = dspy.lm15.Message(
+            role="user",
+            parts=[
+                dspy.lm15.ImagePart(
+                    url="https://example.com/img.png", media_type="image/png"
+                ),
+                dspy.lm15.AudioPart(
+                    url="https://example.com/audio.mp3", media_type="audio/mp3"
+                ),
+                dspy.lm15.VideoPart(
+                    url="https://example.com/video.mp4", media_type="video/mp4"
+                ),
+                dspy.lm15.DocumentPart(
+                    url="https://example.com/doc.pdf",
+                    media_type="application/pdf",
+                ),
+            ],
+        )
+    else:
+        from dspy.core.types import (
+            LMAudioPart,
+            LMDocumentPart,
+            LMImagePart,
+            LMMessage,
+            LMVideoPart,
+        )
+
+        lm_msg = LMMessage(
+            role="user",
+            parts=[
+                LMImagePart(
+                    url="https://example.com/img.png", media_type="image/png"
+                ),
+                LMAudioPart(
+                    url="https://example.com/audio.mp3", media_type="audio/mp3"
+                ),
+                LMVideoPart(
+                    url="https://example.com/video.mp4", media_type="video/mp4"
+                ),
+                LMDocumentPart(
+                    url="https://example.com/doc.pdf",
+                    media_type="application/pdf",
+                ),
+            ],
+        )
     msg = _extract_single_message(lm_msg)
     assert msg is not None
     assert len(msg.parts) == 4
@@ -766,28 +866,61 @@ def test_extract_multimodal_and_generic_parts() -> None:
         mime_type="image/png", modality="image", content=b"hello"
     )
 
-    data_url_part_msg = _extract_single_message(
-        LMMessage(
-            role="user",
-            parts=[LMImagePart(url="data:image/png;base64,aGVsbG8=")],
+    if hasattr(dspy, "lm15"):
+        data_url_part_msg = _extract_single_message(
+            dspy.lm15.Message(
+                role="user",
+                parts=[
+                    dspy.lm15.ImagePart(url="data:image/png;base64,aGVsbG8=")
+                ],
+            )
         )
-    )
+    else:
+        from dspy.core.types import LMImagePart, LMMessage
+
+        data_url_part_msg = _extract_single_message(
+            LMMessage(
+                role="user",
+                parts=[LMImagePart(url="data:image/png;base64,aGVsbG8=")],
+            )
+        )
     assert data_url_part_msg is not None
     assert data_url_part_msg.parts[0] == BlobPart(
         mime_type="image/png", modality="image", content=b"hello"
     )
 
     # 2. BlobPart for inline data (images, documents, binary, source)
-    blob_msg = LMMessage(
-        role="user",
-        parts=[
-            LMImagePart(data="aGVsbG8=", media_type="image/png"),
-            LMDocumentPart(data="aGVsbG8=", media_type="application/pdf"),
-            LMBinaryPart(
-                data="aGVsbG8=", media_type="application/octet-stream"
-            ),
-        ],
-    )
+    if hasattr(dspy, "lm15"):
+        blob_msg = dspy.lm15.Message(
+            role="user",
+            parts=[
+                dspy.lm15.ImagePart(data="aGVsbG8=", media_type="image/png"),
+                dspy.lm15.DocumentPart(
+                    data="aGVsbG8=", media_type="application/pdf"
+                ),
+                dspy.lm15.BinaryPart(
+                    data="aGVsbG8=", media_type="application/octet-stream"
+                ),
+            ],
+        )
+    else:
+        from dspy.core.types import (
+            LMBinaryPart,
+            LMDocumentPart,
+            LMImagePart,
+            LMMessage,
+        )
+
+        blob_msg = LMMessage(
+            role="user",
+            parts=[
+                LMImagePart(data="aGVsbG8=", media_type="image/png"),
+                LMDocumentPart(data="aGVsbG8=", media_type="application/pdf"),
+                LMBinaryPart(
+                    data="aGVsbG8=", media_type="application/octet-stream"
+                ),
+            ],
+        )
     extracted_blob = _extract_single_message(blob_msg)
     assert extracted_blob is not None
     assert len(extracted_blob.parts) == 3
@@ -804,11 +937,19 @@ def test_extract_multimodal_and_generic_parts() -> None:
     )
 
     # LMSourcePart extracted directly and from dict
-    from opentelemetry.instrumentation.genai.dspy.utils import _extract_part
+    try:
+        from dspy.core.types import LMSourcePart
 
-    assert _extract_part(
-        LMSourcePart(type="source", data="aGVsbG8=", media_type="text/html")
-    ) == BlobPart(mime_type="text/html", modality="document", content=b"hello")
+        assert _extract_part(
+            LMSourcePart(
+                type="source", data="aGVsbG8=", media_type="text/html"
+            )
+        ) == BlobPart(
+            mime_type="text/html", modality="document", content=b"hello"
+        )
+    except ImportError:
+        pass
+
     source_dict_msg = _extract_single_message(
         {
             "role": "user",
@@ -827,13 +968,24 @@ def test_extract_multimodal_and_generic_parts() -> None:
     )
 
     # 3. Inline audio / video omitted as GenericPart
-    av_msg = LMMessage(
-        role="user",
-        parts=[
-            LMAudioPart(data="aGVsbG8=", media_type="audio/wav"),
-            LMVideoPart(data="aGVsbG8=", media_type="video/mp4"),
-        ],
-    )
+    if hasattr(dspy, "lm15"):
+        av_msg = dspy.lm15.Message(
+            role="user",
+            parts=[
+                dspy.lm15.AudioPart(data="aGVsbG8=", media_type="audio/wav"),
+                dspy.lm15.VideoPart(data="aGVsbG8=", media_type="video/mp4"),
+            ],
+        )
+    else:
+        from dspy.core.types import LMAudioPart, LMMessage, LMVideoPart
+
+        av_msg = LMMessage(
+            role="user",
+            parts=[
+                LMAudioPart(data="aGVsbG8=", media_type="audio/wav"),
+                LMVideoPart(data="aGVsbG8=", media_type="video/mp4"),
+            ],
+        )
     extracted_av = _extract_single_message(av_msg)
     assert extracted_av is not None
     assert len(extracted_av.parts) == 2
@@ -841,12 +993,22 @@ def test_extract_multimodal_and_generic_parts() -> None:
     assert extracted_av.parts[1] == GenericPart(type="video")
 
     # 4. GenericPart fallback for other parts (refusal, citation, custom dict, invalid b64)
-    refusal_msg = LMMessage(
-        role="assistant",
-        parts=[
-            LMRefusalPart(text="I cannot fulfill this request."),
-        ],
-    )
+    if hasattr(dspy, "lm15"):
+        refusal_msg = dspy.lm15.Message(
+            role="assistant",
+            parts=[
+                dspy.lm15.RefusalPart(text="I cannot fulfill this request."),
+            ],
+        )
+    else:
+        from dspy.core.types import LMMessage, LMRefusalPart
+
+        refusal_msg = LMMessage(
+            role="assistant",
+            parts=[
+                LMRefusalPart(text="I cannot fulfill this request."),
+            ],
+        )
     extracted_refusal = _extract_single_message(refusal_msg)
     assert extracted_refusal is not None
     assert extracted_refusal.parts[0] == GenericPart(type="refusal")
@@ -869,12 +1031,22 @@ def test_extract_multimodal_and_generic_parts() -> None:
     assert invalid_b64_msg is not None
     assert invalid_b64_msg.parts[0] == GenericPart(type="image")
 
-    other_msg = LMMessage(
-        role="user",
-        parts=[
-            LMCitationPart(text="cite", title="title"),
-        ],
-    )
+    if hasattr(dspy, "lm15"):
+        other_msg = dspy.lm15.Message(
+            role="assistant",
+            parts=[
+                dspy.lm15.CitationPart(text="cite", title="title"),
+            ],
+        )
+    else:
+        from dspy.core.types import LMCitationPart, LMMessage
+
+        other_msg = LMMessage(
+            role="assistant",
+            parts=[
+                LMCitationPart(text="cite", title="title"),
+            ],
+        )
     extracted_other = _extract_single_message(other_msg)
     assert extracted_other is not None
     assert len(extracted_other.parts) == 1
@@ -892,14 +1064,39 @@ def test_extract_multimodal_and_generic_parts() -> None:
     assert len(custom_dict_msg.parts) == 1
     assert custom_dict_msg.parts[0] == GenericPart(type="custom_extension")
 
-    # 5. Output messages with multimodal and generic parts in LMResponse
-    lm_resp = LMResponse.from_text("Text output")
-    lm_resp.outputs[0].parts.append(
-        LMImagePart(url="https://example.com/out.png", media_type="image/png")
-    )
-    lm_resp.outputs[0].parts.append(
-        LMCitationPart(text="source", title="title")
-    )
+    # 5. Output messages with multimodal and generic parts in Response / LMResponse
+    if hasattr(dspy, "lm15"):
+        lm_resp = dspy.lm15.Response(
+            id="chatcmpl-out",
+            model="gpt-4o",
+            message=dspy.lm15.Message(
+                role="assistant",
+                parts=[
+                    dspy.lm15.TextPart(text="Text output"),
+                    dspy.lm15.ImagePart(
+                        url="https://example.com/out.png",
+                        media_type="image/png",
+                    ),
+                    dspy.lm15.CitationPart(text="source", title="title"),
+                ],
+            ),
+            finish_reason="stop",
+            usage=dspy.lm15.Usage(
+                input_tokens=10, output_tokens=5, total_tokens=15
+            ),
+        )
+    else:
+        from dspy.core.types import LMCitationPart, LMImagePart, LMResponse
+
+        lm_resp = LMResponse.from_text("Text output")
+        lm_resp.outputs[0].parts.append(
+            LMImagePart(
+                url="https://example.com/out.png", media_type="image/png"
+            )
+        )
+        lm_resp.outputs[0].parts.append(
+            LMCitationPart(text="source", title="title")
+        )
     out_msgs = extract_lm_output_messages(lm_resp)
     assert len(out_msgs) == 1
     assert len(out_msgs[0].parts) == 3
@@ -938,28 +1135,42 @@ def test_lm_multiple_choices_different_finish_reasons(
             )
 
         def forward(self, *args: Any, **kwargs: Any) -> Any:
-            resp = mock.MagicMock()
-            c1 = mock.MagicMock()
-            c1.message.content = "First choice"
-            c1.message.reasoning_content = None
-            c1.message.tool_calls = None
-            c1.finish_reason = "stop"
-
-            c2 = mock.MagicMock()
-            c2.message.content = "Second choice"
-            c2.message.reasoning_content = None
-            c2.message.tool_calls = None
-            c2.finish_reason = "length"
-
-            resp.choices = [c1, c2]
-            resp.model = "gpt-4o-2024-05-13"
-            resp.id = "chatcmpl-multi"
-            resp.usage = {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-            }
-            return resp
+            c1 = AttrDict(
+                {
+                    "message": AttrDict(
+                        {
+                            "content": "First choice",
+                            "reasoning_content": None,
+                            "tool_calls": None,
+                        }
+                    ),
+                    "finish_reason": "stop",
+                }
+            )
+            c2 = AttrDict(
+                {
+                    "message": AttrDict(
+                        {
+                            "content": "Second choice",
+                            "reasoning_content": None,
+                            "tool_calls": None,
+                        }
+                    ),
+                    "finish_reason": "length",
+                }
+            )
+            return AttrDict(
+                {
+                    "choices": [c1, c2],
+                    "model": "gpt-4o-2024-05-13",
+                    "id": "chatcmpl-multi",
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 20,
+                        "total_tokens": 30,
+                    },
+                }
+            )
 
     with instrument(
         DSPyInstrumentor(),
