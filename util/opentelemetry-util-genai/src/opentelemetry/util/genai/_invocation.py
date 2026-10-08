@@ -77,8 +77,8 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
     _context_key: str | None = None
     """Context key used to attach context data for nested deduplication."""
 
-    _context_factory: Callable[[], Any] | None = None
-    """Factory creating the initial context data object to attach."""
+    _dataclass_class_object: Callable[[], Any] | None = None
+    """Dataclass type instantiated to attach initial context data."""
 
     def __init__(
         self,
@@ -146,11 +146,11 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             ctx = set_span_in_context(self.span, context)
             if (
                 self._context_key is not None
-                and self._context_factory is not None
+                and self._dataclass_class_object is not None
             ):
                 ctx = set_value(
                     self._context_key,
-                    self._context_factory(),
+                    self._dataclass_class_object(),
                     context=ctx,
                 )
             self._span_context: Context = ctx

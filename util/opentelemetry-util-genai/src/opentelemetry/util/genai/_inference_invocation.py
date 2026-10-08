@@ -212,9 +212,7 @@ class InferenceInvocation(GenAIInvocation):
     """
 
     _context_key = CLIENT_INFERENCE_CONTEXT_KEY
-    _context_factory = InferenceData
-
-    data: InferenceData
+    _dataclass_class_object = InferenceData
 
     def __init__(
         self,
@@ -874,6 +872,8 @@ class InferenceInvocation(GenAIInvocation):
         Outer (root) attributes take precedence over inner values. Inner
         invocations never override content capture fields.
         """
+        # Content capture is always set to false on inner invocations.
+        # We always want to use content capture from the outer invocation.
         input_messages = self.data.input_messages
         output_messages = self.data.output_messages
         system_instructions = self.data.system_instructions
@@ -1027,11 +1027,13 @@ class SuppressedInferenceInvocation(InferenceInvocation):
 
     def publish_to_context(self, data: InferenceData) -> None:
         """Publish invocation attributes to the active inference context."""
+        # Sync fields managed on base GenAIInvocation onto self.data before merging.
         self.data.conversation_id = self.conversation_id
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
         if self._request_stream is not None:
             self.data.request_stream = self._request_stream
+        # Overwrite so later inner invocations update the context; the root invocation enriches with overwrite=False.
         data.merge(self.data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:
