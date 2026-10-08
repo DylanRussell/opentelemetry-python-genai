@@ -10,7 +10,8 @@ This package provides OpenTelemetry instrumentation for the
 `DSPy framework <https://pypi.org/project/dspy/>`_, emitting Generative AI
 semantic conventions for DSPy language models (``dspy.LM``), Tool executions,
 ReAct agent loops (supporting both ``dspy.ReAct`` and ``dspy.ReActV2``), and
-``dspy.Retrieve`` retrieval operations.
+retrieval operations (``dspy.Retrieve``, ``dspy.ColBERTv2``, and
+``dspy.Embeddings``).
 
 Installation
 ------------
