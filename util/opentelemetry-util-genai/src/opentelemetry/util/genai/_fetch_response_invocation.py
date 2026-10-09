@@ -35,15 +35,16 @@ from opentelemetry.util.genai.types import (
 from opentelemetry.util.genai.utils import ContentCapturingMode
 from opentelemetry.util.types import AttributeValue
 
+FETCH_RESPONSE_CONTEXT_KEY: Final[str] = (
+    "opentelemetry.genai.fetch_response.context"
+)
+
 # TODO: Migrate to gen_ai_attributes constants once available in the semconv
 # package. Added to the GenAI semantic conventions in
 # https://github.com/open-telemetry/semantic-conventions-genai/pull/353.
 _FETCH_RESPONSE_OPERATION_NAME: Final = "fetch_response"
 _GEN_AI_REQUEST_STREAM_CURSOR: Final = "gen_ai.request.stream_cursor"
 _GEN_AI_RESPONSE_STATUS: Final = "gen_ai.response.status"
-FETCH_RESPONSE_CONTEXT_KEY: Final[str] = (
-    "opentelemetry.genai.fetch_response.context"
-)
 
 
 @dataclass
@@ -332,7 +333,6 @@ class FetchResponseInvocation(GenAIInvocation):
             ),
             (server_attributes.SERVER_ADDRESS, self.data.server_address),
             (server_attributes.SERVER_PORT, self.data.server_port),
-            (GenAI.GEN_AI_REQUEST_STREAM, self.request_stream),
             (_GEN_AI_REQUEST_STREAM_CURSOR, self.data.request_stream_cursor),
             (
                 GenAI.GEN_AI_RESPONSE_FINISH_REASONS,

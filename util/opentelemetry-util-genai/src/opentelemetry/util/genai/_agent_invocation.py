@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from opentelemetry._logs import Logger
-from opentelemetry.context import Context, get_value
+from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -23,10 +23,7 @@ from opentelemetry.util.genai._invocation import (
     _ContextData,
     get_content_attributes,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import (
     InputMessage,
     MessagePart,
@@ -43,12 +40,11 @@ _GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS: Final = (
 _GEN_AI_REQUEST_PREVIOUS_RESPONSE_ID: Final = (
     "gen_ai.request.previous_response.id"
 )
-AGENT_CONTEXT_KEY: Final[str] = "opentelemetry.genai.agent.context"
 
 
 @dataclass
 class AgentData(_ContextData):
-    """Typed data passed from inner agent invocations to the outer invocation."""
+    """Typed data container for an agent invocation."""
 
     agent_id: str | None = None
     agent_name: str | None = None
@@ -112,7 +108,6 @@ class AgentInvocation(GenAIInvocation, ABC):
         request_model: str | None = None,
         agent_name: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
-        start_span: bool = True,
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
@@ -152,12 +147,9 @@ class AgentInvocation(GenAIInvocation, ABC):
             context=context,
             conversation_id=conversation_id,
             content_capturing_mode=content_capturing_mode,
-            start_span=start_span,
             _attach_to_context=_attach_to_context,
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
-            context_key=AGENT_CONTEXT_KEY,
-            dataclass_class_object=AgentData,
         )
         self._request_model: str | None = request_model
         self._agent_name: str | None = agent_name
@@ -168,6 +160,11 @@ class AgentInvocation(GenAIInvocation, ABC):
     def agent_name(self) -> str | None:
         """The agent name provided at construction time."""
         return self.data.agent_name
+
+    @property
+    def request_model(self) -> str | None:
+        """The request model provided at construction time."""
+        return self.data.request_model
 
     @property
     def agent_description(self) -> str | None:
@@ -319,7 +316,6 @@ class AgentInvocation(GenAIInvocation, ABC):
     def system_instruction(
         self,
     ) -> list[SystemInstructionPart] | list[MessagePart]:
-        """System instructions for the agent. Passing ``MessagePart`` is deprecated; use ``SystemInstructionPart``."""
         if isinstance(self.data.system_instructions, list):
             return self.data.system_instructions
         instructions = (
@@ -332,12 +328,9 @@ class AgentInvocation(GenAIInvocation, ABC):
 
     @system_instruction.setter
     def system_instruction(
-        self,
-        value: Sequence[SystemInstructionPart] | Sequence[MessagePart] | None,
+        self, value: Sequence[SystemInstructionPart] | Sequence[MessagePart]
     ) -> None:
-        self.data.system_instructions = (
-            list(value) if value is not None else None
-        )
+        self.data.system_instructions = value
 
     @property
     def tool_definitions(self) -> list[ToolDefinition] | None:
@@ -347,68 +340,31 @@ class AgentInvocation(GenAIInvocation, ABC):
     def tool_definitions(self, value: Sequence[ToolDefinition] | None) -> None:
         self.data.tool_definitions = list(value) if value is not None else None
 
-    def enrich_from_context(self, data: AgentData) -> None:
-        """Enrich invocation attributes from context data published by inner invocations.
-
-        Outer (root) attributes take precedence over inner values. Inner
-        invocations never override content capture fields.
-        """
-        input_messages = self.data.input_messages
-        output_messages = self.data.output_messages
-        system_instructions = self.data.system_instructions
-        tool_definitions = self.data.tool_definitions
-
-        self.data.merge(data, overwrite=False)
-
-        self.data.input_messages = input_messages
-        self.data.output_messages = output_messages
-        self.data.system_instructions = system_instructions
-        self.data.tool_definitions = tool_definitions
-
     def _get_agent_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
-            (GenAI.GEN_AI_AGENT_NAME, self.data.agent_name),
-            (GenAI.GEN_AI_AGENT_DESCRIPTION, self.data.agent_description),
+            (GenAI.GEN_AI_AGENT_DESCRIPTION, self.agent_description),
         )
         return {k: v for k, v in optional_attrs if v is not None}
 
     def _get_request_attributes(self) -> dict[str, AttributeValue]:
-        conv_id = self.conversation_id or self.data.conversation_id
         optional_attrs = (
-            (GenAI.GEN_AI_CONVERSATION_ID, conv_id),
-            (GenAI.GEN_AI_DATA_SOURCE_ID, self.data.data_source_id),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
-            (GenAI.GEN_AI_OUTPUT_TYPE, self.data.output_type),
-            (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.data.request_temperature),
-            (GenAI.GEN_AI_REQUEST_TOP_P, self.data.request_top_p),
-            (
-                GenAI.GEN_AI_REQUEST_FREQUENCY_PENALTY,
-                self.data.request_frequency_penalty,
-            ),
-            (
-                GenAI.GEN_AI_REQUEST_PRESENCE_PENALTY,
-                self.data.request_presence_penalty,
-            ),
-            (GenAI.GEN_AI_REQUEST_MAX_TOKENS, self.data.request_max_tokens),
-            (
-                GenAI.GEN_AI_REQUEST_STOP_SEQUENCES,
-                self.data.request_stop_sequences,
-            ),
-            (GenAI.GEN_AI_REQUEST_SEED, self.data.request_seed),
-            (
-                GenAI.GEN_AI_REQUEST_CHOICE_COUNT,
-                self.data.request_choice_count,
-            ),
+            (GenAI.GEN_AI_CONVERSATION_ID, self.conversation_id),
+            (GenAI.GEN_AI_DATA_SOURCE_ID, self.data_source_id),
+            (GenAI.GEN_AI_OUTPUT_TYPE, self.output_type),
+            (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.temperature),
+            (GenAI.GEN_AI_REQUEST_TOP_P, self.top_p),
+            (GenAI.GEN_AI_REQUEST_FREQUENCY_PENALTY, self.frequency_penalty),
+            (GenAI.GEN_AI_REQUEST_PRESENCE_PENALTY, self.presence_penalty),
+            (GenAI.GEN_AI_REQUEST_MAX_TOKENS, self.max_tokens),
+            (GenAI.GEN_AI_REQUEST_STOP_SEQUENCES, self.stop_sequences),
+            (GenAI.GEN_AI_REQUEST_SEED, self.seed),
+            (GenAI.GEN_AI_REQUEST_CHOICE_COUNT, self.choice_count),
         )
         return {k: v for k, v in optional_attrs if v is not None}
 
     def _get_response_attributes(self) -> dict[str, AttributeValue]:
-        if self.data.response_finish_reasons:
-            return {
-                GenAI.GEN_AI_RESPONSE_FINISH_REASONS: (
-                    self.data.response_finish_reasons
-                )
-            }
+        if self.finish_reasons:
+            return {GenAI.GEN_AI_RESPONSE_FINISH_REASONS: self.finish_reasons}
         return {}
 
     def _get_usage_attributes(self) -> dict[str, AttributeValue]:
@@ -431,12 +387,9 @@ class AgentInvocation(GenAIInvocation, ABC):
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        ctx_data = get_value(AGENT_CONTEXT_KEY, context=self._span_context)
-        if isinstance(ctx_data, AgentData):
-            self.enrich_from_context(ctx_data)
+
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
-
         attributes: dict[str, AttributeValue] = {}
         attributes.update(self._get_agent_attributes())
         attributes.update(self._get_request_attributes())
@@ -477,10 +430,10 @@ class LocalAgentInvocation(AgentInvocation):
         request_model: str | None = None,
         agent_name: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
-        start_span: bool = True,
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
+        data: AgentData | None = None,
     ) -> None:
         super().__init__(
             tracer,
@@ -491,10 +444,10 @@ class LocalAgentInvocation(AgentInvocation):
             request_model=request_model,
             agent_name=agent_name,
             content_capturing_mode=content_capturing_mode,
-            start_span=start_span,
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
+            data=data,
         )
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
@@ -540,10 +493,10 @@ class RemoteAgentInvocation(AgentInvocation):
         server_port: int | None = None,
         agent_name: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
-        start_span: bool = True,
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
+        data: AgentData | None = None,
     ) -> None:
         start_attributes: dict[str, AttributeValue] = {
             k: v
@@ -556,17 +509,18 @@ class RemoteAgentInvocation(AgentInvocation):
             )
             if v is not None
         }
-        data = AgentData(
-            provider_name=provider,
-            request_model=request_model,
-            agent_name=agent_name,
-            server_address=server_address,
-            server_port=server_port,
-            conversation_id=conversation_id,
-            input_messages=[],
-            output_messages=[],
-            system_instructions=[],
-        )
+        if data is None:
+            data = AgentData(
+                agent_name=agent_name,
+                provider_name=provider,
+                request_model=request_model,
+                server_address=server_address,
+                server_port=server_port,
+                conversation_id=conversation_id,
+                input_messages=[],
+                output_messages=[],
+                system_instructions=[],
+            )
         super().__init__(
             tracer,
             instruments,
@@ -577,7 +531,6 @@ class RemoteAgentInvocation(AgentInvocation):
             agent_name=agent_name,
             start_attributes=start_attributes,
             content_capturing_mode=content_capturing_mode,
-            start_span=start_span,
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
@@ -588,15 +541,18 @@ class RemoteAgentInvocation(AgentInvocation):
         self._server_port: int | None = server_port
 
     @property
-    def provider(self) -> str | None:
-        return self.data.provider_name
+    def provider(self) -> str:
+        """The provider name provided at construction time."""
+        return self.data.provider_name or self._provider
 
     @property
     def server_address(self) -> str | None:
+        """The server address provided at construction time."""
         return self.data.server_address
 
     @property
     def server_port(self) -> int | None:
+        """The server port provided at construction time."""
         return self.data.server_port
 
     @property
@@ -693,10 +649,22 @@ class RemoteAgentInvocation(AgentInvocation):
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
-            (GenAI.GEN_AI_PROVIDER_NAME, self.data.provider_name),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (
+                GenAI.GEN_AI_PROVIDER_NAME,
+                self.data.provider_name or self._provider,
+            ),
+            (
+                GenAI.GEN_AI_REQUEST_MODEL,
+                self.data.request_model or self._request_model,
+            ),
+            (
+                server_attributes.SERVER_ADDRESS,
+                self.data.server_address or self._server_address,
+            ),
+            (
+                server_attributes.SERVER_PORT,
+                self.data.server_port or self._server_port,
+            ),
         )
         attrs: dict[str, AttributeValue] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
@@ -719,117 +687,3 @@ class RemoteAgentInvocation(AgentInvocation):
 
     def _record_metrics(self) -> None:
         self._record_client_metrics()
-
-
-class SuppressedLocalAgentInvocation(LocalAgentInvocation):
-    """Represents a local agent invocation running inside an active agent context.
-
-    Suppresses span creation and metrics. On stop or fail, publishes its
-    attributes to the active agent context.
-    """
-
-    def __init__(
-        self,
-        tracer: Tracer,
-        instruments: _Instruments,
-        logger: Logger,
-        completion_hook: CompletionHook,
-        *,
-        request_model: str | None = None,
-        agent_name: str | None = None,
-        content_capturing_mode: ContentCapturingMode | None = None,
-        context: Context | None = None,
-        _attach_to_context: bool = True,
-        conversation_id: str | None = None,
-    ) -> None:
-        super().__init__(
-            tracer,
-            instruments,
-            logger,
-            _NoOpCompletionHook(),
-            request_model=request_model,
-            agent_name=agent_name,
-            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
-            start_span=False,
-            context=context,
-            _attach_to_context=_attach_to_context,
-            conversation_id=conversation_id,
-        )
-
-    def publish_to_context(self, data: AgentData) -> None:
-        """Publish invocation attributes to the active agent context."""
-        self.data.conversation_id = self.conversation_id
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
-        data.merge(self.data, overwrite=True)
-
-    def _finish(self, error: Error | None = None) -> None:
-        if self._finished:
-            return
-        self._finished = True
-        ctx_data = get_value(AGENT_CONTEXT_KEY, context=self._span_context)
-        if isinstance(ctx_data, AgentData):
-            self.publish_to_context(ctx_data)
-
-    def _apply_finish(self, error: Error | None = None) -> None:
-        pass
-
-
-class SuppressedRemoteAgentInvocation(RemoteAgentInvocation):
-    """Represents a remote agent invocation running inside an active agent context.
-
-    Suppresses span creation and metrics. On stop or fail, publishes its
-    attributes to the active agent context.
-    """
-
-    def __init__(
-        self,
-        tracer: Tracer,
-        instruments: _Instruments,
-        logger: Logger,
-        completion_hook: CompletionHook,
-        provider: str,
-        *,
-        request_model: str | None = None,
-        server_address: str | None = None,
-        server_port: int | None = None,
-        agent_name: str | None = None,
-        content_capturing_mode: ContentCapturingMode | None = None,
-        context: Context | None = None,
-        _attach_to_context: bool = True,
-        conversation_id: str | None = None,
-    ) -> None:
-        super().__init__(
-            tracer,
-            instruments,
-            logger,
-            _NoOpCompletionHook(),
-            provider,
-            request_model=request_model,
-            server_address=server_address,
-            server_port=server_port,
-            agent_name=agent_name,
-            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
-            start_span=False,
-            context=context,
-            _attach_to_context=_attach_to_context,
-            conversation_id=conversation_id,
-        )
-
-    def publish_to_context(self, data: AgentData) -> None:
-        """Publish invocation attributes to the active agent context."""
-        self.data.conversation_id = self.conversation_id
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
-        data.merge(self.data, overwrite=True)
-
-    def _finish(self, error: Error | None = None) -> None:
-        if self._finished:
-            return
-        self._finished = True
-        ctx_data = get_value(AGENT_CONTEXT_KEY, context=self._span_context)
-        if isinstance(ctx_data, AgentData):
-            self.publish_to_context(ctx_data)
-
-    def _apply_finish(self, error: Error | None = None) -> None:
-        pass

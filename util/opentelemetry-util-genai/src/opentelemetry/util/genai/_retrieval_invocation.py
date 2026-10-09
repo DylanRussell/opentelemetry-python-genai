@@ -31,8 +31,8 @@ from opentelemetry.util.genai.utils import (
 )
 from opentelemetry.util.types import AttributeValue
 
-_GEN_AI_RETRIEVAL_TOP_K: Final = "gen_ai.retrieval.top_k"
 RETRIEVAL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.retrieval.context"
+_GEN_AI_RETRIEVAL_TOP_K: Final = "gen_ai.retrieval.top_k"
 
 
 @dataclass

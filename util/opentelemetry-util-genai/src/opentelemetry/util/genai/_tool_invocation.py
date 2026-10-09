@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import timeit
 from dataclasses import dataclass, field
 from typing import Final
@@ -29,8 +30,6 @@ from opentelemetry.util.genai.utils import (
 )
 from opentelemetry.util.types import AnyValue, AttributeValue
 
-TOOL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.tool.context"
-
 
 def _any_value_to_attribute_value(value: AnyValue) -> AttributeValue | None:
     """Serialize an AnyValue to an AttributeValue for OTel span attributes."""
@@ -42,6 +41,9 @@ def _any_value_to_attribute_value(value: AnyValue) -> AttributeValue | None:
         return gen_ai_json_dumps(value)
     except (TypeError, ValueError):
         return str(value)
+
+
+TOOL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.tool.context"
 
 
 @dataclass
@@ -141,7 +143,7 @@ class ToolInvocation(GenAIInvocation):
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
             context_key=TOOL_CONTEXT_KEY,
-            dataclass_class_object=ToolData,
+            dataclass_class_object=functools.partial(ToolData, tool_name=name),
         )
         self._name: str = name
         self._tool_type: str | None = tool_type

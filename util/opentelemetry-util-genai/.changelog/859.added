@@ -1,1 +1,1 @@
-Add suppressed invocation classes and context data propagation across all GenAI invocation types to deduplicate nested operations.
+Add context data propagation and nested operation suppression across GenAI invocations.

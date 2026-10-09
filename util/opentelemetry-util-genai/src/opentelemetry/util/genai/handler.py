@@ -50,10 +50,6 @@ from opentelemetry.trace import (
     TracerProvider,
     get_tracer,
 )
-from opentelemetry.util.genai._agent_invocation import (
-    SuppressedLocalAgentInvocation,
-    SuppressedRemoteAgentInvocation,
-)
 from opentelemetry.util.genai._embedding_invocation import (
     SuppressedEmbeddingInvocation,
 )
@@ -70,23 +66,17 @@ from opentelemetry.util.genai._retrieval_invocation import (
 from opentelemetry.util.genai._tool_invocation import (
     SuppressedToolInvocation,
 )
-from opentelemetry.util.genai._workflow_invocation import (
-    SuppressedWorkflowInvocation,
-)
 from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
     _SafeCompletionHook,
 )
 from opentelemetry.util.genai.invocation import (
-    AGENT_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
     EMBEDDING_CONTEXT_KEY,
     FETCH_RESPONSE_CONTEXT_KEY,
     RETRIEVAL_CONTEXT_KEY,
     TOOL_CONTEXT_KEY,
-    WORKFLOW_CONTEXT_KEY,
-    AgentData,
     EmbeddingData,
     EmbeddingInvocation,
     FetchResponseData,
@@ -99,7 +89,6 @@ from opentelemetry.util.genai.invocation import (
     RetrievalInvocation,
     ToolData,
     ToolInvocation,
-    WorkflowData,
     WorkflowInvocation,
 )
 from opentelemetry.util.genai.types import (
@@ -419,13 +408,12 @@ class TelemetryHandler:
         Recommended to set ``invocation.arguments`` and ``invocation.tool_result`` on the
         invocation object but only if `invocation.should_capture_content` is True.
         """
+        ctx_data = get_value(TOOL_CONTEXT_KEY, context=context)
+        is_suppressed = isinstance(ctx_data, ToolData) and (
+            ctx_data.tool_name is None or ctx_data.tool_name == name
+        )
         invocation_cls: type[ToolInvocation] = (
-            SuppressedToolInvocation
-            if isinstance(
-                get_value(TOOL_CONTEXT_KEY, context=context),
-                ToolData,
-            )
-            else ToolInvocation
+            SuppressedToolInvocation if is_suppressed else ToolInvocation
         )
         return invocation_cls(
             self._tracer,
@@ -467,15 +455,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[LocalAgentInvocation] = (
-            SuppressedLocalAgentInvocation
-            if isinstance(
-                get_value(AGENT_CONTEXT_KEY, context=context),
-                AgentData,
-            )
-            else LocalAgentInvocation
-        )
-        return invocation_cls(
+        return LocalAgentInvocation(
             self._tracer,
             self._instruments,
             self._logger,
@@ -516,15 +496,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[RemoteAgentInvocation] = (
-            SuppressedRemoteAgentInvocation
-            if isinstance(
-                get_value(AGENT_CONTEXT_KEY, context=context),
-                AgentData,
-            )
-            else RemoteAgentInvocation
-        )
-        return invocation_cls(
+        return RemoteAgentInvocation(
             self._tracer,
             self._instruments,
             self._logger,
@@ -562,15 +534,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[WorkflowInvocation] = (
-            SuppressedWorkflowInvocation
-            if isinstance(
-                get_value(WORKFLOW_CONTEXT_KEY, context=context),
-                WorkflowData,
-            )
-            else WorkflowInvocation
-        )
-        return invocation_cls(
+        return WorkflowInvocation(
             self._tracer,
             self._instruments,
             self._logger,
