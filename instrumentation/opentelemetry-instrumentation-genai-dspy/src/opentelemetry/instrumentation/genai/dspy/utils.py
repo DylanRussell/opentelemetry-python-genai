@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, Protocol, TypeGuard, cast, runtime_checkable
 
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GenAiProviderNameValues,
@@ -35,6 +35,27 @@ if TYPE_CHECKING:
     from dspy.primitives.prediction import Prediction
 
     from opentelemetry.util.genai.invocation import InferenceInvocation
+
+
+@runtime_checkable
+class LMRequestProtocol(Protocol):
+    """Structural protocol for DSPy LM request objects across DSPy versions.
+
+    DSPy 3.3 uses ``dspy.clients.base_lm.LMRequest`` and DSPy 3.4+ uses
+    ``dspy.lm15.Request``. Both share the same request shape (messages,
+    model, and config). Using a runtime-checkable protocol allows clean
+    isinstance() checks across versions without brittle version-specific imports.
+    """
+
+    @property
+    def messages(self) -> Sequence[object]: ...
+
+    @property
+    def model(self) -> str | None: ...
+
+    @property
+    def config(self) -> object | None: ...
+
 
 SENTINEL_TOOL_NAMES: frozenset[str] = frozenset({"finish", "submit"})
 
@@ -94,7 +115,8 @@ def safe_stop_sequences(val: object) -> list[str] | None:
     if isinstance(val, str):
         return [val]
     if _is_sequence(val):
-        return [str(s) for s in val]
+        seq = [str(s) for s in val]
+        return seq if seq else None
     return None
 
 
@@ -120,7 +142,7 @@ def parse_provider_and_model(
     return None, model_str.strip() if model_str else None
 
 
-def resolve_provider(instance: BaseLM) -> str:
+def resolve_provider(instance: BaseLM, model: str | None = None) -> str:
     """Resolve gen_ai.provider.name from a DSPy LM instance."""
     provider_obj = getattr(instance, "provider", None)
     if provider_obj is not None:
@@ -129,7 +151,8 @@ def resolve_provider(instance: BaseLM) -> str:
             p_name = cls_name.removesuffix("provider")
             return _KNOWN_PROVIDERS.get(p_name) or p_name
 
-    model = getattr(instance, "model", None)
+    if model is None:
+        model = getattr(instance, "model", None)
     if model is not None:
         p_name, _ = parse_provider_and_model(str(model))
         if p_name:
@@ -148,14 +171,19 @@ def resolve_provider(instance: BaseLM) -> str:
     return "unknown"
 
 
-def resolve_request_model(instance: BaseLM) -> str | None:
+def resolve_request_model(
+    instance: BaseLM, model: str | None = None
+) -> str | None:
     """Resolve model name from a DSPy LM instance."""
-    if (model_name := getattr(instance, "model_name", None)) is not None:
-        return str(model_name)
-    model = getattr(instance, "model", None)
     if model is not None:
         _, m_name = parse_provider_and_model(str(model))
         return m_name or str(model)
+    if (model_name := getattr(instance, "model_name", None)) is not None:
+        return str(model_name)
+    instance_model = getattr(instance, "model", None)
+    if instance_model is not None:
+        _, m_name = parse_provider_and_model(str(instance_model))
+        return m_name or str(instance_model)
     return None
 
 
@@ -478,6 +506,52 @@ def _extract_single_message(
     return None
 
 
+def extract_lm_request_config(
+    request: LMRequestProtocol | None,
+) -> dict[str, object]:
+    """Extract configuration dictionary from a DSPy request object."""
+    if request is None:
+        return {}
+    config_dict: dict[str, object] = {}
+    config = request.config
+    sources: list[object] = []
+    if config is not None:
+        sources.append(config)
+        dump_fn = getattr(config, "model_dump", None) or getattr(
+            config, "dict", None
+        )
+        if callable(dump_fn):
+            try:
+                dumped = dump_fn()
+                if _is_mapping(dumped):
+                    sources.append(dumped)
+            except Exception:
+                pass
+    else:
+        sources.append(request)
+
+    for attr in (
+        "temperature",
+        "max_tokens",
+        "top_p",
+        "frequency_penalty",
+        "presence_penalty",
+        "seed",
+        "stop",
+        "n",
+    ):
+        for src in sources:
+            val: object | None = None
+            if _is_mapping(src):
+                val = src.get(attr)
+            else:
+                val = getattr(src, attr, None)
+            if val is not None and val != () and val != []:
+                config_dict[attr] = val
+
+    return config_dict
+
+
 def extract_lm_input_messages(
     bound: Mapping[str, object],
     capture_content: bool = True,
@@ -486,15 +560,18 @@ def extract_lm_input_messages(
     items_raw = bound.get("items") or bound.get("args")
     items: Sequence[object] = items_raw if _is_sequence(items_raw) else ()
 
-    request = bound.get("request")
-    if request is None:
-        for candidate in (items[0] if items else None, bound.get("prompt")):
-            if candidate is not None and hasattr(candidate, "messages"):
-                request = candidate
-                break
+    request: LMRequestProtocol | None = None
+    for candidate in (
+        bound.get("request"),
+        items[0] if items else None,
+        bound.get("prompt"),
+    ):
+        if isinstance(candidate, LMRequestProtocol):
+            request = candidate
+            break
 
-    if request is not None and hasattr(request, "messages"):
-        raw_req_msgs = getattr(request, "messages", None)
+    if request is not None:
+        raw_req_msgs = request.messages
         if _is_sequence(raw_req_msgs):
             msgs: list[InputMessage] = []
             for m in raw_req_msgs:
@@ -793,7 +870,7 @@ def extract_output_content(
         output_fields_raw = (
             getattr(signature, "output_fields", None) if signature else None
         )
-        if _is_sequence(output_fields_raw):
+        if _is_mapping(output_fields_raw) or _is_sequence(output_fields_raw):
             for key in output_fields_raw:
                 key_str = str(key)
                 if key_str in output_dict:

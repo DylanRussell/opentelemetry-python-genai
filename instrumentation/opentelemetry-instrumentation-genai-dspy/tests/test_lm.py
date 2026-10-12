@@ -198,6 +198,55 @@ def test_lm_call_request_parameters(
     assert span.attributes[GenAI.GEN_AI_REQUEST_CHOICE_COUNT] == 2
 
 
+def _make_request(lm: FakeLM, **kwargs: Any) -> Any:
+    if hasattr(dspy, "lm15"):
+        return dspy.lm15.Request(
+            model=lm.model,
+            messages=[
+                dspy.lm15.Message(
+                    role="user",
+                    parts=[dspy.lm15.TextPart(text="Capital of France?")],
+                )
+            ],
+            config=dspy.lm15.Config(**kwargs),
+        )
+    from dspy.clients.base_lm import LMRequest
+
+    return LMRequest.from_call(
+        model=lm.model,
+        prompt="Capital of France?",
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize(
+    "parameter,value,attribute",
+    [
+        ("temperature", 0.2, GenAI.GEN_AI_REQUEST_TEMPERATURE),
+        ("max_tokens", 37, GenAI.GEN_AI_REQUEST_MAX_TOKENS),
+    ],
+)
+def test_explicit_request_parameters(
+    instrument_dspy: DSPyInstrumentor,
+    span_exporter,
+    parameter: str,
+    value: float,
+    attribute: str,
+) -> None:
+    lm = FakeLM(temperature=0.9, max_tokens=100)
+    request = _make_request(lm, **{parameter: value})
+
+    with mock.patch.object(lm, "forward", wraps=lm.forward) as forward:
+        lm(request=request)
+
+    expected_kwarg = forward.call_args.kwargs.get(
+        parameter
+    ) or forward.call_args.kwargs.get("max_completion_tokens")
+    assert expected_kwarg == value
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[attribute] == value
+
+
 def test_lm_call_typed_response(
     tracer_provider: TracerProvider,
     logger_provider: LoggerProvider,
@@ -1324,3 +1373,40 @@ def test_lm_signature_binding_and_keyword_history(
     assert span.attributes[GenAI.GEN_AI_USAGE_OUTPUT_TOKENS] == 3
     input_msgs = json.loads(span.attributes[GenAI.GEN_AI_INPUT_MESSAGES])
     assert input_msgs[0]["parts"][0]["content"] == "Positional message"
+
+
+def test_lm_call_does_not_inherit_earlier_instance_history(
+    tracer_provider: TracerProvider,
+    logger_provider: LoggerProvider,
+    meter_provider: MeterProvider,
+    span_exporter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_history_call(self: Any, *args: Any, **kwargs: Any) -> list[str]:
+        return ["Answer without history"]
+
+    monkeypatch.setattr(dspy.LM, "__call__", no_history_call)
+
+    with instrument(
+        DSPyInstrumentor(),
+        tracer_provider=tracer_provider,
+        logger_provider=logger_provider,
+        meter_provider=meter_provider,
+    ):
+        lm = FakeLM()
+        lm.history = [
+            {
+                "response_model": "old-stale-model",
+                "usage": {"prompt_tokens": 99, "completion_tokens": 88},
+                "response": {"id": "old-stale-id"},
+            }
+        ]
+        res = lm("Question")
+
+    assert res == ["Answer without history"]
+    (span,) = span_exporter.get_finished_spans()
+    attrs = span.attributes or {}
+    assert GenAI.GEN_AI_RESPONSE_MODEL not in attrs
+    assert GenAI.GEN_AI_USAGE_INPUT_TOKENS not in attrs
+    assert GenAI.GEN_AI_USAGE_OUTPUT_TOKENS not in attrs
+    assert GenAI.GEN_AI_RESPONSE_ID not in attrs

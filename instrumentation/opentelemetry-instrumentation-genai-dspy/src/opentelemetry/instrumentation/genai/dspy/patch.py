@@ -22,6 +22,7 @@ from wrapt import (
 
 from opentelemetry.instrumentation.genai.dspy.utils import (
     SENTINEL_TOOL_NAMES,
+    LMRequestProtocol,
     _safe_float,
     _safe_int,
     _safe_stop_sequences,
@@ -29,6 +30,7 @@ from opentelemetry.instrumentation.genai.dspy.utils import (
     extract_input_content,
     extract_lm_input_messages,
     extract_lm_output_messages,
+    extract_lm_request_config,
     extract_output_content,
     prepare_tool_definitions,
     resolve_provider,
@@ -354,15 +356,31 @@ def _start_lm_invocation(
     kwargs: dict[str, Any],
     wrapped: Callable[..., Any],
 ) -> InferenceInvocation:
-    provider = resolve_provider(instance)
-    request_model = resolve_request_model(instance)
+    req_obj: LMRequestProtocol | None = None
+    for candidate in (
+        kwargs.get("request"),
+        args[0] if args else None,
+        kwargs.get("prompt"),
+    ):
+        if isinstance(candidate, LMRequestProtocol):
+            req_obj = candidate
+            break
+
+    req_model = req_obj.model if req_obj is not None else None
+    provider = resolve_provider(instance, model=req_model)
+    request_model = resolve_request_model(instance, model=req_model)
 
     invocation = handler.inference(
         provider=provider,
         request_model=request_model,
     )
 
-    merged_kwargs = {**getattr(instance, "kwargs", {}), **kwargs}
+    req_config = extract_lm_request_config(req_obj)
+    merged_kwargs = {
+        **getattr(instance, "kwargs", {}),
+        **req_config,
+        **kwargs,
+    }
 
     invocation.temperature = _safe_float(merged_kwargs.get("temperature"))
     invocation.max_tokens = _safe_int(merged_kwargs.get("max_tokens"))
@@ -418,7 +436,6 @@ def _lm_update_history() -> Callable[..., Any]:
 def _set_lm_invocation_response(
     handler: TelemetryHandler,
     invocation: InferenceInvocation,
-    instance: LM,
     result: object,
     history_entry: Any = None,
 ) -> None:
@@ -459,16 +476,9 @@ def _set_lm_invocation_response(
         return
 
     # DSPy 3.x LM calls return a legacy list by default unless experimental=True
-    # or an LMRequest is used. When available, use history_entry captured from
-    # LM.update_history for per-call isolation; fall back to instance.history[-1].
+    # or an LMRequest is used. Only use the history_entry captured for this
+    # invocation; never fall back to shared instance.history.
     entry = history_entry
-    if entry is None:
-        history: Sequence[Mapping[str, Any]] | None = getattr(
-            instance, "history", None
-        )
-        if isinstance(history, Sequence) and history:
-            entry = history[-1]
-
     choice_finish_reasons: list[str | None] | None = None
     if entry is not None:
         resp_model = _get_field(entry, "response_model") or _get_field(
@@ -543,7 +553,6 @@ def _lm_call(handler: TelemetryHandler) -> Callable[..., Any]:
                 _set_lm_invocation_response(
                     handler,
                     invocation,
-                    instance,
                     result,
                     history_entry=history_entry,
                 )
@@ -573,7 +582,6 @@ def _lm_acall(handler: TelemetryHandler) -> Callable[..., Any]:
                 _set_lm_invocation_response(
                     handler,
                     invocation,
-                    instance,
                     result,
                     history_entry=history_entry,
                 )
