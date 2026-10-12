@@ -950,6 +950,37 @@ def _extract_functions(ag: dict[str, Any]) -> list[dict[str, Any]]:
     return [f for f in functions if _is_dict(f)]
 
 
+def _convert_bedrock_parameters_to_json_schema(
+    params: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert Bedrock parameter detail map to a standard JSON Schema object."""
+    if not params:
+        return {"type": "object", "properties": {}}
+
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+
+    for prop_name, prop_def in params.items():
+        if not _is_dict(prop_def):
+            continue
+        prop_schema: dict[str, Any] = {}
+        for k, v in prop_def.items():
+            if k == "required":
+                if v is True:
+                    required.append(prop_name)
+            else:
+                prop_schema[k] = v
+        properties[prop_name] = prop_schema
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+    }
+    if required:
+        schema["required"] = required
+    return schema
+
+
 def extract_invoke_inline_agent_request(
     api_params: dict[str, Any],
     invocation: RemoteAgentInvocation,
@@ -992,7 +1023,9 @@ def extract_invoke_inline_agent_request(
                     FunctionToolDefinition(
                         name=name,
                         description=str(desc) if desc is not None else None,
-                        parameters=params if _is_dict(params) else {},
+                        parameters=_convert_bedrock_parameters_to_json_schema(
+                            params
+                        ),
                     )
                 )
             sig = ag.get("parentActionGroupSignature")

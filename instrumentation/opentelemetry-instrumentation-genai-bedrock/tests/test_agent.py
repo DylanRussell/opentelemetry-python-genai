@@ -501,6 +501,12 @@ def test_invoke_inline_agent_sync_with_content(
     assert tools[0]["name"] == "CodeInterpreter"
     assert tools[0]["type"] == "AMAZON.CodeInterpreter"
     assert tools[1]["name"] == "get_weather"
+    assert tools[1]["parameters"] == {
+        "type": "object",
+        "properties": {
+            "city": {"type": "string"},
+        },
+    }
 
 
 def test_invoke_inline_agent_sync_no_content(
@@ -1346,6 +1352,12 @@ async def test_async_invoke_inline_agent_with_content(
     assert tools[0]["name"] == "CodeInterpreter"
     assert tools[0]["type"] == "AMAZON.CodeInterpreter"
     assert tools[1]["name"] == "get_weather"
+    assert tools[1]["parameters"] == {
+        "type": "object",
+        "properties": {
+            "city": {"type": "string"},
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -2528,3 +2540,65 @@ async def test_async_retrieve_and_generate_stream_caller_error(
     span = spans[0]
     assert span.status.status_code == StatusCode.ERROR
     assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+def test_convert_bedrock_parameters_to_json_schema():
+    from opentelemetry.instrumentation.genai.bedrock.extractors import (
+        _convert_bedrock_parameters_to_json_schema,
+    )
+
+    assert _convert_bedrock_parameters_to_json_schema(None) == {
+        "type": "object",
+        "properties": {},
+    }
+    assert _convert_bedrock_parameters_to_json_schema({}) == {
+        "type": "object",
+        "properties": {},
+    }
+
+    params = {
+        "city": {
+            "type": "string",
+            "description": "City name",
+            "required": True,
+        },
+        "days": {
+            "type": "integer",
+            "description": "Number of days",
+            "required": False,
+        },
+    }
+    expected = {
+        "type": "object",
+        "properties": {
+            "city": {
+                "type": "string",
+                "description": "City name",
+            },
+            "days": {
+                "type": "integer",
+                "description": "Number of days",
+            },
+        },
+        "required": ["city"],
+    }
+    assert _convert_bedrock_parameters_to_json_schema(params) == expected
+
+    # Parameter named "type" should still be converted
+    named_type_param = {
+        "type": {
+            "type": "string",
+            "description": "Event type",
+            "required": True,
+        }
+    }
+    assert _convert_bedrock_parameters_to_json_schema(named_type_param) == {
+        "type": "object",
+        "properties": {
+            "type": {
+                "type": "string",
+                "description": "Event type",
+            },
+        },
+        "required": ["type"],
+    }
