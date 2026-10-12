@@ -19,29 +19,14 @@ from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
     _ContextData,
+    _json_dumps_unless_str,
 )
 from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
 )
-from opentelemetry.util.genai.utils import (
-    ContentCapturingMode,
-    gen_ai_json_dumps,
-)
+from opentelemetry.util.genai.utils import ContentCapturingMode
 from opentelemetry.util.types import AnyValue, AttributeValue
-
-
-def _any_value_to_attribute_value(value: AnyValue) -> AttributeValue | None:
-    """Serialize an AnyValue to an AttributeValue for OTel span attributes."""
-    if value is None:
-        return None
-    if isinstance(value, (bool, str, bytes, int, float)):
-        return value
-    try:
-        return gen_ai_json_dumps(value)
-    except (TypeError, ValueError):
-        return str(value)
-
 
 TOOL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.tool.context"
 
@@ -236,16 +221,14 @@ class ToolInvocation(GenAIInvocation):
             (GenAI.GEN_AI_AGENT_NAME, self.data.agent_name),
             (
                 GenAI.GEN_AI_TOOL_CALL_ARGUMENTS,
-                _any_value_to_attribute_value(self.data.tool_call_arguments)
+                _json_dumps_unless_str(self.arguments)
                 if capture_content_on_span
-                and self.data.tool_call_arguments is not None
                 else None,
             ),
             (
                 GenAI.GEN_AI_TOOL_CALL_RESULT,
-                _any_value_to_attribute_value(self.data.tool_call_result)
+                _json_dumps_unless_str(self.tool_result)
                 if capture_content_on_span
-                and self.data.tool_call_result is not None
                 else None,
             ),
         )
@@ -266,6 +249,9 @@ class ToolInvocation(GenAIInvocation):
             attributes=self._get_metric_attributes(),
             context=self._span_context,
         )
+
+    def _on_stream_chunk(self, chunk_at: float) -> None:
+        """A streamed tool result only scopes context; the conventions define no chunk timing metrics for tools."""
 
 
 class SuppressedToolInvocation(ToolInvocation):
