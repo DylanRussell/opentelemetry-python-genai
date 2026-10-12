@@ -94,9 +94,9 @@ context API with the exported context key and dataclass.
 Exported from ``opentelemetry.util.genai.invocation``:
 
 - Inference: ``CLIENT_INFERENCE_CONTEXT_KEY``, ``InferenceData``
-- Embedding: ``EMBEDDING_CONTEXT_KEY``, ``EmbeddingData``
-- Fetch Response: ``FETCH_RESPONSE_CONTEXT_KEY``, ``FetchResponseData``
-- Retrieval: ``RETRIEVAL_CONTEXT_KEY``, ``RetrievalData``
+- Embedding: ``CLIENT_EMBEDDING_CONTEXT_KEY``, ``EmbeddingData``
+- Fetch Response: ``CLIENT_FETCH_RESPONSE_CONTEXT_KEY``, ``FetchResponseData``
+- Retrieval: ``CLIENT_RETRIEVAL_CONTEXT_KEY``, ``RetrievalData``
 - Tool: ``TOOL_CONTEXT_KEY``, ``ToolData``
 
 

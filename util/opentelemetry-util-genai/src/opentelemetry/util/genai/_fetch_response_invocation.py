@@ -35,8 +35,8 @@ from opentelemetry.util.genai.types import (
 from opentelemetry.util.genai.utils import ContentCapturingMode
 from opentelemetry.util.types import AttributeValue
 
-FETCH_RESPONSE_CONTEXT_KEY: Final[str] = (
-    "opentelemetry.genai.fetch_response.context"
+CLIENT_FETCH_RESPONSE_CONTEXT_KEY: Final[str] = (
+    "opentelemetry.genai.client.fetch_response.context"
 )
 
 # TODO: Migrate to gen_ai_attributes constants once available in the semconv
@@ -170,7 +170,7 @@ class FetchResponseInvocation(GenAIInvocation):
             _attach_to_context=_attach_to_context,
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
-            context_key=FETCH_RESPONSE_CONTEXT_KEY,
+            context_key=CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
             dataclass_class_object=FetchResponseData,
         )
         self._provider: str = provider
@@ -347,7 +347,7 @@ class FetchResponseInvocation(GenAIInvocation):
         if error is not None:
             self._apply_error_attributes(error)
         ctx_data = get_value(
-            FETCH_RESPONSE_CONTEXT_KEY, context=self._span_context
+            CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=self._span_context
         )
         if isinstance(ctx_data, FetchResponseData):
             self.enrich_from_context(ctx_data)
@@ -434,7 +434,7 @@ class SuppressedFetchResponseInvocation(FetchResponseInvocation):
             return
         self._finished = True
         ctx_data = get_value(
-            FETCH_RESPONSE_CONTEXT_KEY, context=self._span_context
+            CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=self._span_context
         )
         if isinstance(ctx_data, FetchResponseData):
             self.publish_to_context(ctx_data)

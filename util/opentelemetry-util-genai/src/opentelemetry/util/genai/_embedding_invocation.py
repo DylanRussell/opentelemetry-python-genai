@@ -27,7 +27,9 @@ from opentelemetry.util.genai.completion_hook import (
 from opentelemetry.util.genai.utils import ContentCapturingMode
 from opentelemetry.util.types import AttributeValue
 
-EMBEDDING_CONTEXT_KEY: Final[str] = "opentelemetry.genai.embedding.context"
+CLIENT_EMBEDDING_CONTEXT_KEY: Final[str] = (
+    "opentelemetry.genai.client.embedding.context"
+)
 
 
 @dataclass
@@ -107,7 +109,7 @@ class EmbeddingInvocation(GenAIInvocation):
             start_span=start_span,
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
-            context_key=EMBEDDING_CONTEXT_KEY,
+            context_key=CLIENT_EMBEDDING_CONTEXT_KEY,
             dataclass_class_object=EmbeddingData,
         )
         self._provider: str = provider
@@ -201,7 +203,9 @@ class EmbeddingInvocation(GenAIInvocation):
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        ctx_data = get_value(EMBEDDING_CONTEXT_KEY, context=self._span_context)
+        ctx_data = get_value(
+            CLIENT_EMBEDDING_CONTEXT_KEY, context=self._span_context
+        )
         if isinstance(ctx_data, EmbeddingData):
             self.enrich_from_context(ctx_data)
         self.data.attributes = self.attributes
@@ -283,7 +287,9 @@ class SuppressedEmbeddingInvocation(EmbeddingInvocation):
         if self._finished:
             return
         self._finished = True
-        ctx_data = get_value(EMBEDDING_CONTEXT_KEY, context=self._span_context)
+        ctx_data = get_value(
+            CLIENT_EMBEDDING_CONTEXT_KEY, context=self._span_context
+        )
         if isinstance(ctx_data, EmbeddingData):
             self.publish_to_context(ctx_data)
 

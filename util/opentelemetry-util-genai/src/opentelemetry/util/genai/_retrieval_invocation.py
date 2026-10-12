@@ -31,7 +31,9 @@ from opentelemetry.util.genai.utils import (
 )
 from opentelemetry.util.types import AttributeValue
 
-RETRIEVAL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.retrieval.context"
+CLIENT_RETRIEVAL_CONTEXT_KEY: Final[str] = (
+    "opentelemetry.genai.client.retrieval.context"
+)
 _GEN_AI_RETRIEVAL_TOP_K: Final = "gen_ai.retrieval.top_k"
 
 
@@ -131,7 +133,7 @@ class RetrievalInvocation(GenAIInvocation):
             _attach_to_context=_attach_to_context,
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
-            context_key=RETRIEVAL_CONTEXT_KEY,
+            context_key=CLIENT_RETRIEVAL_CONTEXT_KEY,
             dataclass_class_object=RetrievalData,
         )
         self._data_source_id: str | None = data_source_id
@@ -248,7 +250,9 @@ class RetrievalInvocation(GenAIInvocation):
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        ctx_data = get_value(RETRIEVAL_CONTEXT_KEY, context=self._span_context)
+        ctx_data = get_value(
+            CLIENT_RETRIEVAL_CONTEXT_KEY, context=self._span_context
+        )
         if isinstance(ctx_data, RetrievalData):
             self.enrich_from_context(ctx_data)
         self.data.attributes = self.attributes
@@ -324,7 +328,9 @@ class SuppressedRetrievalInvocation(RetrievalInvocation):
         if self._finished:
             return
         self._finished = True
-        ctx_data = get_value(RETRIEVAL_CONTEXT_KEY, context=self._span_context)
+        ctx_data = get_value(
+            CLIENT_RETRIEVAL_CONTEXT_KEY, context=self._span_context
+        )
         if isinstance(ctx_data, RetrievalData):
             self.publish_to_context(ctx_data)
 

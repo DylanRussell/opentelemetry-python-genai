@@ -24,12 +24,12 @@ from opentelemetry.util.genai._agent_invocation import (
     RemoteAgentInvocation,
 )
 from opentelemetry.util.genai._embedding_invocation import (
-    EMBEDDING_CONTEXT_KEY,
+    CLIENT_EMBEDDING_CONTEXT_KEY,
     EmbeddingData,
     EmbeddingInvocation,
 )
 from opentelemetry.util.genai._fetch_response_invocation import (
-    FETCH_RESPONSE_CONTEXT_KEY,
+    CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
     FetchResponseData,
     FetchResponseInvocation,
 )
@@ -44,7 +44,7 @@ from opentelemetry.util.genai._invocation import (
     GenAIInvocation,
 )
 from opentelemetry.util.genai._retrieval_invocation import (
-    RETRIEVAL_CONTEXT_KEY,
+    CLIENT_RETRIEVAL_CONTEXT_KEY,
     RetrievalData,
     RetrievalInvocation,
 )
@@ -59,10 +59,10 @@ from opentelemetry.util.genai._workflow_invocation import (
 )
 
 __all__ = [
+    "CLIENT_EMBEDDING_CONTEXT_KEY",
+    "CLIENT_FETCH_RESPONSE_CONTEXT_KEY",
     "CLIENT_INFERENCE_CONTEXT_KEY",
-    "EMBEDDING_CONTEXT_KEY",
-    "FETCH_RESPONSE_CONTEXT_KEY",
-    "RETRIEVAL_CONTEXT_KEY",
+    "CLIENT_RETRIEVAL_CONTEXT_KEY",
     "TOOL_CONTEXT_KEY",
     "AgentData",
     "AgentInvocation",

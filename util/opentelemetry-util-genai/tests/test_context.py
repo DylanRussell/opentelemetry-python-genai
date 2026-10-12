@@ -51,10 +51,10 @@ from opentelemetry.util.genai._tool_invocation import (
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
+    CLIENT_EMBEDDING_CONTEXT_KEY,
+    CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
-    EMBEDDING_CONTEXT_KEY,
-    FETCH_RESPONSE_CONTEXT_KEY,
-    RETRIEVAL_CONTEXT_KEY,
+    CLIENT_RETRIEVAL_CONTEXT_KEY,
     TOOL_CONTEXT_KEY,
     EmbeddingData,
     EmbeddingInvocation,
@@ -62,6 +62,8 @@ from opentelemetry.util.genai.invocation import (
     FetchResponseInvocation,
     InferenceData,
     InferenceInvocation,
+    LocalAgentInvocation,
+    RemoteAgentInvocation,
     RetrievalData,
     RetrievalInvocation,
     ToolData,
@@ -1378,8 +1380,8 @@ class TestEmbeddingContext(BaseContextTest):
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
-            EMBEDDING_CONTEXT_KEY,
-            "opentelemetry.genai.embedding.context",
+            CLIENT_EMBEDDING_CONTEXT_KEY,
+            "opentelemetry.genai.client.embedding.context",
         )
 
     def test_embedding_context_data_merge(self) -> None:
@@ -1450,15 +1452,15 @@ class TestEmbeddingContext(BaseContextTest):
     def test_embedding_invocation_outer_sets_empty_object_on_context(
         self,
     ) -> None:
-        self.assertIsNone(get_value(EMBEDDING_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_EMBEDDING_CONTEXT_KEY))
         with self.handler.embedding(
             "openai", request_model="text-embedding-3-small"
         ) as inv:
             self.assertIsInstance(inv, EmbeddingInvocation)
             self.assertNotIsInstance(inv, SuppressedEmbeddingInvocation)
-            ctx_data = get_value(EMBEDDING_CONTEXT_KEY)
+            ctx_data = get_value(CLIENT_EMBEDDING_CONTEXT_KEY)
             self.assertIsInstance(ctx_data, EmbeddingData)
-        self.assertIsNone(get_value(EMBEDDING_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_EMBEDDING_CONTEXT_KEY))
 
     def test_nested_embedding_deduplication_and_enrichment(self) -> None:
         with self.handler.embedding(
@@ -1733,6 +1735,66 @@ class TestToolContext(BaseContextTest):
             span_names, ["execute_tool inner-tool", "execute_tool outer-tool"]
         )
 
+    def test_nested_tool_inside_local_agent_not_suppressed(self) -> None:
+        with self.handler.tool("search") as outer_tool:
+            self.assertIsInstance(outer_tool, ToolInvocation)
+            self.assertNotIsInstance(outer_tool, SuppressedToolInvocation)
+            with self.handler.invoke_local_agent(
+                agent_name="search-agent"
+            ) as agent:
+                self.assertIsInstance(agent, LocalAgentInvocation)
+                with self.handler.tool("search") as inner_tool:
+                    self.assertIsInstance(inner_tool, ToolInvocation)
+                    self.assertNotIsInstance(
+                        inner_tool, SuppressedToolInvocation
+                    )
+
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 3)
+        inner_tool_span, agent_span, outer_tool_span = spans
+        self.assertEqual(inner_tool_span.name, "execute_tool search")
+        self.assertEqual(agent_span.name, "invoke_agent search-agent")
+        self.assertEqual(outer_tool_span.name, "execute_tool search")
+        self.assertIsNotNone(inner_tool_span.parent)
+        self.assertIsNotNone(agent_span.parent)
+        self.assertEqual(
+            inner_tool_span.parent.span_id, agent_span.context.span_id
+        )
+        self.assertEqual(
+            agent_span.parent.span_id, outer_tool_span.context.span_id
+        )
+        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
+
+    def test_nested_tool_inside_remote_agent_not_suppressed(self) -> None:
+        with self.handler.tool("search") as outer_tool:
+            self.assertIsInstance(outer_tool, ToolInvocation)
+            self.assertNotIsInstance(outer_tool, SuppressedToolInvocation)
+            with self.handler.invoke_remote_agent(
+                provider="test-provider", agent_name="remote-search-agent"
+            ) as agent:
+                self.assertIsInstance(agent, RemoteAgentInvocation)
+                with self.handler.tool("search") as inner_tool:
+                    self.assertIsInstance(inner_tool, ToolInvocation)
+                    self.assertNotIsInstance(
+                        inner_tool, SuppressedToolInvocation
+                    )
+
+        spans = self.span_exporter.get_finished_spans()
+        self.assertEqual(len(spans), 3)
+        inner_tool_span, agent_span, outer_tool_span = spans
+        self.assertEqual(inner_tool_span.name, "execute_tool search")
+        self.assertEqual(agent_span.name, "invoke_agent remote-search-agent")
+        self.assertEqual(outer_tool_span.name, "execute_tool search")
+        self.assertIsNotNone(inner_tool_span.parent)
+        self.assertIsNotNone(agent_span.parent)
+        self.assertEqual(
+            inner_tool_span.parent.span_id, agent_span.context.span_id
+        )
+        self.assertEqual(
+            agent_span.parent.span_id, outer_tool_span.context.span_id
+        )
+        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
+
 
 class TestRetrievalContext(BaseContextTest):
     def setUp(self) -> None:
@@ -1748,8 +1810,8 @@ class TestRetrievalContext(BaseContextTest):
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
-            RETRIEVAL_CONTEXT_KEY,
-            "opentelemetry.genai.retrieval.context",
+            CLIENT_RETRIEVAL_CONTEXT_KEY,
+            "opentelemetry.genai.client.retrieval.context",
         )
 
     def test_retrieval_context_data_merge(self) -> None:
@@ -1797,13 +1859,13 @@ class TestRetrievalContext(BaseContextTest):
     def test_retrieval_invocation_outer_sets_empty_object_on_context(
         self,
     ) -> None:
-        self.assertIsNone(get_value(RETRIEVAL_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_RETRIEVAL_CONTEXT_KEY))
         with self.handler.retrieval(data_source_id="ds-1") as inv:
             self.assertIsInstance(inv, RetrievalInvocation)
             self.assertNotIsInstance(inv, SuppressedRetrievalInvocation)
-            ctx_data = get_value(RETRIEVAL_CONTEXT_KEY)
+            ctx_data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY)
             self.assertIsInstance(ctx_data, RetrievalData)
-        self.assertIsNone(get_value(RETRIEVAL_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_RETRIEVAL_CONTEXT_KEY))
 
     def test_nested_retrieval_deduplication_and_enrichment(self) -> None:
         with self.handler.retrieval(data_source_id="root-ds") as root:
@@ -1905,8 +1967,8 @@ class TestFetchResponseContext(BaseContextTest):
 
     def test_context_key_constant_value(self) -> None:
         self.assertEqual(
-            FETCH_RESPONSE_CONTEXT_KEY,
-            "opentelemetry.genai.fetch_response.context",
+            CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
+            "opentelemetry.genai.client.fetch_response.context",
         )
 
     def test_fetch_response_context_data_merge(self) -> None:
@@ -1957,15 +2019,15 @@ class TestFetchResponseContext(BaseContextTest):
     def test_fetch_response_invocation_outer_sets_empty_object_on_context(
         self,
     ) -> None:
-        self.assertIsNone(get_value(FETCH_RESPONSE_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY))
         with self.handler.fetch_response(
             "openai", response_id="resp-root"
         ) as inv:
             self.assertIsInstance(inv, FetchResponseInvocation)
             self.assertNotIsInstance(inv, SuppressedFetchResponseInvocation)
-            ctx_data = get_value(FETCH_RESPONSE_CONTEXT_KEY)
+            ctx_data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
             self.assertIsInstance(ctx_data, FetchResponseData)
-        self.assertIsNone(get_value(FETCH_RESPONSE_CONTEXT_KEY))
+        self.assertIsNone(get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY))
 
     def test_nested_fetch_response_deduplication_and_enrichment(self) -> None:
         with self.handler.fetch_response(

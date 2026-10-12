@@ -72,10 +72,10 @@ from opentelemetry.util.genai.completion_hook import (
     _SafeCompletionHook,
 )
 from opentelemetry.util.genai.invocation import (
+    CLIENT_EMBEDDING_CONTEXT_KEY,
+    CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
-    EMBEDDING_CONTEXT_KEY,
-    FETCH_RESPONSE_CONTEXT_KEY,
-    RETRIEVAL_CONTEXT_KEY,
+    CLIENT_RETRIEVAL_CONTEXT_KEY,
     TOOL_CONTEXT_KEY,
     EmbeddingData,
     EmbeddingInvocation,
@@ -213,7 +213,7 @@ class TelemetryHandler:
         invocation_cls: type[RetrievalInvocation] = (
             SuppressedRetrievalInvocation
             if isinstance(
-                get_value(RETRIEVAL_CONTEXT_KEY, context=context),
+                get_value(CLIENT_RETRIEVAL_CONTEXT_KEY, context=context),
                 RetrievalData,
             )
             else RetrievalInvocation
@@ -309,7 +309,7 @@ class TelemetryHandler:
         invocation_cls: type[EmbeddingInvocation] = (
             SuppressedEmbeddingInvocation
             if isinstance(
-                get_value(EMBEDDING_CONTEXT_KEY, context=context),
+                get_value(CLIENT_EMBEDDING_CONTEXT_KEY, context=context),
                 EmbeddingData,
             )
             else EmbeddingInvocation
@@ -358,7 +358,7 @@ class TelemetryHandler:
         invocation_cls: type[FetchResponseInvocation] = (
             SuppressedFetchResponseInvocation
             if isinstance(
-                get_value(FETCH_RESPONSE_CONTEXT_KEY, context=context),
+                get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=context),
                 FetchResponseData,
             )
             else FetchResponseInvocation
