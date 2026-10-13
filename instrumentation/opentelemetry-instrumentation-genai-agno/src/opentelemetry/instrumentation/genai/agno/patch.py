@@ -8,13 +8,16 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import sys
 from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Iterable,
     Iterator,
+    Mapping,
     Sequence,
 )
 from typing import TYPE_CHECKING, Any, cast
@@ -23,6 +26,7 @@ if TYPE_CHECKING:
     from agno.agent import Agent, RunOutput
     from agno.knowledge.document.base import Document
     from agno.knowledge.knowledge import Knowledge
+    from agno.models.response import ToolExecution
     from agno.run.workflow import WorkflowRunOutput
     from agno.team import Team, TeamRunOutput
     from agno.tools.function import FunctionCall, FunctionExecutionResult
@@ -64,7 +68,9 @@ from opentelemetry.util.genai.types import (
     InputMessage,
     OutputMessage,
     Role,
+    SystemInstructionPart,
     TextPart,
+    ToolCallResponsePart,
 )
 from opentelemetry.util.genai.utils import get_argument, object_to_any_value
 
@@ -139,6 +145,18 @@ def patch_agent(handler: TelemetryHandler) -> None:
         current_generation,
     )
     _safe_wrap_function(
+        _AGNO_MODULE,
+        f"{_AGENT_CLASS}.continue_run",
+        _agent_run(handler, is_continue=True),
+        current_generation,
+    )
+    _safe_wrap_function(
+        _AGNO_MODULE,
+        f"{_AGENT_CLASS}.acontinue_run",
+        _agent_arun(handler, is_continue=True),
+        current_generation,
+    )
+    _safe_wrap_function(
         _AGNO_TEAM_MODULE,
         f"{_TEAM_CLASS}.run",
         _agent_run(handler),
@@ -148,6 +166,18 @@ def patch_agent(handler: TelemetryHandler) -> None:
         _AGNO_TEAM_MODULE,
         f"{_TEAM_CLASS}.arun",
         _agent_arun(handler),
+        current_generation,
+    )
+    _safe_wrap_function(
+        _AGNO_TEAM_MODULE,
+        f"{_TEAM_CLASS}.continue_run",
+        _agent_run(handler, is_continue=True),
+        current_generation,
+    )
+    _safe_wrap_function(
+        _AGNO_TEAM_MODULE,
+        f"{_TEAM_CLASS}.acontinue_run",
+        _agent_arun(handler, is_continue=True),
         current_generation,
     )
     _safe_wrap_function(
@@ -174,6 +204,18 @@ def patch_agent(handler: TelemetryHandler) -> None:
         _workflow_arun(handler),
         current_generation,
     )
+    _safe_wrap_function(
+        _AGNO_WORKFLOW_MODULE,
+        f"{_WORKFLOW_CLASS}.continue_run",
+        _workflow_run(handler, is_continue=True),
+        current_generation,
+    )
+    _safe_wrap_function(
+        _AGNO_WORKFLOW_MODULE,
+        f"{_WORKFLOW_CLASS}.acontinue_run",
+        _workflow_arun(handler, is_continue=True),
+        current_generation,
+    )
     # Knowledge.retrieve and aretrieve delegate to search and asearch, so wrapping
     # search/asearch avoids duplicate spans.
     _safe_wrap_function(
@@ -195,45 +237,52 @@ def unpatch_agent() -> None:
     global _instrumentation_generation, _is_instrumented
     _instrumentation_generation += 1
     _is_instrumented = False
+
+    def _safe_unwrap(target: Any, attr: str) -> None:
+        try:
+            unwrap(target, attr)
+        except (AttributeError, ValueError):
+            pass
+
     if _AGNO_MODULE in sys.modules:
         try:
             import agno.agent
 
-            unwrap(agno.agent.Agent, "run")
-            unwrap(agno.agent.Agent, "arun")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.agent.Agent, attr)
+        except ImportError:
             pass
     if _AGNO_TEAM_MODULE in sys.modules:
         try:
             import agno.team
 
-            unwrap(agno.team.Team, "run")
-            unwrap(agno.team.Team, "arun")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.team.Team, attr)
+        except ImportError:
             pass
     if _AGNO_TOOLS_MODULE in sys.modules:
         try:
             import agno.tools.function
 
-            unwrap(agno.tools.function.FunctionCall, "execute")
-            unwrap(agno.tools.function.FunctionCall, "aexecute")
-        except (ImportError, AttributeError):
+            for attr in ("execute", "aexecute"):
+                _safe_unwrap(agno.tools.function.FunctionCall, attr)
+        except ImportError:
             pass
     if _AGNO_WORKFLOW_MODULE in sys.modules:
         try:
             import agno.workflow.workflow
 
-            unwrap(agno.workflow.workflow.Workflow, "run")
-            unwrap(agno.workflow.workflow.Workflow, "arun")
-        except (ImportError, AttributeError):
+            for attr in ("run", "arun", "continue_run", "acontinue_run"):
+                _safe_unwrap(agno.workflow.workflow.Workflow, attr)
+        except ImportError:
             pass
     if _AGNO_KNOWLEDGE_MODULE in sys.modules:
         try:
             import agno.knowledge.knowledge
 
-            unwrap(agno.knowledge.knowledge.Knowledge, "search")
-            unwrap(agno.knowledge.knowledge.Knowledge, "asearch")
-        except (ImportError, AttributeError):
+            for attr in ("search", "asearch"):
+                _safe_unwrap(agno.knowledge.knowledge.Knowledge, attr)
+        except ImportError:
             pass
 
 
@@ -319,11 +368,222 @@ def _resolve_conversation_id(
     args: tuple[object, ...],
     kwargs: dict[str, object],
     wrapped: Callable[..., object],
+    *,
+    is_continue: bool = False,
 ) -> str | None:
     session_id = get_argument("session_id", wrapped, args, kwargs)
-    if session_id is None:
-        session_id = instance.session_id
+    if session_id is not None:
+        return str(session_id)
+    if is_continue:
+        run_response = get_argument("run_response", wrapped, args, kwargs)
+        if run_response is not None:
+            sid = getattr(run_response, "session_id", None)
+            if sid is not None:
+                return str(sid)
+    session_id = getattr(instance, "session_id", None)
     return str(session_id) if session_id is not None else None
+
+
+def _to_tool_executions(raw_tools: object) -> list[ToolExecution]:
+    """Normalize raw tools/requirements into a list of Agno ToolExecution instances."""
+    if not raw_tools:
+        return []
+
+    from agno.models.response import ToolExecution
+
+    items: Iterable[object]
+    if isinstance(raw_tools, str):
+        try:
+            parsed: object = json.loads(raw_tools)
+            items = (
+                cast(list[object], parsed)
+                if isinstance(parsed, list)
+                else [parsed]
+            )
+        except Exception:
+            return []
+    elif isinstance(raw_tools, Iterable):
+        items = cast(Iterable[object], raw_tools)
+    else:
+        items = [raw_tools]
+
+    tool_executions: list[ToolExecution] = []
+    for item in items:
+        if isinstance(item, str):
+            try:
+                item = json.loads(item)
+            except Exception:
+                pass
+
+        if (tool_exec := getattr(item, "tool_execution", None)) is not None:
+            item = tool_exec
+
+        # Agno populates tool_call_id on paused tools; without an ID the result
+        # cannot be correlated to a prior tool call.
+        if isinstance(item, ToolExecution):
+            if item.tool_call_id:
+                tool_executions.append(item)
+            continue
+
+        call_id = _get_property_value(
+            item, "tool_call_id"
+        ) or _get_property_value(item, "id")
+        if not call_id:
+            continue
+
+        resp: Any = _get_property_value(item, "result")
+        confirmed: Any = _get_property_value(item, "confirmed")
+        tool_name = _get_property_value(
+            item, "tool_name"
+        ) or _get_property_value(item, "name")
+
+        tool_executions.append(
+            ToolExecution(
+                tool_call_id=str(call_id),
+                tool_name=str(tool_name) if tool_name else None,
+                result=resp,
+                confirmed=bool(confirmed) if confirmed is not None else None,
+            )
+        )
+
+    return tool_executions
+
+
+_RESUME_FLAGS = (
+    "external_execution_required",
+    "requires_confirmation",
+    "requires_user_input",
+    "is_paused",
+)
+
+
+def _has_result(item: object) -> bool:
+    return (
+        _get_property_value(item, "result") is not None
+        or _get_property_value(item, "confirmed") is not None
+    )
+
+
+def _extract_resumed_tools(run_response: object) -> list[object]:
+    """Extract resumed tool executions or requirements from run_response."""
+    if isinstance(run_response, str):
+        return []
+
+    status: object = _get_property_value(run_response, "status")
+    is_paused = bool(
+        _get_property_value(run_response, "is_paused")
+        or (isinstance(status, str) and status.lower() == "paused")
+    )
+
+    tools: object = _get_property_value(run_response, "tools")
+    if isinstance(tools, Iterable) and not isinstance(
+        tools, (str, bytes, Mapping)
+    ):
+        tool_items: list[object] = [
+            t
+            for t in cast(Iterable[object], tools)
+            if _has_result(t)
+            and (
+                is_paused
+                or any(_get_property_value(t, flag) for flag in _RESUME_FLAGS)
+            )
+        ]
+        if tool_items:
+            return tool_items
+
+    requirements: object = _get_property_value(
+        run_response, "requirements"
+    ) or _get_property_value(run_response, "step_requirements")
+    if isinstance(requirements, Iterable) and not isinstance(
+        requirements, (str, bytes, Mapping)
+    ):
+        result: list[object] = []
+        for req in cast(Iterable[object], requirements):
+            target: object = getattr(req, "tool_execution", req)
+            is_resolved = getattr(req, "is_resolved", None)
+            if _has_result(target) or (
+                callable(is_resolved) and bool(is_resolved())
+            ):
+                result.append(req)
+        return result
+
+    return []
+
+
+def _set_continue_invocation_input(
+    invocation: LocalAgentInvocation | WorkflowInvocation,
+    wrapped: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    capture_content: bool,
+) -> None:
+    if not capture_content:
+        return
+    messages: list[InputMessage] = []
+
+    # In Agno, tool results can be passed as:
+    # - tools: JSON string or list of tool execution dicts / ToolExecution objects
+    # - updated_tools: list of ToolExecution objects or dicts
+    # - requirements: list of RunRequirement objects containing tool_execution
+    # - run_response: RunOutput containing resumed tool executions or requirements
+    raw_tools: object = (
+        get_argument("tools", wrapped, args, kwargs)
+        or get_argument("updated_tools", wrapped, args, kwargs)
+        or get_argument("requirements", wrapped, args, kwargs)
+    )
+    # Explicit tool arguments take precedence as incoming updates; when omitted,
+    # callers resume by modifying tool executions on run_response in-place.
+    if not raw_tools:
+        run_response = get_argument("run_response", wrapped, args, kwargs)
+        if run_response is not None:
+            raw_tools = _extract_resumed_tools(run_response)
+    for tool_exec in _to_tool_executions(raw_tools):
+        resp: Any = tool_exec.result
+        # In Agno HITL confirmation, the user approves/denies the tool call.
+        # When confirmed=True without a result, Agno executes the tool during
+        # this continued run (emitting an execute_tool child span).
+        if resp is None and tool_exec.confirmed is not None:
+            resp = {"confirmed": tool_exec.confirmed}
+        elif resp is None:
+            to_dict = getattr(tool_exec, "to_dict", None)
+            resp = to_dict() if callable(to_dict) else str(tool_exec)
+
+        messages.append(
+            InputMessage(
+                role=Role.TOOL.value,
+                parts=[
+                    ToolCallResponsePart(
+                        id=tool_exec.tool_call_id,
+                        response=resp,
+                    )
+                ],
+            )
+        )
+
+    input_val = get_argument("input", wrapped, args, kwargs)
+    if input_val is not None:
+        content_str = _extract_input_content(input_val)
+        if content_str:
+            messages.append(
+                InputMessage(
+                    role=Role.USER.value,
+                    parts=[TextPart(content=content_str)],
+                )
+            )
+
+    invocation.input_messages = messages
+
+    if isinstance(invocation, LocalAgentInvocation):
+        instructions_val = get_argument(
+            "additional_instructions", wrapped, args, kwargs
+        ) or get_argument("additionalInstructions", wrapped, args, kwargs)
+        if instructions_val is not None:
+            instr_str = _extract_input_content(instructions_val)
+            if instr_str:
+                instructions: list[SystemInstructionPart] = [
+                    TextPart(content=instr_str)
+                ]
+                invocation.system_instruction = instructions
 
 
 def _extract_finish_reason(result: object) -> str:
@@ -358,9 +618,13 @@ def _start_agent_invocation(
     kwargs: dict[str, Any],
     capture_content: bool,
     wrapped: Callable[..., Any],
+    *,
+    is_continue: bool = False,
 ) -> LocalAgentInvocation:
     agent_name = getattr(instance, "name", None)
-    conversation_id = _resolve_conversation_id(instance, args, kwargs, wrapped)
+    conversation_id = _resolve_conversation_id(
+        instance, args, kwargs, wrapped, is_continue=is_continue
+    )
     model_obj = get_argument("model", wrapped, args, kwargs) or getattr(
         instance, "model", None
     )
@@ -381,12 +645,21 @@ def _start_agent_invocation(
     if description:
         invocation.agent_description = str(description)
 
-    _set_invocation_input(
-        invocation, instance, args, kwargs, capture_content, wrapped
-    )
-    invocation.tool_definitions = prepare_tool_definitions(
-        getattr(instance, "tools", None)
-    )
+    if is_continue:
+        _set_continue_invocation_input(
+            invocation, wrapped, args, kwargs, capture_content
+        )
+    else:
+        _set_invocation_input(
+            invocation, instance, args, kwargs, capture_content, wrapped
+        )
+
+    tool_defs = prepare_tool_definitions(getattr(instance, "tools", None))
+    if not tool_defs and not is_continue:
+        tools_arg: Any = get_argument("tools", wrapped, args, kwargs)
+        if tools_arg is not None:
+            tool_defs = prepare_tool_definitions(tools_arg)
+    invocation.tool_definitions = tool_defs
     return invocation
 
 
@@ -413,6 +686,8 @@ def _start_tool_invocation(
 
 def _agent_run(
     handler: TelemetryHandler,
+    *,
+    is_continue: bool = False,
 ) -> Callable[..., Any]:
     capture_content = handler.should_capture_content()
 
@@ -423,11 +698,17 @@ def _agent_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content, wrapped=wrapped
+            handler,
+            instance,
+            args,
+            kwargs,
+            capture_content,
+            wrapped=wrapped,
+            is_continue=is_continue,
         )
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
@@ -443,6 +724,8 @@ def _agent_run(
 
 def _agent_arun(
     handler: TelemetryHandler,
+    *,
+    is_continue: bool = False,
 ) -> Callable[..., Any]:
     capture_content = handler.should_capture_content()
 
@@ -454,7 +737,7 @@ def _agent_arun(
     ) -> Any:
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation = _start_agent_invocation(
                 handler,
                 instance,
@@ -462,6 +745,7 @@ def _agent_arun(
                 kwargs,
                 capture_content,
                 wrapped=wrapped,
+                is_continue=is_continue,
             )
             invocation.fail(error)
             raise
@@ -474,6 +758,7 @@ def _agent_arun(
                 kwargs,
                 capture_content,
                 wrapped=wrapped,
+                is_continue=is_continue,
             )
             return AsyncAgnoAgentStreamWrapper(
                 result, invocation, capture_content
@@ -490,6 +775,7 @@ def _agent_arun(
                     kwargs,
                     capture_content,
                     wrapped=wrapped,
+                    is_continue=is_continue,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -503,14 +789,20 @@ def _agent_arun(
                     )
                     invocation.stop()
                     return response
-                except Exception as error:
+                except BaseException as error:
                     invocation.fail(error)
                     raise
 
             return _await_result()
 
         invocation = _start_agent_invocation(
-            handler, instance, args, kwargs, capture_content, wrapped=wrapped
+            handler,
+            instance,
+            args,
+            kwargs,
+            capture_content,
+            wrapped=wrapped,
+            is_continue=is_continue,
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()
@@ -594,20 +886,31 @@ def _start_workflow_invocation(
     kwargs: dict[str, Any],
     capture_content: bool,
     wrapped: Callable[..., Any],
+    *,
+    is_continue: bool = False,
 ) -> WorkflowInvocation:
     workflow_name = getattr(instance, "name", None)
-    conversation_id = _resolve_conversation_id(instance, args, kwargs, wrapped)
+    conversation_id = _resolve_conversation_id(
+        instance, args, kwargs, wrapped, is_continue=is_continue
+    )
     invocation = handler.workflow(
         name=workflow_name, conversation_id=conversation_id
     )
-    _set_invocation_input(
-        invocation, instance, args, kwargs, capture_content, wrapped
-    )
+    if is_continue:
+        _set_continue_invocation_input(
+            invocation, wrapped, args, kwargs, capture_content
+        )
+    else:
+        _set_invocation_input(
+            invocation, instance, args, kwargs, capture_content, wrapped
+        )
     return invocation
 
 
 def _workflow_run(
     handler: TelemetryHandler,
+    *,
+    is_continue: bool = False,
 ) -> Callable[..., Any]:
     capture_content = handler.should_capture_content()
 
@@ -618,11 +921,17 @@ def _workflow_run(
         kwargs: dict[str, Any],
     ) -> Any:
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content, wrapped=wrapped
+            handler,
+            instance,
+            args,
+            kwargs,
+            capture_content,
+            wrapped=wrapped,
+            is_continue=is_continue,
         )
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation.fail(error)
             raise
 
@@ -640,6 +949,8 @@ def _workflow_run(
 
 def _workflow_arun(
     handler: TelemetryHandler,
+    *,
+    is_continue: bool = False,
 ) -> Callable[..., Any]:
     capture_content = handler.should_capture_content()
 
@@ -651,7 +962,7 @@ def _workflow_arun(
     ) -> Any:
         try:
             result = wrapped(*args, **kwargs)
-        except Exception as error:
+        except BaseException as error:
             invocation = _start_workflow_invocation(
                 handler,
                 instance,
@@ -659,6 +970,7 @@ def _workflow_arun(
                 kwargs,
                 capture_content,
                 wrapped=wrapped,
+                is_continue=is_continue,
             )
             invocation.fail(error)
             raise
@@ -671,6 +983,7 @@ def _workflow_arun(
                 kwargs,
                 capture_content,
                 wrapped=wrapped,
+                is_continue=is_continue,
             )
             return AsyncAgnoWorkflowStreamWrapper(
                 result, invocation, capture_content
@@ -687,6 +1000,7 @@ def _workflow_arun(
                     kwargs,
                     capture_content,
                     wrapped=wrapped,
+                    is_continue=is_continue,
                 )
                 try:
                     awaitable = cast(Awaitable[object], result)
@@ -700,14 +1014,20 @@ def _workflow_arun(
                     )
                     invocation.stop()
                     return response
-                except Exception as error:
+                except BaseException as error:
                     invocation.fail(error)
                     raise
 
             return _await_result()
 
         invocation = _start_workflow_invocation(
-            handler, instance, args, kwargs, capture_content, wrapped=wrapped
+            handler,
+            instance,
+            args,
+            kwargs,
+            capture_content,
+            wrapped=wrapped,
+            is_continue=is_continue,
         )
         _set_invocation_output(invocation, result, capture_content)
         invocation.stop()
