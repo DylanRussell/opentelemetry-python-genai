@@ -1,0 +1,19 @@
+[project]
+name = "adk-agent-tracing-example"
+version = "0.1.0"
+description = "Basic ADK agent with OpenTelemetry tracing enabled for Google Cloud Trace"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=2.12.0",
+    "opentelemetry-exporter-otlp-proto-http~=1.43",
+    "opentelemetry-resourcedetector-gcp>=1.9.0a0,<2",
+    "opentelemetry-instrumentation-google-genai>=1.2b0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.uv]
+package = false
+override-dependencies = [
+    "opentelemetry-api ~= 1.43",
+    "opentelemetry-sdk ~= 1.43",
+]
