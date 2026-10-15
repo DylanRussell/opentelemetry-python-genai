@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from opentelemetry.context import (
     Context,
@@ -48,6 +48,9 @@ from opentelemetry.util.genai._retrieval_invocation import (
 )
 from opentelemetry.util.genai._tool_invocation import (
     SuppressedToolInvocation,
+)
+from opentelemetry.util.genai.environment_variables import (
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT,
 )
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
@@ -1078,6 +1081,19 @@ class TestInferenceContext(BaseContextTest):
         )  # preserved outer
         self.assertEqual(outer.attributes["a"], 1)  # enriched from inner
 
+        # capture_content and upload_completion are never overwritten
+        config_data = InferenceData(
+            capture_content=True,
+            upload_completion=True,
+        )
+        inner_publish = InferenceData(
+            capture_content=False,
+            upload_completion=False,
+        )
+        config_data.merge(inner_publish, overwrite=True)
+        self.assertTrue(config_data.capture_content)
+        self.assertTrue(config_data.upload_completion)
+
     def test_inference_invocation_property_delegation_to_data(self) -> None:
         with self.handler.inference(
             "test-provider",
@@ -1364,6 +1380,312 @@ class TestInferenceContext(BaseContextTest):
         with self.handler.inference("openai", context=ctx) as inv:
             self.assertNotIsInstance(inv, SuppressedInferenceInvocation)
             self.assertIsInstance(inv, InferenceInvocation)
+
+    def test_suppressed_inference_content_capture_disabled_by_default(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.inference("outer", request_model="m1"):
+                data = get_inference_context_data()
+                self.assertIsNotNone(data)
+                assert data is not None
+                self.assertFalse(data.capture_content)
+                self.assertFalse(data.upload_completion)
+
+                with handler.inference(
+                    "inner", request_model="m2"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.input_messages = [
+                        InputMessage(
+                            role="user",
+                            parts=[TextPart(content="inner hello")],
+                        )
+                    ]
+
+                self.assertIsNone(data.input_messages)
+
+    def test_suppressed_inference_content_capture_enabled_when_configured(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.inference("outer", request_model="m1"):
+                data = get_inference_context_data()
+                self.assertIsNotNone(data)
+                assert data is not None
+                data.capture_content = True
+
+                with handler.inference(
+                    "inner", request_model="m2"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
+                    self.assertTrue(nested_inv.should_capture_content)
+                    expected_inputs = [
+                        InputMessage(
+                            role="user",
+                            parts=[TextPart(content="inner hello")],
+                        )
+                    ]
+                    nested_inv.input_messages = expected_inputs
+
+                self.assertEqual(data.input_messages, expected_inputs)
+
+    def test_suppressed_inference_content_capture_disallowed_by_env(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "NO_CONTENT"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.inference("outer", request_model="m1"):
+                data = get_inference_context_data()
+                self.assertIsNotNone(data)
+                assert data is not None
+                data.capture_content = True
+
+                with handler.inference(
+                    "inner", request_model="m2"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.input_messages = [
+                        InputMessage(
+                            role="user",
+                            parts=[TextPart(content="inner hello")],
+                        )
+                    ]
+
+                self.assertIsNone(data.input_messages)
+
+    def test_suppressed_inference_content_capture_disallowed_by_flag_false(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.inference("outer", request_model="m1"):
+                data = get_inference_context_data()
+                self.assertIsNotNone(data)
+                assert data is not None
+                data.capture_content = False
+
+                with handler.inference(
+                    "inner", request_model="m2"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedInferenceInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.input_messages = [
+                        InputMessage(
+                            role="user",
+                            parts=[TextPart(content="inner hello")],
+                        )
+                    ]
+
+                self.assertIsNone(data.input_messages)
+
+    def test_suppressed_inference_content_enrichment_from_context(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.inference("outer", request_model="m1") as root_inv:
+                data = get_inference_context_data()
+                self.assertIsNotNone(data)
+                assert data is not None
+                data.capture_content = True
+
+                with handler.inference(
+                    "inner", request_model="m2"
+                ) as nested_inv:
+                    nested_inv.input_messages = [
+                        InputMessage(
+                            role="user",
+                            parts=[TextPart(content="inner hello")],
+                        )
+                    ]
+                    nested_inv.output_messages = [
+                        OutputMessage(
+                            role="assistant",
+                            parts=[TextPart(content="inner hi")],
+                        )
+                    ]
+
+            # When root_inv exited, enrich_from_context enriched content onto root_inv
+            self.assertEqual(len(root_inv.input_messages), 1)
+            part_in = root_inv.input_messages[0].parts[0]
+            assert isinstance(part_in, TextPart)
+            self.assertEqual(part_in.content, "inner hello")
+
+            self.assertEqual(len(root_inv.output_messages), 1)
+            part_out = root_inv.output_messages[0].parts[0]
+            assert isinstance(part_out, TextPart)
+            self.assertEqual(part_out.content, "inner hi")
+
+    def test_suppressed_inference_upload_completion_called_when_configured(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.inference("outer", request_model="m1") as root_inv:
+            data = get_inference_context_data()
+            self.assertIsNotNone(data)
+            assert data is not None
+            data.upload_completion = True
+
+            with handler.inference("inner", request_model="m2") as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedInferenceInvocation
+                )
+                self.assertTrue(nested_inv.should_capture_content)
+                expected_inputs = [
+                    InputMessage(
+                        role="user", parts=[TextPart(content="hello inner")]
+                    )
+                ]
+                expected_outputs = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="hi inner")]
+                    )
+                ]
+                nested_inv.input_messages = expected_inputs
+                nested_inv.output_messages = expected_outputs
+                nested_inv.stop()
+
+                hook.on_completion.assert_called_once()
+                kwargs = hook.on_completion.call_args.kwargs
+                self.assertEqual(kwargs["inputs"], expected_inputs)
+                self.assertEqual(kwargs["outputs"], expected_outputs)
+                self.assertIs(kwargs["span"], root_inv.span)
+
+    def test_suppressed_inference_upload_completion_not_called_by_default(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.inference("outer", request_model="m1"):
+            with handler.inference("inner", request_model="m2") as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedInferenceInvocation
+                )
+                self.assertFalse(nested_inv.should_capture_content)
+                nested_inv.input_messages = [
+                    InputMessage(
+                        role="user", parts=[TextPart(content="hello inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            # Inner stop did not call completion hook
+            hook.on_completion.assert_not_called()
+
+    def test_suppressed_inference_upload_completion_without_capturing_to_context(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.inference("outer", request_model="m1"):
+            data = get_inference_context_data()
+            self.assertIsNotNone(data)
+            assert data is not None
+            data.upload_completion = True
+            data.capture_content = False
+
+            with handler.inference("inner", request_model="m2") as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedInferenceInvocation
+                )
+                self.assertTrue(nested_inv.should_capture_content)
+                nested_inv.input_messages = [
+                    InputMessage(
+                        role="user", parts=[TextPart(content="hello inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            hook.on_completion.assert_called_once()
+            # Content was NOT published to data in context
+            self.assertIsNone(data.input_messages)
+
+    def test_suppressed_inference_upload_completion_called_on_fail(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.inference("outer", request_model="m1") as root_inv:
+            data = get_inference_context_data()
+            self.assertIsNotNone(data)
+            assert data is not None
+            data.upload_completion = True
+
+            nested_inv = handler.inference("inner", request_model="m2")
+            self.assertIsInstance(nested_inv, SuppressedInferenceInvocation)
+            expected_inputs = [
+                InputMessage(
+                    role="user", parts=[TextPart(content="hello inner")]
+                )
+            ]
+            nested_inv.input_messages = expected_inputs
+            nested_inv.fail(RuntimeError("inner error"))
+
+            hook.on_completion.assert_called_once()
+            kwargs = hook.on_completion.call_args.kwargs
+            self.assertEqual(kwargs["inputs"], expected_inputs)
+            self.assertEqual(kwargs["outputs"], [])
+            self.assertIs(kwargs["span"], root_inv.span)
 
 
 class TestEmbeddingContext(BaseContextTest):

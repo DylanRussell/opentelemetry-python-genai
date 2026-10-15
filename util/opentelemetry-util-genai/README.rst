@@ -99,6 +99,19 @@ Exported from ``opentelemetry.util.genai.invocation``:
 - Retrieval: ``CLIENT_RETRIEVAL_CONTEXT_KEY``, ``RetrievalData``
 - Tool: ``TOOL_CONTEXT_KEY``, ``ToolData``
 
+**Content capture and completion upload controls:**
+
+Context data classes accept two boolean parameters (defaulting to ``False``):
+
+- ``capture_content``: When set to ``True`` on the context data, signals that the outer instrumentation permits inner suppressed invocations to capture content attributes (such as input and output messages, system instructions, and tool definitions) and publish them into context.
+- ``upload_completion``: When set to ``True`` on the context data, signals that the outer instrumentation permits inner suppressed invocations to trigger completion hook uploads.
+
+.. note::
+
+   Setting these parameters only indicates that the outer instrumentation is OK with the inner instrumentation adding content capture attributes or uploading completions. Whether the inner instrumentation actually does so still depends on the user's settings.
+
+
+
 
 Stream execution context
 ------------------------

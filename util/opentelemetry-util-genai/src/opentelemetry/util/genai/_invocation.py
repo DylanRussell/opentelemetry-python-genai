@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import Token
-from dataclasses import asdict, fields
+from dataclasses import asdict, dataclass, field, fields
 from types import TracebackType
 from typing import Any, TypeAlias, cast
 
@@ -66,11 +66,18 @@ _GEN_AI_PROMPT_VARIABLE_PREFIX: str = "gen_ai.prompt.variable."
 ContextToken: TypeAlias = Token[Context]
 
 
+@dataclass
 class _ContextData:
     """Base class for invocation context data containers."""
 
-    attributes: dict[str, AttributeValue]
-    metric_attributes: dict[str, AttributeValue]
+    capture_content: bool = False
+    upload_completion: bool = False
+    attributes: dict[str, AttributeValue] = field(
+        default_factory=dict[str, AttributeValue]
+    )
+    metric_attributes: dict[str, AttributeValue] = field(
+        default_factory=dict[str, AttributeValue]
+    )
 
     def merge(self: Self, other: Self, *, overwrite: bool = True) -> None:
         """Merge another context data instance into this one.
@@ -83,7 +90,12 @@ class _ContextData:
                 the root invocation enriches from context).
         """
         for f in fields(cast(Any, self)):
-            if f.name in ("attributes", "metric_attributes"):
+            if f.name in (
+                "attributes",
+                "metric_attributes",
+                "capture_content",
+                "upload_completion",
+            ):
                 continue
             val = getattr(other, f.name)
             if val is not None and (
