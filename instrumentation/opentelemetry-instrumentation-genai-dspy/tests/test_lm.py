@@ -16,6 +16,7 @@ from dspy.utils import DummyLM
 
 from opentelemetry.instrumentation.genai.dspy import DSPyInstrumentor
 from opentelemetry.instrumentation.genai.dspy.utils import (
+    extract_lm_input_messages,
     parse_provider_and_model,
     resolve_provider,
     resolve_request_model,
@@ -1410,3 +1411,124 @@ def test_lm_call_does_not_inherit_earlier_instance_history(
     assert GenAI.GEN_AI_USAGE_INPUT_TOKENS not in attrs
     assert GenAI.GEN_AI_USAGE_OUTPUT_TOKENS not in attrs
     assert GenAI.GEN_AI_RESPONSE_ID not in attrs
+
+
+@pytest.mark.skipif(not hasattr(dspy, "lm15"), reason="requires DSPy 3.4+")
+def test_lm15_tool_result_id(instrument_dspy) -> None:
+    from dspy.lm15 import Message, Request, TextPart, ToolResultPart
+
+    request = Request(
+        model="openai/gpt-4o",
+        messages=[
+            Message(role="user", parts=[TextPart(text="What is 6*7?")]),
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(id="call_1", content=[TextPart(text="42")])
+                ],
+            ),
+        ],
+    )
+
+    messages = extract_lm_input_messages({"request": request})
+
+    assert messages[1].parts[0].id == "call_1"
+
+
+class DetailedUsageLM(FakeLM):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        response = super().forward(*args, **kwargs)
+        response["usage"] = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "prompt_tokens_details": AttrDict({"cached_tokens": 4}),
+            "completion_tokens_details": AttrDict({"reasoning_tokens": 3}),
+        }
+        return response
+
+
+def test_lm_call_cached_and_reasoning_tokens(
+    instrument_dspy, span_exporter
+) -> None:
+    DetailedUsageLM()("Capital of France?")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GenAI.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS] == 4
+    assert span.attributes[GenAI.GEN_AI_USAGE_REASONING_OUTPUT_TOKENS] == 3
+
+
+@pytest.mark.skipif(not hasattr(dspy, "lm15"), reason="requires DSPy 3.4+")
+def test_lm_native_backend_finish_reason(
+    instrument_dspy, span_exporter
+) -> None:
+    from dspy._vendor.lm15.testing import FakeLM as FakeEngine
+    from dspy.lm15 import Message, Response, TextPart, Usage
+
+    response = Response(
+        id="resp_1",
+        model="gpt-4o-2024-05-13",
+        message=Message(role="assistant", parts=[TextPart(text="Paris")]),
+        finish_reason="length",
+        usage=Usage(input_tokens=10, output_tokens=5),
+    )
+    lm = dspy.LM(
+        "openai/gpt-4o",
+        engine=FakeEngine(responses=[response]),
+        cache=False,
+    )
+    assert lm("Capital of France?") == ["Paris"]
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_ID] == "resp_1"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == ("length",)
+
+
+@pytest.mark.skipif(not hasattr(dspy, "lm15"), reason="requires DSPy 3.4+")
+def test_lm_native_backend_finish_reasons_multiple(
+    instrument_dspy, span_exporter
+) -> None:
+    from dspy._vendor.lm15.testing import FakeLM as FakeEngine
+    from dspy.lm15 import Message, Response, TextPart, Usage
+
+    response1 = Response(
+        id="resp_1",
+        model="gpt-4o-2024-05-13",
+        message=Message(role="assistant", parts=[TextPart(text="Paris")]),
+        finish_reason="length",
+        usage=Usage(input_tokens=10, output_tokens=5),
+    )
+    response2 = Response(
+        id="resp_2",
+        model="gpt-4o-2024-05-13",
+        message=Message(role="assistant", parts=[TextPart(text="London")]),
+        finish_reason="stop",
+        usage=Usage(input_tokens=10, output_tokens=5),
+    )
+    lm = dspy.LM(
+        "openai/gpt-4o",
+        engine=FakeEngine(responses=[response1, response2]),
+        cache=False,
+    )
+    assert lm("Capital of France?", n=2) == ["Paris", "London"]
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_ID] == "resp_1"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == (
+        "length",
+        "stop",
+    )
+
+
+def test_lm_call_disable_history_keeps_response_metadata(
+    instrument_dspy, span_exporter
+) -> None:
+    with dspy.context(disable_history=True):
+        FakeLM()("Capital of France?")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_MODEL] == "gpt-4o-2024-05-13"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_ID] == "chatcmpl-123"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
+    assert span.attributes[GenAI.GEN_AI_USAGE_INPUT_TOKENS] == 10
+    assert span.attributes[GenAI.GEN_AI_USAGE_OUTPUT_TOKENS] == 5

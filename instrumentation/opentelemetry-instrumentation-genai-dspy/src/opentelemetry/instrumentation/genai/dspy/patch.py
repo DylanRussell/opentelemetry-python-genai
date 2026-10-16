@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from copy import copy, deepcopy
+from dataclasses import dataclass
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
@@ -65,10 +66,19 @@ _REACT_V2_CLASS = "ReActV2"
 _EMBEDDINGS_MODULE = "dspy.retrievers.embeddings"
 _EMBEDDINGS_WITH_SCORES_CLASS = "EmbeddingsWithScores"
 
+
+@dataclass(slots=True)
+class _LMHistoryMetadata:
+    response: Any = None
+    usage: Any = None
+    model: str | None = None
+    response_model: str | None = None
+
+
 _in_retrieval_invocation: ContextVar[bool] = ContextVar(
     "_in_retrieval_invocation", default=False
 )
-_current_lm_history_entry: ContextVar[Any] = ContextVar(
+_current_lm_history_entry: ContextVar[_LMHistoryMetadata | None] = ContextVar(
     "_current_lm_history_entry", default=None
 )
 
@@ -304,6 +314,22 @@ def patch_dspy(handler: TelemetryHandler) -> None:
                 f"{lm_name}.update_history",
                 _lm_update_history(),
             )
+        if hasattr(dspy.LM, "_process_lm_response"):
+            _wrap_function(
+                lm_module,
+                f"{lm_name}._process_lm_response",
+                _lm_process_response(),
+            )
+        try:
+            import_module("dspy.clients.execution")
+
+            _wrap_function(
+                "dspy.clients.execution",
+                "finalize",
+                _lm_finalize(),
+            )
+        except (ImportError, AttributeError):
+            pass
 
 
 def unpatch_dspy() -> None:
@@ -347,6 +373,11 @@ def unpatch_dspy() -> None:
         unwrap(dspy.LM, "acall")
         if hasattr(dspy.LM, "update_history"):
             unwrap(dspy.LM, "update_history")
+        if hasattr(dspy.LM, "_process_lm_response"):
+            unwrap(dspy.LM, "_process_lm_response")
+        dspy_execution = sys.modules.get("dspy.clients.execution")
+        if dspy_execution is not None and hasattr(dspy_execution, "finalize"):
+            unwrap(dspy_execution, "finalize")
 
 
 def _start_lm_invocation(
@@ -427,7 +458,61 @@ def _lm_update_history() -> Callable[..., Any]:
     ) -> Any:
         entry = get_argument("entry", wrapped, args, kwargs)
         if entry is not None:
-            _current_lm_history_entry.set(entry)
+            _current_lm_history_entry.set(
+                _LMHistoryMetadata(
+                    response=_get_field(entry, "response"),
+                    usage=_get_field(entry, "usage"),
+                    model=_get_field(entry, "model"),
+                    response_model=_get_field(entry, "response_model"),
+                )
+            )
+        return wrapped(*args, **kwargs)
+
+    return traced_method
+
+
+def _lm_process_response() -> Callable[..., Any]:
+    def traced_method(
+        wrapped: Callable[..., Any],
+        instance: LM,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        response = get_argument("response", wrapped, args, kwargs)
+        if response is not None:
+            _current_lm_history_entry.set(
+                _LMHistoryMetadata(
+                    response=response,
+                    usage=getattr(response, "usage", None),
+                    model=getattr(instance, "model", None),
+                    response_model=getattr(response, "model", None),
+                )
+            )
+        return wrapped(*args, **kwargs)
+
+    return traced_method
+
+
+def _lm_finalize() -> Callable[..., Any]:
+    def traced_method(
+        wrapped: Callable[..., Any],
+        instance: Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        lm = get_argument("lm", wrapped, args, kwargs)
+        result = get_argument("result", wrapped, args, kwargs)
+        if result is not None:
+            raw = getattr(result, "raw", None)
+            responses = getattr(result, "responses", None)
+            _current_lm_history_entry.set(
+                _LMHistoryMetadata(
+                    response=raw if raw is not None else responses,
+                    usage=getattr(result, "usage", None),
+                    model=getattr(lm, "model", None),
+                    response_model=getattr(result, "response_model", None),
+                )
+            )
         return wrapped(*args, **kwargs)
 
     return traced_method
@@ -437,8 +522,12 @@ def _set_lm_invocation_response(
     handler: TelemetryHandler,
     invocation: InferenceInvocation,
     result: object,
-    history_entry: Any = None,
+    history_entry: _LMHistoryMetadata | None = None,
 ) -> None:
+    invocation.finish_reasons = []
+    finish_reasons = invocation.finish_reasons
+    assert finish_reasons is not None
+
     if not isinstance(result, list):
         model = getattr(result, "model", None)
         if model:
@@ -461,76 +550,73 @@ def _set_lm_invocation_response(
 
         outputs = getattr(result, "outputs", None)
         if isinstance(outputs, Sequence):
-            finish_reasons = [
-                str(fr)
-                for out in cast(Sequence[object], outputs)
-                if (fr := getattr(out, "finish_reason", None))
-            ]
-            if finish_reasons:
-                invocation.finish_reasons = finish_reasons
+            for out in cast(Sequence[object], outputs):
+                if (fr := getattr(out, "finish_reason", None)) is not None:
+                    finish_reasons.append(str(fr))
         elif (fr := getattr(result, "finish_reason", None)) is not None:
-            invocation.finish_reasons = [str(fr)]
+            finish_reasons.append(str(fr))
 
         if handler.should_capture_content():
-            invocation.output_messages = extract_lm_output_messages(result)
+            invocation.output_messages = extract_lm_output_messages(
+                result, finish_reasons=invocation.finish_reasons
+            )
         return
 
     # DSPy 3.x LM calls return a legacy list by default unless experimental=True
     # or an LMRequest is used. Only use the history_entry captured for this
     # invocation; never fall back to shared instance.history.
     entry = history_entry
-    choice_finish_reasons: list[str | None] | None = None
     if entry is not None:
-        resp_model = _get_field(entry, "response_model") or _get_field(
-            entry, "model"
-        )
+        resp_model = entry.response_model or entry.model
         if resp_model:
             invocation.response_model_name = str(resp_model)
 
-        usage = _get_field(entry, "usage")
-        if isinstance(usage, Mapping):
-            apply_usage_to_invocation(
-                invocation, cast(Mapping[str, Any], usage)
-            )
+        if entry.usage is not None:
+            apply_usage_to_invocation(invocation, entry.usage)
 
-        resp_obj: Any = _get_field(entry, "response")
+        resp_obj: Any = entry.response
         if resp_obj is not None:
-            resp_id = _get_field(resp_obj, "id")
-            if resp_id:
-                invocation.response_id = str(resp_id)
-
-            choices = _get_field(resp_obj, "choices")
-            if isinstance(choices, Sequence) and choices:
-                choice_finish_reasons = []
-                for choice in cast(Sequence[object], choices):
-                    fr = _get_field(choice, "finish_reason")
-                    choice_finish_reasons.append(
-                        str(fr) if fr is not None else None
-                    )
-                invocation_finish_reasons = [
-                    fr for fr in choice_finish_reasons if fr is not None
-                ]
-                if invocation_finish_reasons:
-                    invocation.finish_reasons = invocation_finish_reasons
+            if isinstance(resp_obj, Sequence) and not isinstance(
+                resp_obj, (str, bytes, Mapping)
+            ):
+                resp_seq = cast(Sequence[Any], resp_obj)
+                if resp_seq:
+                    resp_id = _get_field(resp_seq[0], "id")
+                    if resp_id:
+                        invocation.response_id = str(resp_id)
+                for r in resp_seq:
+                    fr = _get_field(r, "finish_reason")
+                    if fr is None:
+                        choices = _get_field(r, "choices")
+                        if isinstance(choices, Sequence) and choices:
+                            fr = _get_field(choices[0], "finish_reason")
+                    if fr is not None:
+                        finish_reasons.append(str(fr))
             else:
-                outputs = _get_field(resp_obj, "outputs")
-                if isinstance(outputs, Sequence) and outputs:
-                    choice_finish_reasons = []
-                    for out in cast(Sequence[object], outputs):
-                        fr = _get_field(out, "finish_reason")
-                        choice_finish_reasons.append(
-                            str(fr) if fr is not None else None
-                        )
-                    invocation_finish_reasons = [
-                        fr for fr in choice_finish_reasons if fr is not None
-                    ]
-                    if invocation_finish_reasons:
-                        invocation.finish_reasons = invocation_finish_reasons
+                resp_id = _get_field(resp_obj, "id")
+                if resp_id:
+                    invocation.response_id = str(resp_id)
+
+                choices = _get_field(resp_obj, "choices")
+                if isinstance(choices, Sequence) and choices:
+                    for choice in cast(Sequence[object], choices):
+                        fr = _get_field(choice, "finish_reason")
+                        if fr is not None:
+                            finish_reasons.append(str(fr))
+                elif (fr := _get_field(resp_obj, "finish_reason")) is not None:
+                    finish_reasons.append(str(fr))
+                else:
+                    outputs = _get_field(resp_obj, "outputs")
+                    if isinstance(outputs, Sequence) and outputs:
+                        for out in cast(Sequence[object], outputs):
+                            fr = _get_field(out, "finish_reason")
+                            if fr is not None:
+                                finish_reasons.append(str(fr))
 
     if handler.should_capture_content():
         invocation.output_messages = extract_lm_output_messages(
             cast(Sequence[object], result),
-            finish_reasons=choice_finish_reasons,
+            finish_reasons=invocation.finish_reasons,
         )
 
 

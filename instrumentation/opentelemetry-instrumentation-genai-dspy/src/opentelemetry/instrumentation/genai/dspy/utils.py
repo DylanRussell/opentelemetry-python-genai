@@ -7,7 +7,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, Protocol, TypeGuard, cast, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    TypeGuard,
+    cast,
+    runtime_checkable,
+)
 
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GenAiProviderNameValues,
@@ -366,8 +373,16 @@ def _extract_part(
         hasattr(p, "args") and hasattr(p, "name")
     ):
         return _extract_tool_call_part(p, capture_content=capture_content)
-    elif p_type_str == "tool_result" or hasattr(p, "call_id"):
-        call_id = getattr(p, "call_id", None)
+    elif (
+        p_type_str == "tool_result"
+        or hasattr(p, "call_id")
+        or hasattr(p, "tool_call_id")
+    ):
+        call_id = (
+            getattr(p, "tool_call_id", None)
+            or getattr(p, "call_id", None)
+            or getattr(p, "id", None)
+        )
         content = getattr(p, "content", None)
         return ToolCallResponsePart(
             id=str(call_id) if call_id else None,
@@ -781,49 +796,42 @@ def extract_lm_output_messages(
     return msgs
 
 
+def _get_field(obj: object, key: str) -> Any:
+    if isinstance(obj, Mapping):
+        return cast(Mapping[str, Any], obj).get(key)
+    return getattr(obj, key, None)
+
+
 def apply_usage_to_invocation(
     invocation: InferenceInvocation,
     usage: Mapping[str, object] | object,
 ) -> None:
     """Apply token usage dictionary or object to an InferenceInvocation."""
-    if _is_mapping(usage):
-        in_tokens = usage.get("prompt_tokens")
-        if in_tokens is None:
-            in_tokens = usage.get("input_tokens")
-        invocation.input_tokens = _safe_int(in_tokens)
+    in_tokens = _get_field(usage, "prompt_tokens")
+    if in_tokens is None:
+        in_tokens = _get_field(usage, "input_tokens")
+    invocation.input_tokens = _safe_int(in_tokens)
 
-        out_tokens = usage.get("completion_tokens")
-        if out_tokens is None:
-            out_tokens = usage.get("output_tokens")
-        invocation.output_tokens = _safe_int(out_tokens)
+    out_tokens = _get_field(usage, "completion_tokens")
+    if out_tokens is None:
+        out_tokens = _get_field(usage, "output_tokens")
+    invocation.output_tokens = _safe_int(out_tokens)
 
-        invocation.thinking_tokens = _safe_int(usage.get("reasoning_tokens"))
-        invocation.cache_read_input_tokens = _safe_int(
-            usage.get("cache_read_tokens")
-        )
-        invocation.cache_write_input_tokens = _safe_int(
-            usage.get("cache_write_tokens")
-        )
-    else:
-        in_tokens = getattr(usage, "prompt_tokens", None)
-        if in_tokens is None:
-            in_tokens = getattr(usage, "input_tokens", None)
-        invocation.input_tokens = _safe_int(in_tokens)
+    thinking = _get_field(usage, "reasoning_tokens")
+    completion_details = _get_field(usage, "completion_tokens_details")
+    if thinking is None and completion_details is not None:
+        thinking = _get_field(completion_details, "reasoning_tokens")
+    invocation.thinking_tokens = _safe_int(thinking)
 
-        out_tokens = getattr(usage, "completion_tokens", None)
-        if out_tokens is None:
-            out_tokens = getattr(usage, "output_tokens", None)
-        invocation.output_tokens = _safe_int(out_tokens)
+    cache_read = _get_field(usage, "cache_read_tokens")
+    prompt_details = _get_field(usage, "prompt_tokens_details")
+    if cache_read is None and prompt_details is not None:
+        cache_read = _get_field(prompt_details, "cached_tokens")
+    invocation.cache_read_input_tokens = _safe_int(cache_read)
 
-        invocation.thinking_tokens = _safe_int(
-            getattr(usage, "reasoning_tokens", None)
-        )
-        invocation.cache_read_input_tokens = _safe_int(
-            getattr(usage, "cache_read_tokens", None)
-        )
-        invocation.cache_write_input_tokens = _safe_int(
-            getattr(usage, "cache_write_tokens", None)
-        )
+    invocation.cache_write_input_tokens = _safe_int(
+        _get_field(usage, "cache_write_tokens")
+    )
 
 
 def extract_input_content(input_args: Mapping[str, object]) -> str:
