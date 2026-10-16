@@ -1568,52 +1568,6 @@ def test_agent_continue_run_with_additional_instructions(
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
 
 
-def test_agent_continue_run_with_additional_instructions_camel_case(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent.continue_run with camelCase additionalInstructions alias."""
-    if (
-        "additional_instructions"
-        not in inspect.signature(Agent.continue_run).parameters
-    ):
-        pytest.skip(
-            "Agent.continue_run does not support additional_instructions in this version of agno"
-        )
-
-    agent = Agent(
-        name="test-camel-inst-agent", model=MockModel(id="mock-model")
-    )
-    mock_run_output = ModelResponse(content="Initial response")
-    mock_cont_output = ModelResponse(content="Continued response")
-
-    with patch.object(Agent, "run", wraps=agent.run):
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_run_output
-        ):
-            run_res = agent.run("hello")
-            assert run_res is not None
-
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_cont_output
-        ):
-            cont_res = agent.continue_run(
-                run_res, additionalInstructions="steer output"
-            )
-            assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
-    system_instructions = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
-    )
-    assert len(system_instructions) == 1
-    assert system_instructions[0]["type"] == "text"
-    assert system_instructions[0]["content"] == "steer output"
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
-
-
 def test_agent_continue_run_with_input_and_additional_instructions(
     instrument_agno_content_capture,
     span_exporter,
@@ -1681,267 +1635,6 @@ def test_agent_continue_run_with_input_and_additional_instructions(
     assert system_instructions[0]["content"] == "be very concise"
 
 
-def test_agent_continue_run_with_tools_json_string_results(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent.continue_run with tools passed as a JSON string of tool executions."""
-    agent = Agent(
-        name="test-tools-json-agent", model=MockModel(id="mock-model")
-    )
-    mock_run_output = ModelResponse(content="Initial response")
-    mock_cont_output = ModelResponse(content="Continued response")
-    tools_payload = json.dumps(
-        [{"tool_call_id": "call_abc", "tool_name": "calc", "result": "42"}]
-    )
-
-    with patch.object(Agent, "run", wraps=agent.run):
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_run_output
-        ):
-            run_res = agent.run("calculate something")
-            assert run_res is not None
-
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_cont_output
-        ):
-            cont_res = agent.continue_run(run_res, updated_tools=tools_payload)
-            assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
-    )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "tool"
-    assert input_messages[0]["parts"][0]["id"] == "call_abc"
-    assert input_messages[0]["parts"][0]["response"] == "42"
-
-
-def test_agent_continue_run_with_tools_kwarg_json_string(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent.continue_run with tools kwarg directly passed as JSON string."""
-    import agno.agent
-
-    if not hasattr(agno.agent, "_run"):
-        pytest.skip(
-            "Agent.continue_run kwargs not supported in this version of agno"
-        )
-
-    agent = Agent(
-        name="test-tools-direct-agent", model=MockModel(id="mock-model")
-    )
-    mock_run_output = ModelResponse(content="Initial response")
-    mock_cont_output = ModelResponse(content="Continued response")
-    tools_payload = json.dumps(
-        [{"tool_call_id": "call_direct", "tool_name": "calc", "result": "99"}]
-    )
-
-    with (
-        patch.object(Agent, "run", wraps=agent.run),
-        patch("agno.models.base.Model.response", return_value=mock_run_output),
-    ):
-        run_res = agent.run("calculate")
-
-    with patch(
-        "agno.agent._run.continue_run_dispatch", return_value=mock_cont_output
-    ):
-        cont_res = agent.continue_run(run_res, tools=tools_payload)
-        assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
-    )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "tool"
-    assert input_messages[0]["parts"][0]["id"] == "call_direct"
-    assert input_messages[0]["parts"][0]["response"] == "99"
-
-
-def test_agent_continue_run_with_tools_json_string_and_additional_instructions(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent.continue_run with both tools JSON string and additional_instructions."""
-    if (
-        "additional_instructions"
-        not in inspect.signature(Agent.continue_run).parameters
-    ):
-        pytest.skip(
-            "Agent.continue_run does not support additional_instructions in this version of agno"
-        )
-
-    agent = Agent(
-        name="test-tools-hitl-agent", model=MockModel(id="mock-model")
-    )
-    mock_run_output = ModelResponse(content="Initial response")
-    mock_cont_output = ModelResponse(content="Continued response")
-    tools_payload = json.dumps(
-        [{"tool_call_id": "call_hitl", "confirmed": True}]
-    )
-
-    with patch.object(Agent, "run", wraps=agent.run):
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_run_output
-        ):
-            run_res = agent.run("start hitl")
-            assert run_res is not None
-
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_cont_output
-        ):
-            cont_res = agent.continue_run(
-                run_res,
-                updated_tools=tools_payload,
-                additional_instructions="proceed with caution",
-            )
-            assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
-    )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "tool"
-    assert input_messages[0]["parts"][0]["id"] == "call_hitl"
-    assert input_messages[0]["parts"][0]["response"] == {"confirmed": True}
-
-    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
-    system_instructions = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
-    )
-    assert len(system_instructions) == 1
-    assert system_instructions[0]["type"] == "text"
-    assert system_instructions[0]["content"] == "proceed with caution"
-
-
-def test_agent_continue_run_with_tools_json_string_tool_definitions(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent with tools initialized as a JSON string of tool definitions."""
-    tool_defs_json = json.dumps(
-        [
-            {
-                "name": "weather_tool",
-                "description": "Get weather info",
-                "parameters": {"type": "object"},
-            }
-        ]
-    )
-    agent = Agent(
-        name="test-tools-def-json-agent",
-        model=MockModel(id="mock-model"),
-        tools=tool_defs_json,
-    )
-    mock_run_output = ModelResponse(content="Initial response")
-    mock_cont_output = ModelResponse(content="Continued response")
-
-    with patch.object(Agent, "run", wraps=agent.run):
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_run_output
-        ):
-            run_res = agent.run("initial run")
-            assert run_res is not None
-
-        with patch(
-            "agno.models.base.Model.response", return_value=mock_cont_output
-        ):
-            kwargs = (
-                {"input": "next"}
-                if "input" in inspect.signature(Agent.continue_run).parameters
-                else {}
-            )
-            cont_res = agent.continue_run(run_res, **kwargs)
-            assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS in cont_span.attributes
-    tool_defs = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_TOOL_DEFINITIONS]
-    )
-    assert len(tool_defs) == 1
-    assert tool_defs[0]["name"] == "weather_tool"
-    assert tool_defs[0]["description"] == "Get weather info"
-
-
-def test_agent_acontinue_run_with_tools_and_additional_instructions(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test Agent.acontinue_run with tools JSON string and additional_instructions."""
-    if (
-        "additional_instructions"
-        not in inspect.signature(Agent.acontinue_run).parameters
-    ):
-        pytest.skip(
-            "Agent.acontinue_run does not support additional_instructions in this version of agno"
-        )
-
-    agent = Agent(
-        name="test-async-tools-agent", model=MockModel(id="mock-model")
-    )
-    mock_run_output = ModelResponse(content="Async initial")
-    mock_cont_output = ModelResponse(content="Async continued")
-    tools_payload = json.dumps(
-        [
-            {
-                "tool_call_id": "call_async_1",
-                "tool_name": "calc",
-                "result": "100",
-            }
-        ]
-    )
-
-    async def _run() -> None:
-        with patch(
-            "agno.models.base.Model.aresponse", return_value=mock_run_output
-        ):
-            run_res = await agent.arun("async hello")
-            assert run_res is not None
-
-        with patch(
-            "agno.models.base.Model.aresponse", return_value=mock_cont_output
-        ):
-            cont_res = await agent.acontinue_run(
-                run_res,
-                updated_tools=tools_payload,
-                additional_instructions="async extra guidance",
-            )
-            assert cont_res is not None
-
-    asyncio.run(_run())
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
-    )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "tool"
-    assert input_messages[0]["parts"][0]["id"] == "call_async_1"
-    assert input_messages[0]["parts"][0]["response"] == "100"
-
-    assert GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS in cont_span.attributes
-    system_instructions = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS]
-    )
-    assert len(system_instructions) == 1
-    assert system_instructions[0]["type"] == "text"
-    assert system_instructions[0]["content"] == "async extra guidance"
-
-
 def test_agent_continue_run_positional_run_id_not_recorded_as_input(
     instrument_agno_content_capture,
     span_exporter,
@@ -1978,61 +1671,6 @@ def test_agent_continue_run_positional_run_id_not_recorded_as_input(
     cont_span = spans[-1]
     # "run-123" must not be captured as a user input message
     assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in cont_span.attributes
-
-
-def test_agent_continue_run_tools_arg_not_used_as_tool_definitions(
-    instrument_agno_content_capture,
-    span_exporter,
-) -> None:
-    """Test that tools argument passed to continue_run is not parsed as tool definitions."""
-    import agno.agent
-
-    if not hasattr(agno.agent, "_run"):
-        pytest.skip(
-            "Agent.continue_run kwargs not supported in this version of agno"
-        )
-
-    agent = Agent(
-        name="test-no-tools-agent",
-        model=MockModel(id="mock-model"),
-        tools=None,
-    )
-    mock_run_output = ModelResponse(content="Initial")
-    mock_cont_output = ModelResponse(content="Continued")
-
-    with patch(
-        "agno.models.base.Model.response", return_value=mock_run_output
-    ):
-        run_res = agent.run("hello")
-        assert run_res is not None
-
-    tools_results = [
-        {
-            "tool_call_id": "call_1",
-            "tool_name": "calculator",
-            "result": "42",
-        }
-    ]
-
-    with patch(
-        "agno.agent._run.continue_run_dispatch", return_value=mock_cont_output
-    ):
-        cont_res = agent.continue_run(run_res, tools=tools_results)
-        assert cont_res is not None
-
-    spans = span_exporter.get_finished_spans()
-    cont_span = spans[-1]
-    # tool execution results must not be recorded as tool definitions
-    assert GenAIAttributes.GEN_AI_TOOL_DEFINITIONS not in cont_span.attributes
-    # but should be captured as input messages (tool role)
-    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES in cont_span.attributes
-    input_messages = json.loads(
-        cont_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
-    )
-    assert len(input_messages) == 1
-    assert input_messages[0]["role"] == "tool"
-    assert input_messages[0]["parts"][0]["id"] == "call_1"
-    assert input_messages[0]["parts"][0]["response"] == "42"
 
 
 def test_continue_run_captures_external_tool_result(
@@ -2206,3 +1844,470 @@ def test_acontinue_run_captures_external_tool_result(
             ],
         }
     ]
+
+
+def test_second_continue_run_captures_only_new_tool_result(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse, ToolExecution
+    from agno.tools import tool
+
+    if not hasattr(agno.agent, "_run") or not hasattr(Agent, "continue_run"):
+        pytest.skip(
+            "Agent.continue_run is not supported in this version of agno"
+        )
+    if not hasattr(ToolExecution, "external_execution_required"):
+        pytest.skip(
+            "ToolExecution.external_execution_required is not supported in this version of agno"
+        )
+
+    @tool(external_execution=True)
+    def lookup_order(order_id: str) -> str:
+        """Look up the delivery status of an order."""
+        raise AssertionError("external")
+
+    @tool(external_execution=True)
+    def refund_order(order_id: str) -> str:
+        """Refund an order."""
+        raise AssertionError("external")
+
+    agent = Agent(
+        name="support",
+        model=MockModel(id="mock-model"),
+        tools=[lookup_order, refund_order],
+        session_id="order-session",
+    )
+
+    def paused(call_id: str, name: str) -> ModelResponse:
+        return ModelResponse(
+            tool_executions=[
+                ToolExecution(
+                    tool_call_id=call_id,
+                    tool_name=name,
+                    tool_args={"order_id": "123"},
+                    external_execution_required=True,
+                )
+            ],
+        )
+
+    with patch(
+        "agno.models.base.Model.response",
+        side_effect=[
+            paused("call_1", "lookup_order"),
+            paused("call_2", "refund_order"),
+            ModelResponse(content="Refunded."),
+        ],
+    ):
+        response = agent.run("Refund order 123 if not delivered.")
+        response.tools_awaiting_external_execution[0].result = "Not delivered"
+        response = agent.continue_run(run_response=response)
+        response.tools_awaiting_external_execution[0].result = "Refund issued"
+        span_exporter.clear()
+        agent.continue_run(run_response=response)
+
+    span = span_exporter.get_finished_spans()[-1]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert [m["parts"][0]["id"] for m in messages] == ["call_2"]
+
+
+def test_continue_run_prefers_run_response_session_id(
+    instrument_agno, span_exporter
+) -> None:
+    """Test that continue_run prefers run_response.session_id over the session_id argument."""
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse
+
+    if not hasattr(agno.agent, "_run") or not hasattr(Agent, "continue_run"):
+        pytest.skip(
+            "Agent.continue_run is not supported in this version of agno"
+        )
+
+    agent = Agent(
+        name="test-session-pref-agent",
+        model=MockModel(id="mock-model"),
+        session_id="agent-session",
+    )
+    mock_run_output = ModelResponse(content="Initial")
+    mock_cont_output = ModelResponse(content="Continued")
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_run_output
+    ):
+        run_res = agent.run("hello")
+        assert run_res is not None
+
+    run_res.session_id = "response-session"
+
+    with patch(
+        "agno.models.base.Model.response", return_value=mock_cont_output
+    ):
+        span_exporter.clear()
+        cont_res = agent.continue_run(
+            run_response=run_res, session_id="arg-session"
+        )
+        assert cont_res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert (
+        spans[0].attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "response-session"
+    )
+
+
+def test_extract_session_id_unit() -> None:
+    """Unit tests for extract_session_id."""
+    from opentelemetry.instrumentation.genai.agno.utils import (
+        extract_session_id,
+    )
+
+    # Arguments priority
+    assert (
+        extract_session_id(kwargs={"session_id": "kw-session"}) == "kw-session"
+    )
+    assert extract_session_id(kwargs={"session_id": 0}) == "0"
+    args = ("a", "b", "c", "d", "pos-session")
+    assert extract_session_id(args=args) == "pos-session"
+    assert extract_session_id(args=("a", "b", "c", "d", 0)) == "0"
+
+    # Instance attribute
+    class MockInstance:
+        session_id = "inst-session"
+
+    assert extract_session_id(instance=MockInstance()) == "inst-session"
+
+    # Response attribute
+    class MockResponse:
+        session_id = "resp-session"
+
+    assert extract_session_id(run_response=MockResponse()) == "resp-session"
+
+    # Continue run prioritizes response over kwargs / instance
+    assert (
+        extract_session_id(
+            instance=MockInstance(),
+            kwargs={"session_id": "kw-session"},
+            run_response=MockResponse(),
+            is_continue=True,
+        )
+        == "resp-session"
+    )
+
+    # Continue run with run_response with None session_id falls back to instance, not kwargs
+    class MockResponseNoneSession:
+        session_id = None
+
+    assert (
+        extract_session_id(
+            instance=MockInstance(),
+            kwargs={"session_id": "kw-session"},
+            run_response=MockResponseNoneSession(),
+            is_continue=True,
+        )
+        == "inst-session"
+    )
+
+    # Continue run without run_response (e.g. continuing from run_id) uses kwargs
+    assert (
+        extract_session_id(
+            instance=MockInstance(),
+            kwargs={"session_id": "kw-session"},
+            run_response=None,
+            is_continue=True,
+        )
+        == "kw-session"
+    )
+
+    # When not continue, kwargs take precedence over response
+    assert (
+        extract_session_id(
+            instance=MockInstance(),
+            kwargs={"session_id": "kw-session"},
+            run_response=MockResponse(),
+            is_continue=False,
+        )
+        == "kw-session"
+    )
+
+    # Empty
+    assert extract_session_id() is None
+
+
+def test_workflow_nested_hitl_captures_only_active_step_requirement(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that Workflow.continue_run in nested HITL captures only the active (last) step requirement."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "continue_run"):
+        pytest.skip(
+            "Workflow.continue_run is not supported in this version of agno"
+        )
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+    from agno.workflow.types import StepRequirement
+
+    workflow = Workflow(
+        name="test-nested-hitl-workflow",
+        steps=[],
+        session_id="wf-session-nested",
+    )
+    req1 = StepRequirement(
+        step_id="step_1",
+        step_name="first_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    req2 = StepRequirement(
+        step_id="step_2",
+        step_name="second_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-session-nested",
+        status=RunStatus.paused,
+        paused_step_index=1,
+        content="Workflow continued",
+        step_requirements=[req1, req2],
+    )
+
+    with (
+        patch.object(Workflow, "get_session", return_value=MagicMock()),
+        patch.object(
+            Workflow, "_continue_execute", return_value=mock_wf_output
+        ),
+    ):
+        res = workflow.continue_run(run_response=mock_wf_output)
+        assert res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    # Step requirements are not LLM tool calls and must not be captured as tool messages
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
+
+
+def test_workflow_nested_hitl_explicit_step_requirements(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that Workflow.continue_run does not capture step requirements as tools, but captures explicit user input."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "continue_run"):
+        pytest.skip(
+            "Workflow.continue_run is not supported in this version of agno"
+        )
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+    from agno.workflow.types import StepRequirement
+
+    workflow = Workflow(
+        name="test-nested-hitl-workflow",
+        steps=[],
+        session_id="wf-session-nested",
+    )
+    req1 = StepRequirement(
+        step_id="step_1",
+        step_name="first_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    req2 = StepRequirement(
+        step_id="step_2",
+        step_name="second_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-session-nested",
+        status=RunStatus.paused,
+        paused_step_index=1,
+        content="Workflow continued",
+    )
+
+    with (
+        patch.object(Workflow, "get_session", return_value=MagicMock()),
+        patch.object(
+            Workflow, "_continue_execute", return_value=mock_wf_output
+        ),
+    ):
+        res = workflow.continue_run(
+            run_response=mock_wf_output,
+            step_requirements=[req1, req2],
+            input="user resumed workflow",
+        )
+        assert res is not None
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    messages = json.loads(
+        span.attributes.get(GenAIAttributes.GEN_AI_INPUT_MESSAGES, "[]")
+    )
+    assert len(messages) == 1
+    assert messages[0]["role"] == "user"
+    assert messages[0]["parts"][0]["content"] == "user resumed workflow"
+
+
+def test_workflow_nested_hitl_acontinue_run(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that Workflow.acontinue_run does not capture step requirements as tool calls."""
+    from agno.workflow.workflow import Workflow
+
+    if not hasattr(Workflow, "acontinue_run"):
+        pytest.skip(
+            "Workflow.acontinue_run is not supported in this version of agno"
+        )
+
+    from unittest.mock import AsyncMock
+
+    from agno.run.workflow import RunStatus, WorkflowRunOutput
+    from agno.workflow.types import StepRequirement
+
+    workflow = Workflow(
+        name="test-nested-hitl-workflow-async",
+        steps=[],
+        session_id="wf-session-nested-async",
+    )
+    req1 = StepRequirement(
+        step_id="step_1",
+        step_name="first_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    req2 = StepRequirement(
+        step_id="step_2",
+        step_name="second_step",
+        requires_confirmation=True,
+        confirmed=True,
+    )
+    mock_wf_output = WorkflowRunOutput(
+        workflow_id="wf-1",
+        session_id="wf-session-nested-async",
+        status=RunStatus.paused,
+        paused_step_index=1,
+        content="Workflow async continued",
+        step_requirements=[req1, req2],
+    )
+
+    mock_session = MagicMock()
+
+    async def _run() -> None:
+        with (
+            patch.object(
+                Workflow,
+                "aget_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ),
+            patch.object(
+                Workflow, "_acontinue_execute", new_callable=AsyncMock
+            ) as mock_exec,
+        ):
+            mock_exec.return_value = mock_wf_output
+            res = await workflow.acontinue_run(run_response=mock_wf_output)
+            assert res is not None
+
+    asyncio.run(_run())
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    # Step requirements are not LLM tool calls and must not be captured as tool messages
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
+
+
+def test_agent_continue_run_with_user_input_schema(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that continue_run extracts answered fields from user_input_schema."""
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse, ToolExecution
+
+    try:
+        from agno.run.requirement import UserInputField
+    except ImportError:
+        pytest.skip("UserInputField is not supported in this version of agno")
+
+    agent = Agent(
+        name="test-user-input-agent", model=MockModel(id="mock-model")
+    )
+    field = UserInputField(
+        name="email", field_type="str", value="test@example.com"
+    )
+    tool_exec = ToolExecution(
+        tool_call_id="call_form",
+        tool_name="collect_info",
+        user_input_schema=[field],
+    )
+    target = (
+        "agno.agent._run.continue_run_dispatch"
+        if hasattr(agno.agent, "_run")
+        else "agno.agent.agent.continue_run_dispatch"
+    )
+    with patch(target, return_value=ModelResponse(content="Got info")):
+        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(messages) == 1
+    assert messages[0]["parts"][0]["response"] == {"email": "test@example.com"}
+
+
+def test_agent_continue_run_with_user_feedback_schema(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that continue_run extracts answered options from user_feedback_schema."""
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse, ToolExecution
+
+    try:
+        from agno.run.requirement import UserFeedbackQuestion
+    except ImportError:
+        pytest.skip(
+            "UserFeedbackQuestion is not supported in this version of agno"
+        )
+
+    agent = Agent(name="test-feedback-agent", model=MockModel(id="mock-model"))
+    question = UserFeedbackQuestion(
+        question="Satisfied?", selected_options=["Yes"]
+    )
+    tool_exec = ToolExecution(
+        tool_call_id="call_feedback",
+        tool_name="request_feedback",
+        user_feedback_schema=[question],
+    )
+    target = (
+        "agno.agent._run.continue_run_dispatch"
+        if hasattr(agno.agent, "_run")
+        else "agno.agent.agent.continue_run_dispatch"
+    )
+    with patch(
+        target,
+        return_value=ModelResponse(content="Thanks for feedback"),
+    ):
+        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(messages) == 1
+    assert messages[0]["parts"][0]["response"] == {"Satisfied?": ["Yes"]}
