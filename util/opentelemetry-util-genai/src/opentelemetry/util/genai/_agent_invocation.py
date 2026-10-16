@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from opentelemetry._logs import Logger
-from opentelemetry.context import Context, set_value
+from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -23,7 +23,6 @@ from opentelemetry.util.genai._invocation import (
     _ContextData,
     get_content_attributes,
 )
-from opentelemetry.util.genai._tool_invocation import TOOL_CONTEXT_KEY
 from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import (
     InputMessage,
@@ -134,8 +133,6 @@ class AgentInvocation(GenAIInvocation, ABC):
                 system_instructions=[],
             )
         self.data: AgentData = data
-        # Clear tool context across agent boundary to avoid suppressing non-duplicate spans.
-        context = set_value(TOOL_CONTEXT_KEY, None, context=context)
         super().__init__(
             tracer,
             instruments,

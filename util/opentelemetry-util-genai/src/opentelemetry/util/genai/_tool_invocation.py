@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import functools
 import timeit
 from dataclasses import dataclass, field
-from typing import Final
 
 from opentelemetry._logs import Logger
-from opentelemetry.context import Context, get_value
+from opentelemetry.context import Context
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAI,
 )
@@ -21,19 +19,14 @@ from opentelemetry.util.genai._invocation import (
     _ContextData,
     _json_dumps_unless_str,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.utils import ContentCapturingMode
 from opentelemetry.util.types import AnyValue, AttributeValue
-
-TOOL_CONTEXT_KEY: Final[str] = "opentelemetry.genai.tool.context"
 
 
 @dataclass
 class ToolData(_ContextData):
-    """Typed data passed from inner tool invocations to the outer invocation."""
+    """Typed data container for a tool invocation."""
 
     tool_name: str | None = None
     tool_type: str | None = None
@@ -85,9 +78,9 @@ class ToolInvocation(GenAIInvocation):
         tool_call_id: str | None = None,
         tool_description: str | None = None,
         content_capturing_mode: ContentCapturingMode | None = None,
-        start_span: bool = True,
         context: Context | None = None,
         _attach_to_context: bool = True,
+        data: ToolData | None = None,
     ) -> None:
         """Use handler.tool(name) instead of calling this directly.
 
@@ -105,13 +98,15 @@ class ToolInvocation(GenAIInvocation):
             )
             if v is not None
         }
-        self.data: ToolData = ToolData(
-            tool_name=name,
-            tool_type=tool_type,
-            agent_name=agent_name,
-            tool_call_id=tool_call_id,
-            tool_description=tool_description,
-        )
+        if data is None:
+            data = ToolData(
+                tool_name=name,
+                tool_type=tool_type,
+                agent_name=agent_name,
+                tool_call_id=tool_call_id,
+                tool_description=tool_description,
+            )
+        self.data: ToolData = data
         super().__init__(
             tracer,
             instruments,
@@ -124,11 +119,8 @@ class ToolInvocation(GenAIInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             content_capturing_mode=content_capturing_mode,
-            start_span=start_span,
             attributes=self.data.attributes,
             metric_attributes=self.data.metric_attributes,
-            context_key=TOOL_CONTEXT_KEY,
-            dataclass_class_object=functools.partial(ToolData, tool_name=name),
         )
         self._name: str = name
         self._tool_type: str | None = tool_type
@@ -180,20 +172,6 @@ class ToolInvocation(GenAIInvocation):
     def tool_result(self, value: AnyValue | None) -> None:
         self.data.tool_call_result = value
 
-    def enrich_from_context(self, data: ToolData) -> None:
-        """Enrich invocation attributes from context data published by inner invocations.
-
-        Outer (root) attributes take precedence over inner values. Inner
-        invocations never override content capture fields.
-        """
-        tool_call_arguments = self.data.tool_call_arguments
-        tool_call_result = self.data.tool_call_result
-
-        self.data.merge(data, overwrite=False)
-
-        self.data.tool_call_arguments = tool_call_arguments
-        self.data.tool_call_result = tool_call_result
-
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         attrs: dict[str, AttributeValue] = {
             GenAI.GEN_AI_TOOL_NAME: self.data.tool_name or self._name,
@@ -208,9 +186,6 @@ class ToolInvocation(GenAIInvocation):
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        ctx_data = get_value(TOOL_CONTEXT_KEY, context=self._span_context)
-        if isinstance(ctx_data, ToolData):
-            self.enrich_from_context(ctx_data)
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
         capture_content_on_span = self._should_capture_content_on_span
@@ -252,60 +227,3 @@ class ToolInvocation(GenAIInvocation):
 
     def _on_stream_chunk(self, chunk_at: float) -> None:
         """A streamed tool result only scopes context; the conventions define no chunk timing metrics for tools."""
-
-
-class SuppressedToolInvocation(ToolInvocation):
-    """Represents a tool invocation running inside an active tool context.
-
-    Suppresses span creation and metrics. On stop or fail, publishes its
-    attributes to the active tool context.
-    """
-
-    def __init__(
-        self,
-        tracer: Tracer,
-        instruments: _Instruments,
-        logger: Logger,
-        completion_hook: CompletionHook,
-        name: str,
-        *,
-        tool_type: str | None = None,
-        agent_name: str | None = None,
-        tool_call_id: str | None = None,
-        tool_description: str | None = None,
-        content_capturing_mode: ContentCapturingMode | None = None,
-        context: Context | None = None,
-        _attach_to_context: bool = True,
-    ) -> None:
-        super().__init__(
-            tracer,
-            instruments,
-            logger,
-            _NoOpCompletionHook(),
-            name,
-            tool_type=tool_type,
-            agent_name=agent_name,
-            tool_call_id=tool_call_id,
-            tool_description=tool_description,
-            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
-            start_span=False,
-            context=context,
-            _attach_to_context=_attach_to_context,
-        )
-
-    def publish_to_context(self, data: ToolData) -> None:
-        """Publish invocation attributes to the active tool context."""
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
-        data.merge(self.data, overwrite=True)
-
-    def _finish(self, error: Error | None = None) -> None:
-        if self._finished:
-            return
-        self._finished = True
-        ctx_data = get_value(TOOL_CONTEXT_KEY, context=self._span_context)
-        if isinstance(ctx_data, ToolData):
-            self.publish_to_context(ctx_data)
-
-    def _apply_finish(self, error: Error | None = None) -> None:
-        pass

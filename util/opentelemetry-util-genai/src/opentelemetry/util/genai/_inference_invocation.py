@@ -24,13 +24,10 @@ from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
     _ContextData,
+    _resolve_suppressed_content_and_hook,
     get_content_attributes,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-    _SafeCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.environment_variables import (
     OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT,
 )
@@ -112,18 +109,6 @@ def _should_emit_event(
         ContentCapturingMode.EVENT_ONLY,
         ContentCapturingMode.SPAN_AND_EVENT,
     )
-
-
-def _is_active_completion_hook(hook: CompletionHook | None) -> bool:
-    if hook is None:
-        return False
-    if isinstance(hook, _NoOpCompletionHook):
-        return False
-    if isinstance(hook, _SafeCompletionHook) and isinstance(
-        hook._wrapped, _NoOpCompletionHook
-    ):
-        return False
-    return True
 
 
 CLIENT_INFERENCE_CONTEXT_KEY: Final[str] = (
@@ -997,30 +982,13 @@ class SuppressedInferenceInvocation(InferenceInvocation):
         conversation_id: str | None = None,
     ) -> None:
         ctx_data = get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context)
-        is_context_data = isinstance(ctx_data, InferenceData)
-
-        allow_content_capture = is_context_data and ctx_data.capture_content
-        env_allows_content_capture = content_capturing_mode not in (
-            None,
-            ContentCapturingMode.NO_CONTENT,
-        )
-        self._capture_content_to_context: bool = (
-            allow_content_capture and env_allows_content_capture
-        )
-
-        allow_upload = is_context_data and ctx_data.upload_completion
-        env_allows_upload = _is_active_completion_hook(completion_hook)
-        self._upload_completion: bool = allow_upload and env_allows_upload
-
-        effective_content_mode = (
-            content_capturing_mode
-            if self._capture_content_to_context
-            else ContentCapturingMode.NO_CONTENT
-        )
-        effective_completion_hook = (
-            completion_hook
-            if self._upload_completion
-            else _NoOpCompletionHook()
+        (
+            self._capture_content_to_context,
+            self._upload_completion,
+            effective_content_mode,
+            effective_completion_hook,
+        ) = _resolve_suppressed_content_and_hook(
+            ctx_data, content_capturing_mode, completion_hook
         )
 
         super().__init__(

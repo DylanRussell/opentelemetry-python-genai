@@ -19,12 +19,10 @@ from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
     _ContextData,
+    _resolve_suppressed_content_and_hook,
     get_content_attributes,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import (
     ErrorTypeResolver,
     MessagePart,
@@ -297,7 +295,7 @@ class FetchResponseInvocation(GenAIInvocation):
         """Enrich invocation attributes from context data published by inner invocations.
 
         Outer (root) attributes take precedence over inner values. Inner
-        invocations never override content capture fields.
+        invocations never override content capture fields unless explicitly enabled.
         """
         output_messages = self.data.output_messages
         system_instructions = self.data.system_instructions
@@ -305,9 +303,22 @@ class FetchResponseInvocation(GenAIInvocation):
 
         self.data.merge(data, overwrite=False)
 
-        self.data.output_messages = output_messages
-        self.data.system_instructions = system_instructions
-        self.data.tool_definitions = tool_definitions
+        if data.capture_content:
+            self.data.output_messages = (
+                output_messages if output_messages else data.output_messages
+            )
+            self.data.system_instructions = (
+                system_instructions
+                if system_instructions
+                else data.system_instructions
+            )
+            self.data.tool_definitions = (
+                tool_definitions if tool_definitions else data.tool_definitions
+            )
+        else:
+            self.data.output_messages = output_messages
+            self.data.system_instructions = system_instructions
+            self.data.tool_definitions = tool_definitions
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # response_id intentionally excluded — high cardinality.
@@ -400,18 +411,30 @@ class SuppressedFetchResponseInvocation(FetchResponseInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
     ) -> None:
+        ctx_data = get_value(
+            CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=context
+        )
+        (
+            self._capture_content_to_context,
+            self._upload_completion,
+            effective_content_mode,
+            effective_completion_hook,
+        ) = _resolve_suppressed_content_and_hook(
+            ctx_data, content_capturing_mode, completion_hook
+        )
+
         super().__init__(
             tracer,
             instruments,
             logger,
-            _NoOpCompletionHook(),
+            effective_completion_hook,
             provider,
             response_id=response_id,
             request_stream=request_stream,
             server_address=server_address,
             server_port=server_port,
             error_type_resolver=error_type_resolver,
-            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
+            content_capturing_mode=effective_content_mode,
             start_span=False,
             context=context,
             _attach_to_context=_attach_to_context,
@@ -427,12 +450,29 @@ class SuppressedFetchResponseInvocation(FetchResponseInvocation):
         self.data.metric_attributes = self.metric_attributes
         if self._request_stream is not None:
             self.data.request_stream = self._request_stream
+
+        # Prevent inner content from merging into context when content capture is off,
+        # such as when messages were populated only for completion hook upload.
+        if not self._capture_content_to_context:
+            self.data.output_messages = None
+            self.data.system_instructions = None
+            self.data.tool_definitions = None
+
         data.merge(self.data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:
         if self._finished:
             return
         self._finished = True
+
+        if self._upload_completion:
+            self._call_completion_hook(
+                outputs=self.output_messages,
+                system_instruction=self.system_instruction,
+                tool_definitions=self.tool_definitions,
+                log_record=None,
+            )
+
         ctx_data = get_value(
             CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=self._span_context
         )

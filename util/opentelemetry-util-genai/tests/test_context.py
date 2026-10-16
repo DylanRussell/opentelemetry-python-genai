@@ -46,9 +46,6 @@ from opentelemetry.util.genai._inference_invocation import (
 from opentelemetry.util.genai._retrieval_invocation import (
     SuppressedRetrievalInvocation,
 )
-from opentelemetry.util.genai._tool_invocation import (
-    SuppressedToolInvocation,
-)
 from opentelemetry.util.genai.environment_variables import (
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT,
 )
@@ -58,19 +55,14 @@ from opentelemetry.util.genai.invocation import (
     CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
     CLIENT_RETRIEVAL_CONTEXT_KEY,
-    TOOL_CONTEXT_KEY,
     EmbeddingData,
     EmbeddingInvocation,
     FetchResponseData,
     FetchResponseInvocation,
     InferenceData,
     InferenceInvocation,
-    LocalAgentInvocation,
-    RemoteAgentInvocation,
     RetrievalData,
     RetrievalInvocation,
-    ToolData,
-    ToolInvocation,
 )
 from opentelemetry.util.genai.types import (
     ContentCapturingMode,
@@ -1891,233 +1883,6 @@ class TestEmbeddingContext(BaseContextTest):
         self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 8443)
 
 
-class TestToolContext(BaseContextTest):
-    def setUp(self) -> None:
-        super().setUp()
-        self.span_exporter = InMemorySpanExporter()
-        self.tracer_provider.add_span_processor(
-            SimpleSpanProcessor(self.span_exporter)
-        )
-        self.handler = TelemetryHandler(
-            tracer_provider=self.tracer_provider,
-            meter_provider=self.meter_provider,
-        )
-
-    def test_context_key_constant_value(self) -> None:
-        self.assertEqual(TOOL_CONTEXT_KEY, "opentelemetry.genai.tool.context")
-
-    def test_tool_context_data_merge(self) -> None:
-        data1 = ToolData(tool_name="tool-1", tool_type="function")
-        data2 = ToolData(
-            tool_name="tool-2",
-            tool_call_id="call-123",
-            tool_description="desc",
-        )
-        data1.merge(data2, overwrite=True)
-        self.assertEqual(data1.tool_name, "tool-2")
-        self.assertEqual(data1.tool_type, "function")
-        self.assertEqual(data1.tool_call_id, "call-123")
-        self.assertEqual(data1.tool_description, "desc")
-
-    def test_tool_invocation_property_delegation_to_data(self) -> None:
-        inv = self.handler.tool(
-            "calculator",
-            tool_type="function",
-            agent_name="MathAgent",
-        )
-        self.assertEqual(inv.name, "calculator")
-        self.assertEqual(inv.tool_type, "function")
-        self.assertEqual(inv.agent_name, "MathAgent")
-
-        inv.tool_call_id = "call-abc"
-        self.assertEqual(inv.data.tool_call_id, "call-abc")
-        self.assertEqual(inv.tool_call_id, "call-abc")
-
-        inv.tool_description = "A math tool"
-        self.assertEqual(inv.data.tool_description, "A math tool")
-        self.assertEqual(inv.tool_description, "A math tool")
-
-        inv.arguments = {"expr": "1+1"}
-        self.assertEqual(inv.data.tool_call_arguments, {"expr": "1+1"})
-        self.assertEqual(inv.arguments, {"expr": "1+1"})
-
-        inv.tool_result = 2
-        self.assertEqual(inv.data.tool_call_result, 2)
-        self.assertEqual(inv.tool_result, 2)
-        inv.stop()
-
-    def test_tool_invocation_outer_sets_empty_object_on_context(self) -> None:
-        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
-        with self.handler.tool("search") as inv:
-            self.assertIsInstance(inv, ToolInvocation)
-            self.assertNotIsInstance(inv, SuppressedToolInvocation)
-            ctx_data = get_value(TOOL_CONTEXT_KEY)
-            self.assertIsInstance(ctx_data, ToolData)
-        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
-
-    def test_nested_tool_deduplication_and_enrichment(self) -> None:
-        with patch.dict(
-            os.environ,
-            {
-                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_ONLY"
-            },
-        ):
-            with self.handler.tool("root-tool") as root:
-                self.assertIsInstance(root, ToolInvocation)
-                self.assertNotIsInstance(root, SuppressedToolInvocation)
-
-                with self.handler.tool("root-tool") as inner:
-                    self.assertIsInstance(inner, SuppressedToolInvocation)
-                    inner.tool_call_id = "inner-call-id"
-                    inner.tool_description = "inner tool desc"
-                    inner.arguments = {"query": "test"}
-                    inner.tool_result = "result"
-
-            (span,) = self.span_exporter.get_finished_spans()
-            attrs = span.attributes
-            self.assertEqual(attrs.get(GenAI.GEN_AI_TOOL_NAME), "root-tool")
-            self.assertEqual(
-                attrs.get(GenAI.GEN_AI_TOOL_CALL_ID), "inner-call-id"
-            )
-            self.assertEqual(
-                attrs.get(GenAI.GEN_AI_TOOL_DESCRIPTION), "inner tool desc"
-            )
-
-    def test_enrich_from_context_does_not_override_content(self) -> None:
-        with self.handler.tool("root-tool") as outer:
-            outer.data.tool_call_arguments = {"root_arg": 1}
-            outer.data.tool_call_result = "root_res"
-            outer.data.tool_description = "root_desc"
-
-            inner_data = ToolData(
-                tool_call_id="call-123",
-                tool_description="inner_desc",
-                tool_call_arguments={"inner_arg": 2},
-                tool_call_result="inner_res",
-            )
-            outer.enrich_from_context(inner_data)
-
-            # Non-content fields are enriched
-            self.assertEqual(outer.data.tool_call_id, "call-123")
-            # Outer non-content fields take precedence
-            self.assertEqual(outer.data.tool_description, "root_desc")
-            # Content fields are NOT overridden by inner
-            self.assertEqual(outer.data.tool_call_arguments, {"root_arg": 1})
-            self.assertEqual(outer.data.tool_call_result, "root_res")
-
-    def test_nested_tool_invocation_does_not_end_span_on_fail(self) -> None:
-        with self.handler.tool("root-tool") as root:
-            with self.assertRaises(ValueError):
-                with self.handler.tool("root-tool") as inner:
-                    self.assertIsInstance(inner, SuppressedToolInvocation)
-                    raise ValueError("inner failure")
-            self.assertTrue(root.span.is_recording())
-            self.assertEqual(len(self.span_exporter.get_finished_spans()), 0)
-
-        (span,) = self.span_exporter.get_finished_spans()
-        self.assertEqual(span.status.status_code, StatusCode.UNSET)
-
-    def test_nested_tool_enrichment_applies_tool_type_to_span(self) -> None:
-        with self.handler.tool("root-tool"):
-            with self.handler.tool("root-tool", tool_type="function") as inner:
-                self.assertIsInstance(inner, SuppressedToolInvocation)
-        (span,) = self.span_exporter.get_finished_spans()
-        self.assertEqual(
-            span.attributes.get(GenAI.GEN_AI_TOOL_TYPE), "function"
-        )
-
-    def test_nested_tool_different_name_not_suppressed_and_context_restored(
-        self,
-    ) -> None:
-        with self.handler.tool("outer-tool") as outer:
-            self.assertIsInstance(outer, ToolInvocation)
-            self.assertNotIsInstance(outer, SuppressedToolInvocation)
-            outer_data = get_value(TOOL_CONTEXT_KEY)
-            self.assertIsInstance(outer_data, ToolData)
-            self.assertEqual(outer_data.tool_name, "outer-tool")
-
-            with self.handler.tool("inner-tool") as inner:
-                self.assertIsInstance(inner, ToolInvocation)
-                self.assertNotIsInstance(inner, SuppressedToolInvocation)
-                inner_data = get_value(TOOL_CONTEXT_KEY)
-                self.assertIsInstance(inner_data, ToolData)
-                self.assertEqual(inner_data.tool_name, "inner-tool")
-
-            # After inner tool exits, outer tool context is restored
-            restored_data = get_value(TOOL_CONTEXT_KEY)
-            self.assertIs(restored_data, outer_data)
-            self.assertEqual(restored_data.tool_name, "outer-tool")
-
-        # After outer tool exits, context is cleared
-        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
-        spans = self.span_exporter.get_finished_spans()
-        self.assertEqual(len(spans), 2)
-        span_names = [s.name for s in spans]
-        self.assertEqual(
-            span_names, ["execute_tool inner-tool", "execute_tool outer-tool"]
-        )
-
-    def test_nested_tool_inside_local_agent_not_suppressed(self) -> None:
-        with self.handler.tool("search") as outer_tool:
-            self.assertIsInstance(outer_tool, ToolInvocation)
-            self.assertNotIsInstance(outer_tool, SuppressedToolInvocation)
-            with self.handler.invoke_local_agent(
-                agent_name="search-agent"
-            ) as agent:
-                self.assertIsInstance(agent, LocalAgentInvocation)
-                with self.handler.tool("search") as inner_tool:
-                    self.assertIsInstance(inner_tool, ToolInvocation)
-                    self.assertNotIsInstance(
-                        inner_tool, SuppressedToolInvocation
-                    )
-
-        spans = self.span_exporter.get_finished_spans()
-        self.assertEqual(len(spans), 3)
-        inner_tool_span, agent_span, outer_tool_span = spans
-        self.assertEqual(inner_tool_span.name, "execute_tool search")
-        self.assertEqual(agent_span.name, "invoke_agent search-agent")
-        self.assertEqual(outer_tool_span.name, "execute_tool search")
-        self.assertIsNotNone(inner_tool_span.parent)
-        self.assertIsNotNone(agent_span.parent)
-        self.assertEqual(
-            inner_tool_span.parent.span_id, agent_span.context.span_id
-        )
-        self.assertEqual(
-            agent_span.parent.span_id, outer_tool_span.context.span_id
-        )
-        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
-
-    def test_nested_tool_inside_remote_agent_not_suppressed(self) -> None:
-        with self.handler.tool("search") as outer_tool:
-            self.assertIsInstance(outer_tool, ToolInvocation)
-            self.assertNotIsInstance(outer_tool, SuppressedToolInvocation)
-            with self.handler.invoke_remote_agent(
-                provider="test-provider", agent_name="remote-search-agent"
-            ) as agent:
-                self.assertIsInstance(agent, RemoteAgentInvocation)
-                with self.handler.tool("search") as inner_tool:
-                    self.assertIsInstance(inner_tool, ToolInvocation)
-                    self.assertNotIsInstance(
-                        inner_tool, SuppressedToolInvocation
-                    )
-
-        spans = self.span_exporter.get_finished_spans()
-        self.assertEqual(len(spans), 3)
-        inner_tool_span, agent_span, outer_tool_span = spans
-        self.assertEqual(inner_tool_span.name, "execute_tool search")
-        self.assertEqual(agent_span.name, "invoke_agent remote-search-agent")
-        self.assertEqual(outer_tool_span.name, "execute_tool search")
-        self.assertIsNotNone(inner_tool_span.parent)
-        self.assertIsNotNone(agent_span.parent)
-        self.assertEqual(
-            inner_tool_span.parent.span_id, agent_span.context.span_id
-        )
-        self.assertEqual(
-            agent_span.parent.span_id, outer_tool_span.context.span_id
-        )
-        self.assertIsNone(get_value(TOOL_CONTEXT_KEY))
-
-
 class TestRetrievalContext(BaseContextTest):
     def setUp(self) -> None:
         super().setUp()
@@ -2273,6 +2038,165 @@ class TestRetrievalContext(BaseContextTest):
         )
         self.assertEqual(attrs.get(server_attributes.SERVER_PORT), 9200)
         self.assertEqual(attrs.get("gen_ai.retrieval.top_k"), 5)
+
+    def test_enrich_from_context_enriches_content_when_enabled(self) -> None:
+        with self.handler.retrieval(data_source_id="root-ds") as outer:
+            inner_data = RetrievalData(
+                capture_content=True,
+                retrieval_query_text="inner query",
+                retrieval_documents=[
+                    RetrievalDocument(id="inner-doc", score=0.1)
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+            self.assertEqual(outer.data.retrieval_query_text, "inner query")
+            self.assertEqual(
+                outer.data.retrieval_documents,
+                [RetrievalDocument(id="inner-doc", score=0.1)],
+            )
+
+    def test_enrich_from_context_drops_content_when_disabled(self) -> None:
+        with self.handler.retrieval(data_source_id="root-ds") as outer:
+            inner_data = RetrievalData(
+                capture_content=False,
+                retrieval_query_text="inner query",
+                retrieval_documents=[
+                    RetrievalDocument(id="inner-doc", score=0.1)
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+            self.assertIsNone(outer.data.retrieval_query_text)
+            self.assertIsNone(outer.data.retrieval_documents)
+
+    def test_suppressed_retrieval_content_capture_enabled_when_configured(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.retrieval(data_source_id="root-ds"):
+                data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, RetrievalData)
+                data.capture_content = True
+
+                with handler.retrieval(
+                    data_source_id="inner-ds"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedRetrievalInvocation
+                    )
+                    self.assertTrue(nested_inv.should_capture_content)
+                    nested_inv.query_text = "inner query"
+                    nested_inv.documents = [
+                        RetrievalDocument(id="inner-doc", score=0.8)
+                    ]
+
+                self.assertEqual(data.retrieval_query_text, "inner query")
+                self.assertEqual(
+                    data.retrieval_documents,
+                    [RetrievalDocument(id="inner-doc", score=0.8)],
+                )
+
+    def test_suppressed_retrieval_content_capture_disallowed_by_default(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.retrieval(data_source_id="root-ds"):
+                data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, RetrievalData)
+                self.assertFalse(data.capture_content)
+
+                with handler.retrieval(
+                    data_source_id="inner-ds"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedRetrievalInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.query_text = "inner query"
+                    nested_inv.documents = [
+                        RetrievalDocument(id="inner-doc", score=0.8)
+                    ]
+
+                self.assertIsNone(data.retrieval_query_text)
+                self.assertIsNone(data.retrieval_documents)
+
+    def test_suppressed_retrieval_content_capture_disallowed_by_env(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "NO_CONTENT"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.retrieval(data_source_id="root-ds"):
+                data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, RetrievalData)
+                data.capture_content = True
+
+                with handler.retrieval(
+                    data_source_id="inner-ds"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedRetrievalInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.query_text = "inner query"
+                    nested_inv.documents = [
+                        RetrievalDocument(id="inner-doc", score=0.8)
+                    ]
+
+                self.assertIsNone(data.retrieval_query_text)
+                self.assertIsNone(data.retrieval_documents)
+
+    def test_suppressed_retrieval_content_enrichment_from_context(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.retrieval(data_source_id="root-ds") as root_inv:
+                data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, RetrievalData)
+                data.capture_content = True
+
+                with handler.retrieval(
+                    data_source_id="inner-ds"
+                ) as nested_inv:
+                    nested_inv.query_text = "inner query"
+                    nested_inv.documents = [
+                        RetrievalDocument(id="inner-doc", score=0.8)
+                    ]
+
+            self.assertEqual(root_inv.query_text, "inner query")
+            self.assertEqual(
+                root_inv.documents,
+                [RetrievalDocument(id="inner-doc", score=0.8)],
+            )
 
 
 class TestFetchResponseContext(BaseContextTest):
@@ -2475,3 +2399,300 @@ class TestFetchResponseContext(BaseContextTest):
         self.assertNotIn(
             "gen_ai.client.operation.time_per_output_chunk", metrics
         )
+
+    def test_enrich_from_context_enriches_content_when_enabled(self) -> None:
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as outer:
+            expected_msgs = [
+                OutputMessage(role="assistant", parts=[TextPart("inner out")])
+            ]
+            inner_data = FetchResponseData(
+                capture_content=True,
+                output_messages=expected_msgs,
+            )
+            outer.enrich_from_context(inner_data)
+            self.assertEqual(outer.data.output_messages, expected_msgs)
+
+    def test_enrich_from_context_drops_content_when_disabled(self) -> None:
+        with self.handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as outer:
+            inner_data = FetchResponseData(
+                capture_content=False,
+                output_messages=[
+                    OutputMessage(
+                        role="assistant", parts=[TextPart("inner out")]
+                    )
+                ],
+            )
+            outer.enrich_from_context(inner_data)
+            self.assertEqual(outer.data.output_messages, [])
+
+    def test_suppressed_fetch_response_content_capture_enabled_when_configured(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.fetch_response("openai", response_id="resp-root"):
+                data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, FetchResponseData)
+                data.capture_content = True
+
+                with handler.fetch_response(
+                    "openai", response_id="resp-root"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedFetchResponseInvocation
+                    )
+                    self.assertTrue(nested_inv.should_capture_content)
+                    expected_outputs = [
+                        OutputMessage(
+                            role="assistant",
+                            parts=[TextPart(content="inner output")],
+                        )
+                    ]
+                    nested_inv.output_messages = expected_outputs
+
+                self.assertEqual(data.output_messages, expected_outputs)
+
+    def test_suppressed_fetch_response_content_capture_disallowed_by_default(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.fetch_response("openai", response_id="resp-root"):
+                data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, FetchResponseData)
+                self.assertFalse(data.capture_content)
+
+                with handler.fetch_response(
+                    "openai", response_id="resp-root"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedFetchResponseInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.output_messages = [
+                        OutputMessage(
+                            role="assistant",
+                            parts=[TextPart(content="inner output")],
+                        )
+                    ]
+
+                self.assertIsNone(data.output_messages)
+
+    def test_suppressed_fetch_response_content_capture_disallowed_by_env(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "NO_CONTENT"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.fetch_response("openai", response_id="resp-root"):
+                data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, FetchResponseData)
+                data.capture_content = True
+
+                with handler.fetch_response(
+                    "openai", response_id="resp-root"
+                ) as nested_inv:
+                    self.assertIsInstance(
+                        nested_inv, SuppressedFetchResponseInvocation
+                    )
+                    self.assertFalse(nested_inv.should_capture_content)
+                    nested_inv.output_messages = [
+                        OutputMessage(
+                            role="assistant",
+                            parts=[TextPart(content="inner output")],
+                        )
+                    ]
+
+                self.assertIsNone(data.output_messages)
+
+    def test_suppressed_fetch_response_content_enrichment_from_context(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "SPAN_ONLY"},
+        ):
+            handler = TelemetryHandler(
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+            )
+            with handler.fetch_response(
+                "openai", response_id="resp-root"
+            ) as root_inv:
+                data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+                self.assertIsNotNone(data)
+                assert isinstance(data, FetchResponseData)
+                data.capture_content = True
+
+                with handler.fetch_response(
+                    "openai", response_id="resp-root"
+                ) as nested_inv:
+                    nested_inv.output_messages = [
+                        OutputMessage(
+                            role="assistant",
+                            parts=[TextPart(content="inner output")],
+                        )
+                    ]
+
+            self.assertEqual(len(root_inv.output_messages), 1)
+            part_out = root_inv.output_messages[0].parts[0]
+            assert isinstance(part_out, TextPart)
+            self.assertEqual(part_out.content, "inner output")
+
+    def test_suppressed_fetch_response_upload_completion_called_when_configured(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as root_inv:
+            data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+            self.assertIsNotNone(data)
+            assert isinstance(data, FetchResponseData)
+            data.upload_completion = True
+
+            with handler.fetch_response(
+                "openai", response_id="resp-root"
+            ) as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedFetchResponseInvocation
+                )
+                self.assertTrue(nested_inv.should_capture_content)
+                expected_outputs = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="hi inner")]
+                    )
+                ]
+                nested_inv.output_messages = expected_outputs
+                nested_inv.stop()
+
+                hook.on_completion.assert_called_once()
+                kwargs = hook.on_completion.call_args.kwargs
+                self.assertEqual(kwargs["inputs"], [])
+                self.assertEqual(kwargs["outputs"], expected_outputs)
+                self.assertIs(kwargs["span"], root_inv.span)
+
+    def test_suppressed_fetch_response_upload_completion_not_called_by_default(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.fetch_response("openai", response_id="resp-root"):
+            with handler.fetch_response(
+                "openai", response_id="resp-root"
+            ) as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedFetchResponseInvocation
+                )
+                self.assertFalse(nested_inv.should_capture_content)
+                nested_inv.output_messages = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="hi inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            hook.on_completion.assert_not_called()
+
+    def test_suppressed_fetch_response_upload_completion_without_capturing_to_context(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.fetch_response("openai", response_id="resp-root"):
+            data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+            self.assertIsNotNone(data)
+            assert isinstance(data, FetchResponseData)
+            data.upload_completion = True
+            data.capture_content = False
+
+            with handler.fetch_response(
+                "openai", response_id="resp-root"
+            ) as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedFetchResponseInvocation
+                )
+                self.assertTrue(nested_inv.should_capture_content)
+                nested_inv.output_messages = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="hi inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            hook.on_completion.assert_called_once()
+            self.assertIsNone(data.output_messages)
+
+    def test_suppressed_fetch_response_upload_completion_called_on_fail(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as root_inv:
+            data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+            self.assertIsNotNone(data)
+            assert isinstance(data, FetchResponseData)
+            data.upload_completion = True
+
+            nested_inv = handler.fetch_response(
+                "openai", response_id="resp-root"
+            )
+            self.assertIsInstance(
+                nested_inv, SuppressedFetchResponseInvocation
+            )
+            expected_outputs = [
+                OutputMessage(
+                    role="assistant", parts=[TextPart(content="hi inner")]
+                )
+            ]
+            nested_inv.output_messages = expected_outputs
+            nested_inv.fail(RuntimeError("inner error"))
+
+            hook.on_completion.assert_called_once()
+            kwargs = hook.on_completion.call_args.kwargs
+            self.assertEqual(kwargs["inputs"], [])
+            self.assertEqual(kwargs["outputs"], expected_outputs)
+            self.assertIs(kwargs["span"], root_inv.span)

@@ -19,11 +19,9 @@ from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
     _ContextData,
+    _resolve_suppressed_content_and_hook,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import RetrievalDocument
 from opentelemetry.util.genai.utils import (
     ContentCapturingMode,
@@ -202,15 +200,27 @@ class RetrievalInvocation(GenAIInvocation):
         """Enrich invocation attributes from context data published by inner invocations.
 
         Outer (root) attributes take precedence over inner values. Inner
-        invocations never override content capture fields.
+        invocations never override content capture fields unless explicitly enabled.
         """
         retrieval_query_text = self.data.retrieval_query_text
         retrieval_documents = self.data.retrieval_documents
 
         self.data.merge(data, overwrite=False)
 
-        self.data.retrieval_query_text = retrieval_query_text
-        self.data.retrieval_documents = retrieval_documents
+        if data.capture_content:
+            self.data.retrieval_query_text = (
+                retrieval_query_text
+                if retrieval_query_text is not None
+                else data.retrieval_query_text
+            )
+            self.data.retrieval_documents = (
+                retrieval_documents
+                if retrieval_documents is not None
+                else data.retrieval_documents
+            )
+        else:
+            self.data.retrieval_query_text = retrieval_query_text
+            self.data.retrieval_documents = retrieval_documents
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # data_source_id intentionally excluded — high cardinality
@@ -302,17 +312,26 @@ class SuppressedRetrievalInvocation(RetrievalInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
     ) -> None:
+        ctx_data = get_value(CLIENT_RETRIEVAL_CONTEXT_KEY, context=context)
+        (
+            self._capture_content_to_context,
+            _upload_completion,
+            effective_content_mode,
+            effective_completion_hook,
+        ) = _resolve_suppressed_content_and_hook(
+            ctx_data, content_capturing_mode, completion_hook
+        )
         super().__init__(
             tracer,
             instruments,
             logger,
-            _NoOpCompletionHook(),
+            effective_completion_hook,
             data_source_id=data_source_id,
             provider=provider,
             request_model=request_model,
             server_address=server_address,
             server_port=server_port,
-            content_capturing_mode=ContentCapturingMode.NO_CONTENT,
+            content_capturing_mode=effective_content_mode,
             start_span=False,
             context=context,
             _attach_to_context=_attach_to_context,
@@ -322,6 +341,12 @@ class SuppressedRetrievalInvocation(RetrievalInvocation):
         """Publish invocation attributes to the active retrieval context."""
         self.data.attributes = self.attributes
         self.data.metric_attributes = self.metric_attributes
+
+        # Prevent inner content from merging into context when content capture is off.
+        if not self._capture_content_to_context:
+            self.data.retrieval_query_text = None
+            self.data.retrieval_documents = None
+
         data.merge(self.data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:

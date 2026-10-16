@@ -39,7 +39,7 @@ Nested Invocation Suppression and Context Enrichment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When an operation runs inside an active operation of the same type, nested spans, metrics,
-and events are suppressed to prevent duplicate telemetry. Agent and workflow invocations are
+and events are suppressed to prevent duplicate telemetry. Agent, workflow, and tool invocations are
 exempt because those are usually legitimately nested.
 
 When using ``TelemetryHandler`` directly, you get this behavior for free—the outer invocation
@@ -97,7 +97,6 @@ Exported from ``opentelemetry.util.genai.invocation``:
 - Embedding: ``CLIENT_EMBEDDING_CONTEXT_KEY``, ``EmbeddingData``
 - Fetch Response: ``CLIENT_FETCH_RESPONSE_CONTEXT_KEY``, ``FetchResponseData``
 - Retrieval: ``CLIENT_RETRIEVAL_CONTEXT_KEY``, ``RetrievalData``
-- Tool: ``TOOL_CONTEXT_KEY``, ``ToolData``
 
 **Content capture and completion upload controls:**
 

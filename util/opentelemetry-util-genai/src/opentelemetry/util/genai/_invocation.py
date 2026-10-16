@@ -42,6 +42,7 @@ from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
+    _SafeCompletionHook,
 )
 from opentelemetry.util.genai.types import (
     Error,
@@ -64,6 +65,14 @@ _GEN_AI_PROMPT_VARIABLE_PREFIX: str = "gen_ai.prompt.variable."
 
 
 ContextToken: TypeAlias = Token[Context]
+
+__all__ = [
+    "ContextToken",
+    "GenAIInvocation",
+    "_ContextData",
+    "_resolve_suppressed_content_and_hook",
+    "get_content_attributes",
+]
 
 
 @dataclass
@@ -111,6 +120,67 @@ class _ContextData:
                 self.attributes.setdefault(k, v)
             for k, v in other.metric_attributes.items():
                 self.metric_attributes.setdefault(k, v)
+
+
+def _is_active_completion_hook(hook: CompletionHook | None) -> bool:
+    if hook is None:
+        return False
+    if isinstance(hook, _NoOpCompletionHook):
+        return False
+    if isinstance(hook, _SafeCompletionHook) and isinstance(
+        hook._wrapped, _NoOpCompletionHook
+    ):
+        return False
+    return True
+
+
+def _resolve_suppressed_content_and_hook(
+    context_data: object | None,
+    content_capturing_mode: ContentCapturingMode | None,
+    completion_hook: CompletionHook | None,
+) -> tuple[bool, bool, ContentCapturingMode, CompletionHook]:
+    """Resolve content capturing and completion hook behavior for suppressed invocations.
+
+    Returns:
+        A tuple of:
+        - capture_content_to_context (bool): Whether inner content can be published to context.
+        - upload_completion (bool): Whether inner completion hook upload should be executed.
+        - effective_content_mode (ContentCapturingMode): Effective mode passed to super().__init__.
+        - effective_completion_hook (CompletionHook): Effective hook passed to super().__init__.
+    """
+    resolved_content_mode = (
+        get_content_capturing_mode()
+        if content_capturing_mode is None
+        else content_capturing_mode
+    )
+    is_context_data = isinstance(context_data, _ContextData)
+    allow_content_capture = is_context_data and context_data.capture_content
+    env_allows_content_capture = (
+        resolved_content_mode != ContentCapturingMode.NO_CONTENT
+    )
+    capture_content_to_context = (
+        allow_content_capture and env_allows_content_capture
+    )
+    allow_upload = is_context_data and context_data.upload_completion
+    env_allows_upload = _is_active_completion_hook(completion_hook)
+    upload_completion = allow_upload and env_allows_upload
+
+    effective_content_mode = (
+        resolved_content_mode
+        if capture_content_to_context
+        else ContentCapturingMode.NO_CONTENT
+    )
+    effective_completion_hook: CompletionHook = (
+        completion_hook
+        if upload_completion and completion_hook is not None
+        else _NoOpCompletionHook()
+    )
+    return (
+        capture_content_to_context,
+        upload_completion,
+        effective_content_mode,
+        effective_completion_hook,
+    )
 
 
 class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):

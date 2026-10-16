@@ -49,7 +49,6 @@ from opentelemetry.util.genai._retrieval_invocation import (
     RetrievalInvocation,
 )
 from opentelemetry.util.genai._tool_invocation import (
-    TOOL_CONTEXT_KEY,
     ToolData,
     ToolInvocation,
 )
@@ -63,7 +62,6 @@ __all__ = [
     "CLIENT_FETCH_RESPONSE_CONTEXT_KEY",
     "CLIENT_INFERENCE_CONTEXT_KEY",
     "CLIENT_RETRIEVAL_CONTEXT_KEY",
-    "TOOL_CONTEXT_KEY",
     "AgentData",
     "AgentInvocation",
     "ContextToken",

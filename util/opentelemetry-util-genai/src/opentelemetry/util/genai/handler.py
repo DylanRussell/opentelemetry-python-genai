@@ -63,9 +63,6 @@ from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._retrieval_invocation import (
     SuppressedRetrievalInvocation,
 )
-from opentelemetry.util.genai._tool_invocation import (
-    SuppressedToolInvocation,
-)
 from opentelemetry.util.genai.completion_hook import (
     CompletionHook,
     _NoOpCompletionHook,
@@ -76,7 +73,6 @@ from opentelemetry.util.genai.invocation import (
     CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
     CLIENT_INFERENCE_CONTEXT_KEY,
     CLIENT_RETRIEVAL_CONTEXT_KEY,
-    TOOL_CONTEXT_KEY,
     EmbeddingData,
     EmbeddingInvocation,
     FetchResponseData,
@@ -87,7 +83,6 @@ from opentelemetry.util.genai.invocation import (
     RemoteAgentInvocation,
     RetrievalData,
     RetrievalInvocation,
-    ToolData,
     ToolInvocation,
     WorkflowInvocation,
 )
@@ -408,14 +403,7 @@ class TelemetryHandler:
         Recommended to set ``invocation.arguments`` and ``invocation.tool_result`` on the
         invocation object but only if `invocation.should_capture_content` is True.
         """
-        ctx_data = get_value(TOOL_CONTEXT_KEY, context=context)
-        is_suppressed = isinstance(ctx_data, ToolData) and (
-            ctx_data.tool_name is None or ctx_data.tool_name == name
-        )
-        invocation_cls: type[ToolInvocation] = (
-            SuppressedToolInvocation if is_suppressed else ToolInvocation
-        )
-        return invocation_cls(
+        return ToolInvocation(
             self._tracer,
             self._instruments,
             self._logger,
