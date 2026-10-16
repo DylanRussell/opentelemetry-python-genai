@@ -2311,3 +2311,76 @@ def test_agent_continue_run_with_user_feedback_schema(
     )
     assert len(messages) == 1
     assert messages[0]["parts"][0]["response"] == {"Satisfied?": ["Yes"]}
+
+
+def test_agent_continue_run_with_confirmation_note(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that continue_run captures confirmation_note alongside confirmed flag."""
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse, ToolExecution
+
+    agent = Agent(
+        name="test-confirm-note-agent", model=MockModel(id="mock-model")
+    )
+    tool_exec = ToolExecution(
+        tool_call_id="call_reject",
+        tool_name="drop_db",
+        confirmed=False,
+    )
+    tool_exec.confirmation_note = "Operation forbidden"
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "continue_run dispatch is not supported in this version of agno"
+        )
+    with patch(
+        "agno.agent._run.continue_run_dispatch",
+        return_value=ModelResponse(content="Cancelled"),
+    ):
+        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(messages) == 1
+    assert messages[0]["parts"][0]["response"] == {
+        "confirmed": False,
+        "confirmation_note": "Operation forbidden",
+    }
+
+
+def test_agent_continue_run_unresolved_tool_has_none_response(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that continue_run with an unresolved tool leaves response as None rather than dumping to_dict."""
+    import agno.agent
+    from agno.agent import Agent
+    from agno.models.response import ModelResponse, ToolExecution
+
+    agent = Agent(name="test-none-agent", model=MockModel(id="mock-model"))
+    tool_exec = ToolExecution(
+        tool_call_id="call_empty",
+        tool_name="empty_tool",
+    )
+    if not hasattr(agno.agent, "_run"):
+        pytest.skip(
+            "continue_run dispatch is not supported in this version of agno"
+        )
+    with patch(
+        "agno.agent._run.continue_run_dispatch",
+        return_value=ModelResponse(content="Done"),
+    ):
+        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert len(messages) == 1
+    assert messages[0]["parts"][0]["response"] is None

@@ -499,6 +499,8 @@ def _set_continue_invocation_input(
             # this continued run (emitting an execute_tool child span).
             if resp is None and tool_exec.confirmed is not None:
                 resp = {"confirmed": tool_exec.confirmed}
+                if getattr(tool_exec, "confirmation_note", None):
+                    resp["confirmation_note"] = tool_exec.confirmation_note
             elif resp is None:
                 input_schema = getattr(tool_exec, "user_input_schema", None)
                 feedback_schema = getattr(
@@ -516,9 +518,6 @@ def _set_continue_invocation_input(
                         for q in feedback_schema
                         if getattr(q, "selected_options", None) is not None
                     }
-                else:
-                    to_dict = getattr(tool_exec, "to_dict", None)
-                    resp = to_dict() if callable(to_dict) else str(tool_exec)
 
             messages.append(
                 InputMessage(
