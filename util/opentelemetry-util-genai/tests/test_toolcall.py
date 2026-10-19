@@ -26,6 +26,7 @@ from opentelemetry.trace import (
     set_span_in_context,
 )
 from opentelemetry.util.genai._instruments import _Instruments
+from opentelemetry.util.genai._tool_invocation import ToolData
 from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.environment_variables import (
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT,
@@ -33,7 +34,6 @@ from opentelemetry.util.genai.environment_variables import (
 from opentelemetry.util.genai.handler import TelemetryHandler
 from opentelemetry.util.genai.invocation import (
     GenAIInvocation,
-    ToolData,
     ToolInvocation,
 )
 from opentelemetry.util.genai.types import (
@@ -693,20 +693,6 @@ def test_tool_invocation_attach_to_context_false():
     )
     assert tool_span.parent is not None
     assert tool_span.parent.span_id == ambient_span.get_span_context().span_id
-
-
-def test_tool_context_data_merge():
-    data1 = ToolData(tool_name="tool-1", tool_type="function")
-    data2 = ToolData(
-        tool_name="tool-2",
-        tool_call_id="call-123",
-        tool_description="desc",
-    )
-    data1.merge(data2, overwrite=True)
-    assert data1.tool_name == "tool-2"
-    assert data1.tool_type == "function"
-    assert data1.tool_call_id == "call-123"
-    assert data1.tool_description == "desc"
 
 
 def test_property_delegation_to_data():

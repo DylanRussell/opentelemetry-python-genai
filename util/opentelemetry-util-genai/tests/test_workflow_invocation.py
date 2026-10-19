@@ -50,7 +50,7 @@ class TestWorkflowInvocation(unittest.TestCase):
         assert invocation._name == "customer_support_pipeline"
 
     def test_property_delegation_to_data(self):
-        from opentelemetry.util.genai.invocation import WorkflowData
+        from opentelemetry.util.genai._workflow_invocation import WorkflowData
 
         inv = self.handler.workflow(name="customer_support_pipeline")
         self.assertIsInstance(inv.data, WorkflowData)

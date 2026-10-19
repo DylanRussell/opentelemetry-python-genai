@@ -18,7 +18,6 @@ Users can import everything from this single module:
 """
 
 from opentelemetry.util.genai._agent_invocation import (
-    AgentData,
     AgentInvocation,
     LocalAgentInvocation,
     RemoteAgentInvocation,
@@ -49,11 +48,9 @@ from opentelemetry.util.genai._retrieval_invocation import (
     RetrievalInvocation,
 )
 from opentelemetry.util.genai._tool_invocation import (
-    ToolData,
     ToolInvocation,
 )
 from opentelemetry.util.genai._workflow_invocation import (
-    WorkflowData,
     WorkflowInvocation,
 )
 
@@ -62,7 +59,6 @@ __all__ = [
     "CLIENT_FETCH_RESPONSE_CONTEXT_KEY",
     "CLIENT_INFERENCE_CONTEXT_KEY",
     "CLIENT_RETRIEVAL_CONTEXT_KEY",
-    "AgentData",
     "AgentInvocation",
     "ContextToken",
     "EmbeddingData",
@@ -77,8 +73,6 @@ __all__ = [
     "RemoteAgentInvocation",
     "RetrievalData",
     "RetrievalInvocation",
-    "ToolData",
     "ToolInvocation",
-    "WorkflowData",
     "WorkflowInvocation",
 ]

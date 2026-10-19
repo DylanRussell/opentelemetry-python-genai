@@ -20,7 +20,6 @@ from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
-    _ContextData,
     get_content_attributes,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
@@ -43,7 +42,7 @@ _GEN_AI_REQUEST_PREVIOUS_RESPONSE_ID: Final = (
 
 
 @dataclass
-class AgentData(_ContextData):
+class AgentData:
     """Typed data container for an agent invocation."""
 
     agent_id: str | None = None
@@ -111,7 +110,7 @@ class AgentInvocation(GenAIInvocation, ABC):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
-        data: AgentData | None = None,
+        _data: AgentData | None = None,
     ) -> None:
         _operation_name = GenAI.GenAiOperationNameValues.INVOKE_AGENT.value
         if start_attributes is None:
@@ -123,8 +122,8 @@ class AgentInvocation(GenAIInvocation, ABC):
                 )
                 if v is not None
             }
-        if data is None:
-            data = AgentData(
+        if _data is None:
+            _data = AgentData(
                 agent_name=agent_name,
                 request_model=request_model,
                 conversation_id=conversation_id,
@@ -132,7 +131,7 @@ class AgentInvocation(GenAIInvocation, ABC):
                 output_messages=[],
                 system_instructions=[],
             )
-        self.data: AgentData = data
+        self.data: AgentData = _data
         super().__init__(
             tracer,
             instruments,
@@ -433,7 +432,6 @@ class LocalAgentInvocation(AgentInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
-        data: AgentData | None = None,
     ) -> None:
         super().__init__(
             tracer,
@@ -447,7 +445,6 @@ class LocalAgentInvocation(AgentInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
-            data=data,
         )
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
@@ -496,7 +493,6 @@ class RemoteAgentInvocation(AgentInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
-        data: AgentData | None = None,
     ) -> None:
         start_attributes: dict[str, AttributeValue] = {
             k: v
@@ -509,18 +505,17 @@ class RemoteAgentInvocation(AgentInvocation):
             )
             if v is not None
         }
-        if data is None:
-            data = AgentData(
-                agent_name=agent_name,
-                provider_name=provider,
-                request_model=request_model,
-                server_address=server_address,
-                server_port=server_port,
-                conversation_id=conversation_id,
-                input_messages=[],
-                output_messages=[],
-                system_instructions=[],
-            )
+        data = AgentData(
+            agent_name=agent_name,
+            provider_name=provider,
+            request_model=request_model,
+            server_address=server_address,
+            server_port=server_port,
+            conversation_id=conversation_id,
+            input_messages=[],
+            output_messages=[],
+            system_instructions=[],
+        )
         super().__init__(
             tracer,
             instruments,
@@ -534,7 +529,7 @@ class RemoteAgentInvocation(AgentInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
-            data=data,
+            _data=data,
         )
         self._provider: str = provider
         self._server_address: str | None = server_address

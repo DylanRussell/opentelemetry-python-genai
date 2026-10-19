@@ -17,7 +17,6 @@ from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
-    _ContextData,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import (
@@ -32,7 +31,7 @@ from opentelemetry.util.types import AttributeValue
 
 
 @dataclass
-class WorkflowData(_ContextData):
+class WorkflowData:
     """Typed data container for a workflow invocation."""
 
     workflow_name: str | None = None
@@ -68,21 +67,18 @@ class WorkflowInvocation(GenAIInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
-        data: WorkflowData | None = None,
     ) -> None:
         """Use handler.workflow(name) rather than calling this directly."""
         _operation_name = GenAI.GenAiOperationNameValues.INVOKE_WORKFLOW.value
         start_attributes: dict[str, AttributeValue] = (
             {GenAI.GEN_AI_WORKFLOW_NAME: name} if name is not None else {}
         )
-        if data is None:
-            data = WorkflowData(
-                workflow_name=name,
-                conversation_id=conversation_id,
-                input_messages=[],
-                output_messages=[],
-            )
-        self.data: WorkflowData = data
+        self.data: WorkflowData = WorkflowData(
+            workflow_name=name,
+            conversation_id=conversation_id,
+            input_messages=[],
+            output_messages=[],
+        )
         super().__init__(
             tracer,
             instruments,

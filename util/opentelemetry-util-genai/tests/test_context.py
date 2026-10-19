@@ -1616,6 +1616,52 @@ class TestInferenceContext(BaseContextTest):
             # Inner stop did not call completion hook
             hook.on_completion.assert_not_called()
 
+    def test_nested_inference_upload_completion_called_only_once_by_outer(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.inference("outer", request_model="m1") as root_inv:
+            data = get_inference_context_data()
+            self.assertIsNotNone(data)
+            assert data is not None
+            self.assertFalse(data.capture_content)
+            self.assertFalse(data.upload_completion)
+
+            with handler.inference("inner", request_model="m2") as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedInferenceInvocation
+                )
+                self.assertFalse(nested_inv.should_capture_content)
+                nested_inv.output_messages = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            # Inner stop did not call completion hook
+            hook.on_completion.assert_not_called()
+            # Context flags remain False after inner publishes to context
+            self.assertFalse(data.capture_content)
+            self.assertFalse(data.upload_completion)
+
+            root_inv.output_messages = [
+                OutputMessage(
+                    role="assistant", parts=[TextPart(content="outer")]
+                )
+            ]
+
+        # Outer invocation called completion hook once
+        hook.on_completion.assert_called_once()
+        self.assertIs(
+            hook.on_completion.call_args.kwargs["span"], root_inv.span
+        )
+
     def test_suppressed_inference_upload_completion_without_capturing_to_context(
         self,
     ) -> None:
@@ -2626,6 +2672,56 @@ class TestFetchResponseContext(BaseContextTest):
                 nested_inv.stop()
 
             hook.on_completion.assert_not_called()
+
+    def test_nested_fetch_response_upload_completion_called_only_once_by_outer(
+        self,
+    ) -> None:
+        hook = MagicMock()
+        handler = TelemetryHandler(
+            tracer_provider=self.tracer_provider,
+            meter_provider=self.meter_provider,
+            completion_hook=hook,
+        )
+        with handler.fetch_response(
+            "openai", response_id="resp-root"
+        ) as root_inv:
+            data = get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY)
+            self.assertIsNotNone(data)
+            assert isinstance(data, FetchResponseData)
+            self.assertFalse(data.capture_content)
+            self.assertFalse(data.upload_completion)
+
+            with handler.fetch_response(
+                "openai", response_id="resp-root"
+            ) as nested_inv:
+                self.assertIsInstance(
+                    nested_inv, SuppressedFetchResponseInvocation
+                )
+                self.assertFalse(nested_inv.should_capture_content)
+                nested_inv.output_messages = [
+                    OutputMessage(
+                        role="assistant", parts=[TextPart(content="inner")]
+                    )
+                ]
+                nested_inv.stop()
+
+            # Inner stop did not call completion hook
+            hook.on_completion.assert_not_called()
+            # Context flags remain False after inner publishes to context
+            self.assertFalse(data.capture_content)
+            self.assertFalse(data.upload_completion)
+
+            root_inv.output_messages = [
+                OutputMessage(
+                    role="assistant", parts=[TextPart(content="outer")]
+                )
+            ]
+
+        # Outer invocation called completion hook once
+        hook.on_completion.assert_called_once()
+        self.assertIs(
+            hook.on_completion.call_args.kwargs["span"], root_inv.span
+        )
 
     def test_suppressed_fetch_response_upload_completion_without_capturing_to_context(
         self,

@@ -16,7 +16,6 @@ from opentelemetry.util.genai._instruments import _Instruments
 from opentelemetry.util.genai._invocation import (
     Error,
     GenAIInvocation,
-    _ContextData,
     _json_dumps_unless_str,
 )
 from opentelemetry.util.genai.completion_hook import CompletionHook
@@ -25,7 +24,7 @@ from opentelemetry.util.types import AnyValue, AttributeValue
 
 
 @dataclass
-class ToolData(_ContextData):
+class ToolData:
     """Typed data container for a tool invocation."""
 
     tool_name: str | None = None
@@ -80,7 +79,6 @@ class ToolInvocation(GenAIInvocation):
         content_capturing_mode: ContentCapturingMode | None = None,
         context: Context | None = None,
         _attach_to_context: bool = True,
-        data: ToolData | None = None,
     ) -> None:
         """Use handler.tool(name) instead of calling this directly.
 
@@ -98,15 +96,13 @@ class ToolInvocation(GenAIInvocation):
             )
             if v is not None
         }
-        if data is None:
-            data = ToolData(
-                tool_name=name,
-                tool_type=tool_type,
-                agent_name=agent_name,
-                tool_call_id=tool_call_id,
-                tool_description=tool_description,
-            )
-        self.data: ToolData = data
+        self.data: ToolData = ToolData(
+            tool_name=name,
+            tool_type=tool_type,
+            agent_name=agent_name,
+            tool_call_id=tool_call_id,
+            tool_description=tool_description,
+        )
         super().__init__(
             tracer,
             instruments,

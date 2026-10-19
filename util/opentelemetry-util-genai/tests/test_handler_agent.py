@@ -290,7 +290,7 @@ class TestLocalAgentInvocation(unittest.TestCase):  # pylint: disable=too-many-p
         assert span.attributes[GenAI.GEN_AI_AGENT_NAME] == "Constructor Agent"
 
     def test_property_delegation_to_data(self):
-        from opentelemetry.util.genai.invocation import AgentData
+        from opentelemetry.util.genai._agent_invocation import AgentData
 
         inv = self.handler.invoke_local_agent(
             agent_name="Delegation Agent", request_model="gpt-4o"
@@ -653,7 +653,7 @@ class TestRemoteAgentInvocation(unittest.TestCase):
         assert attrs[GenAI.GEN_AI_REQUEST_MODEL] == "gpt-4"
 
     def test_property_delegation_to_data(self):
-        from opentelemetry.util.genai.invocation import AgentData
+        from opentelemetry.util.genai._agent_invocation import AgentData
 
         inv = self.handler.invoke_remote_agent(
             "openai",
