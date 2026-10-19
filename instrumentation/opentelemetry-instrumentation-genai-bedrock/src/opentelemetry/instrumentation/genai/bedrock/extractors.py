@@ -993,9 +993,7 @@ def extract_invoke_inline_agent_request(
 
     guardrail_cfg = api_params.get("guardrailConfiguration")
     if _is_dict(guardrail_cfg):
-        guardrail_id = guardrail_cfg.get(
-            "guardrailIdentifier"
-        ) or guardrail_cfg.get("guardrailId")
+        guardrail_id = guardrail_cfg.get("guardrailIdentifier")
         if guardrail_id:
             invocation.attributes[aws_attributes.AWS_BEDROCK_GUARDRAIL_ID] = (
                 str(guardrail_id)

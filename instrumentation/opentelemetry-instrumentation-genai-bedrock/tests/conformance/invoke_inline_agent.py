@@ -46,6 +46,25 @@ class InvokeInlineAgentScenario(Scenario):
                     sessionId="conformance-inline-session-1",
                     inputText="What is the capital of France?",
                     agentName="test-inline-agent",
+                    actionGroups=[
+                        {
+                            "actionGroupName": "CustomTools",
+                            "functionSchema": {
+                                "functions": [
+                                    {
+                                        "name": "get_weather",
+                                        "description": "Get weather for a city",
+                                        "parameters": {
+                                            "city": {
+                                                "type": "string",
+                                                "required": True,
+                                            },
+                                        },
+                                    }
+                                ]
+                            },
+                        },
+                    ],
                 )
                 for _ in response["completion"]:
                     pass
