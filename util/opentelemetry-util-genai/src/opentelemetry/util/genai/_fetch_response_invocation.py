@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 from opentelemetry._logs import Logger
@@ -63,12 +63,6 @@ class FetchResponseData(_ContextData):
         Sequence[SystemInstructionPart] | Sequence[MessagePart] | None
     ) = None
     tool_definitions: list[ToolDefinition] | None = None
-    attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
-    metric_attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
 
 
 class FetchResponseInvocation(GenAIInvocation):
@@ -141,7 +135,7 @@ class FetchResponseInvocation(GenAIInvocation):
             )
             if v is not None
         }
-        self.data: FetchResponseData = FetchResponseData(
+        self._data: FetchResponseData = FetchResponseData(
             provider_name=provider,
             response_id=response_id,
             request_stream=request_stream,
@@ -166,8 +160,8 @@ class FetchResponseInvocation(GenAIInvocation):
             start_span=start_span,
             context=context,
             _attach_to_context=_attach_to_context,
-            attributes=self.data.attributes,
-            metric_attributes=self.data.metric_attributes,
+            attributes=self._data.attributes,
+            metric_attributes=self._data.metric_attributes,
             context_key=CLIENT_FETCH_RESPONSE_CONTEXT_KEY,
             dataclass_class_object=FetchResponseData,
         )
@@ -176,102 +170,102 @@ class FetchResponseInvocation(GenAIInvocation):
         self._request_stream = request_stream
         self._server_address: str | None = server_address
         self._server_port: int | None = server_port
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
     @property
     def response_id(self) -> str:
         """The identifier of the response being fetched."""
-        return self.data.response_id or self._response_id
+        return self._data.response_id or self._response_id
 
     @property
     def provider(self) -> str | None:
-        return self.data.provider_name
+        return self._data.provider_name
 
     @property
     def server_address(self) -> str | None:
-        return self.data.server_address
+        return self._data.server_address
 
     @property
     def server_port(self) -> int | None:
-        return self.data.server_port
+        return self._data.server_port
 
     @property
     def request_stream(self) -> bool | None:
         return (
             self._request_stream
             if self._request_stream is not None
-            else self.data.request_stream
+            else self._data.request_stream
         )
 
     @request_stream.setter
     def request_stream(self, value: bool | None) -> None:
         self._request_stream = value
-        self.data.request_stream = value
+        self._data.request_stream = value
 
     @property
     def response_model_name(self) -> str | None:
-        return self.data.response_model
+        return self._data.response_model
 
     @response_model_name.setter
     def response_model_name(self, value: str | None) -> None:
-        self.data.response_model = value
+        self._data.response_model = value
 
     @property
     def response_status(self) -> str | None:
-        return self.data.response_status
+        return self._data.response_status
 
     @response_status.setter
     def response_status(self, value: str | None) -> None:
-        self.data.response_status = value
+        self._data.response_status = value
 
     @property
     def finish_reasons(self) -> list[str] | None:
-        return self.data.response_finish_reasons
+        return self._data.response_finish_reasons
 
     @finish_reasons.setter
     def finish_reasons(self, value: Sequence[str] | None) -> None:
-        self.data.response_finish_reasons = (
+        self._data.response_finish_reasons = (
             list(value) if value is not None else None
         )
 
     @property
     def stream_cursor(self) -> str | None:
-        return self.data.request_stream_cursor
+        return self._data.request_stream_cursor
 
     @stream_cursor.setter
     def stream_cursor(self, value: str | None) -> None:
-        self.data.request_stream_cursor = value
+        self._data.request_stream_cursor = value
 
     @property
     def output_messages(self) -> list[OutputMessage]:
-        if isinstance(self.data.output_messages, list):
-            return self.data.output_messages
+        if isinstance(self._data.output_messages, list):
+            return self._data.output_messages
         messages = (
-            list(self.data.output_messages)
-            if self.data.output_messages
+            list(self._data.output_messages)
+            if self._data.output_messages
             else []
         )
-        self.data.output_messages = messages
+        self._data.output_messages = messages
         return messages
 
     @output_messages.setter
     def output_messages(self, value: Sequence[OutputMessage]) -> None:
-        self.data.output_messages = value
+        self._data.output_messages = value
 
     @property
     def system_instruction(
         self,
     ) -> list[SystemInstructionPart] | list[MessagePart]:
         """System instructions for the model. Passing ``MessagePart`` is deprecated; use ``SystemInstructionPart``."""
-        if isinstance(self.data.system_instructions, list):
-            return self.data.system_instructions
+        if isinstance(self._data.system_instructions, list):
+            return self._data.system_instructions
         instructions = (
-            list(self.data.system_instructions)
-            if self.data.system_instructions
+            list(self._data.system_instructions)
+            if self._data.system_instructions
             else []
         )
-        self.data.system_instructions = instructions
+        self._data.system_instructions = instructions
         return instructions
 
     @system_instruction.setter
@@ -279,17 +273,19 @@ class FetchResponseInvocation(GenAIInvocation):
         self,
         value: Sequence[SystemInstructionPart] | Sequence[MessagePart] | None,
     ) -> None:
-        self.data.system_instructions = (
+        self._data.system_instructions = (
             list(value) if value is not None else None
         )
 
     @property
     def tool_definitions(self) -> list[ToolDefinition] | None:
-        return self.data.tool_definitions
+        return self._data.tool_definitions
 
     @tool_definitions.setter
     def tool_definitions(self, value: Sequence[ToolDefinition] | None) -> None:
-        self.data.tool_definitions = list(value) if value is not None else None
+        self._data.tool_definitions = (
+            list(value) if value is not None else None
+        )
 
     def enrich_from_context(self, data: FetchResponseData) -> None:
         """Enrich invocation attributes from context data published by inner invocations.
@@ -297,39 +293,39 @@ class FetchResponseInvocation(GenAIInvocation):
         Outer (root) attributes take precedence over inner values. Inner
         invocations never override content capture fields unless explicitly enabled.
         """
-        output_messages = self.data.output_messages
-        system_instructions = self.data.system_instructions
-        tool_definitions = self.data.tool_definitions
+        output_messages = self._data.output_messages
+        system_instructions = self._data.system_instructions
+        tool_definitions = self._data.tool_definitions
 
-        self.data.merge(data, overwrite=False)
+        self._data.merge(data, overwrite=False)
 
         if data.capture_content:
-            self.data.output_messages = (
+            self._data.output_messages = (
                 output_messages if output_messages else data.output_messages
             )
-            self.data.system_instructions = (
+            self._data.system_instructions = (
                 system_instructions
                 if system_instructions
                 else data.system_instructions
             )
-            self.data.tool_definitions = (
+            self._data.tool_definitions = (
                 tool_definitions if tool_definitions else data.tool_definitions
             )
         else:
-            self.data.output_messages = output_messages
-            self.data.system_instructions = system_instructions
-            self.data.tool_definitions = tool_definitions
+            self._data.output_messages = output_messages
+            self._data.system_instructions = system_instructions
+            self._data.tool_definitions = tool_definitions
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # response_id intentionally excluded — high cardinality.
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
-            (GenAI.GEN_AI_RESPONSE_MODEL, self.data.response_model),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (GenAI.GEN_AI_RESPONSE_MODEL, self._data.response_model),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
         )
         attrs: dict[str, AttributeValue] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
-            GenAI.GEN_AI_PROVIDER_NAME: self.data.provider_name
+            GenAI.GEN_AI_PROVIDER_NAME: self._data.provider_name
             or self._provider,
             **{k: v for k, v in optional_attrs if v is not None},
         }
@@ -340,17 +336,17 @@ class FetchResponseInvocation(GenAIInvocation):
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
             (
                 GenAI.GEN_AI_PROVIDER_NAME,
-                self.data.provider_name or self._provider,
+                self._data.provider_name or self._provider,
             ),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
-            (_GEN_AI_REQUEST_STREAM_CURSOR, self.data.request_stream_cursor),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
+            (_GEN_AI_REQUEST_STREAM_CURSOR, self._data.request_stream_cursor),
             (
                 GenAI.GEN_AI_RESPONSE_FINISH_REASONS,
-                self.data.response_finish_reasons or None,
+                self._data.response_finish_reasons or None,
             ),
-            (GenAI.GEN_AI_RESPONSE_MODEL, self.data.response_model),
-            (_GEN_AI_RESPONSE_STATUS, self.data.response_status),
+            (GenAI.GEN_AI_RESPONSE_MODEL, self._data.response_model),
+            (_GEN_AI_RESPONSE_STATUS, self._data.response_status),
         )
         return {k: v for k, v in optional_attrs if v is not None}
 
@@ -362,8 +358,8 @@ class FetchResponseInvocation(GenAIInvocation):
         )
         if isinstance(ctx_data, FetchResponseData):
             self.enrich_from_context(ctx_data)
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         attributes = self._get_attributes()
         attributes.update(
             get_content_attributes(
@@ -442,23 +438,23 @@ class SuppressedFetchResponseInvocation(FetchResponseInvocation):
 
     def _on_stream_chunk(self, chunk_at: float) -> None:
         super()._on_stream_chunk(chunk_at)
-        self.data.request_stream = True
+        self._data.request_stream = True
 
     def publish_to_context(self, data: FetchResponseData) -> None:
         """Publish invocation attributes to the active fetch response context."""
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         if self._request_stream is not None:
-            self.data.request_stream = self._request_stream
+            self._data.request_stream = self._request_stream
 
         # Prevent inner content from merging into context when content capture is off,
         # such as when messages were populated only for completion hook upload.
         if not self._capture_content_to_context:
-            self.data.output_messages = None
-            self.data.system_instructions = None
-            self.data.tool_definitions = None
+            self._data.output_messages = None
+            self._data.system_instructions = None
+            self._data.tool_definitions = None
 
-        data.merge(self.data, overwrite=True)
+        data.merge(self._data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:
         if self._finished:

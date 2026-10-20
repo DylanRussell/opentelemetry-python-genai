@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 from opentelemetry._logs import Logger
@@ -49,12 +49,6 @@ class RetrievalData(_ContextData):
     retrieval_documents: (
         Sequence[RetrievalDocument | Mapping[str, object]] | None
     ) = None
-    attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
-    metric_attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
 
 
 class RetrievalInvocation(GenAIInvocation):
@@ -107,7 +101,7 @@ class RetrievalInvocation(GenAIInvocation):
             )
             if v is not None
         }
-        self.data: RetrievalData = RetrievalData(
+        self._data: RetrievalData = RetrievalData(
             data_source_id=data_source_id,
             provider_name=provider,
             request_model=request_model,
@@ -129,8 +123,8 @@ class RetrievalInvocation(GenAIInvocation):
             start_span=start_span,
             context=context,
             _attach_to_context=_attach_to_context,
-            attributes=self.data.attributes,
-            metric_attributes=self.data.metric_attributes,
+            attributes=self._data.attributes,
+            metric_attributes=self._data.metric_attributes,
             context_key=CLIENT_RETRIEVAL_CONTEXT_KEY,
             dataclass_class_object=RetrievalData,
         )
@@ -139,44 +133,44 @@ class RetrievalInvocation(GenAIInvocation):
         self._request_model: str | None = request_model
         self._server_address: str | None = server_address
         self._server_port: int | None = server_port
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
     @property
     def data_source_id(self) -> str | None:
-        return self.data.data_source_id
+        return self._data.data_source_id
 
     @property
     def provider(self) -> str | None:
-        return self.data.provider_name
+        return self._data.provider_name
 
     @property
     def request_model(self) -> str | None:
-        return self.data.request_model
+        return self._data.request_model
 
     @property
     def server_address(self) -> str | None:
-        return self.data.server_address
+        return self._data.server_address
 
     @property
     def server_port(self) -> int | None:
-        return self.data.server_port
+        return self._data.server_port
 
     @property
     def top_k(self) -> int | None:
-        return self.data.retrieval_top_k
+        return self._data.retrieval_top_k
 
     @top_k.setter
     def top_k(self, value: int | None) -> None:
-        self.data.retrieval_top_k = value
+        self._data.retrieval_top_k = value
 
     @property
     def query_text(self) -> str | None:
-        return self.data.retrieval_query_text
+        return self._data.retrieval_query_text
 
     @query_text.setter
     def query_text(self, value: str | None) -> None:
-        self.data.retrieval_query_text = value
+        self._data.retrieval_query_text = value
 
     @property
     def documents(
@@ -187,14 +181,14 @@ class RetrievalInvocation(GenAIInvocation):
         Passing mappings is deprecated; use ``RetrievalDocument`` instead.
         Legacy mappings are still serialized unchanged.
         """
-        return self.data.retrieval_documents
+        return self._data.retrieval_documents
 
     @documents.setter
     def documents(
         self,
         value: Sequence[RetrievalDocument | Mapping[str, object]] | None,
     ) -> None:
-        self.data.retrieval_documents = value
+        self._data.retrieval_documents = value
 
     def enrich_from_context(self, data: RetrievalData) -> None:
         """Enrich invocation attributes from context data published by inner invocations.
@@ -202,33 +196,33 @@ class RetrievalInvocation(GenAIInvocation):
         Outer (root) attributes take precedence over inner values. Inner
         invocations never override content capture fields unless explicitly enabled.
         """
-        retrieval_query_text = self.data.retrieval_query_text
-        retrieval_documents = self.data.retrieval_documents
+        retrieval_query_text = self._data.retrieval_query_text
+        retrieval_documents = self._data.retrieval_documents
 
-        self.data.merge(data, overwrite=False)
+        self._data.merge(data, overwrite=False)
 
         if data.capture_content:
-            self.data.retrieval_query_text = (
+            self._data.retrieval_query_text = (
                 retrieval_query_text
                 if retrieval_query_text is not None
                 else data.retrieval_query_text
             )
-            self.data.retrieval_documents = (
+            self._data.retrieval_documents = (
                 retrieval_documents
                 if retrieval_documents is not None
                 else data.retrieval_documents
             )
         else:
-            self.data.retrieval_query_text = retrieval_query_text
-            self.data.retrieval_documents = retrieval_documents
+            self._data.retrieval_query_text = retrieval_query_text
+            self._data.retrieval_documents = retrieval_documents
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         # data_source_id intentionally excluded — high cardinality
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
-            (GenAI.GEN_AI_PROVIDER_NAME, self.data.provider_name),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (GenAI.GEN_AI_PROVIDER_NAME, self._data.provider_name),
+            (GenAI.GEN_AI_REQUEST_MODEL, self._data.request_model),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
         )
         attrs: dict[str, AttributeValue] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
@@ -246,12 +240,12 @@ class RetrievalInvocation(GenAIInvocation):
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
             (
                 GenAI.GEN_AI_RETRIEVAL_QUERY_TEXT,
-                self.data.retrieval_query_text,
+                self._data.retrieval_query_text,
             ),
             (
                 GenAI.GEN_AI_RETRIEVAL_DOCUMENTS,
-                gen_ai_json_dumps(self.data.retrieval_documents)
-                if self.data.retrieval_documents is not None
+                gen_ai_json_dumps(self._data.retrieval_documents)
+                if self._data.retrieval_documents is not None
                 else None,
             ),
         )
@@ -265,18 +259,18 @@ class RetrievalInvocation(GenAIInvocation):
         )
         if isinstance(ctx_data, RetrievalData):
             self.enrich_from_context(ctx_data)
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         optional_attrs: tuple[tuple[str, AttributeValue | None], ...] = (
-            (GenAI.GEN_AI_DATA_SOURCE_ID, self.data.data_source_id),
-            (GenAI.GEN_AI_PROVIDER_NAME, self.data.provider_name),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (GenAI.GEN_AI_DATA_SOURCE_ID, self._data.data_source_id),
+            (GenAI.GEN_AI_PROVIDER_NAME, self._data.provider_name),
+            (GenAI.GEN_AI_REQUEST_MODEL, self._data.request_model),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
             (
                 _GEN_AI_RETRIEVAL_TOP_K,
-                int(self.data.retrieval_top_k)
-                if self.data.retrieval_top_k is not None
+                int(self._data.retrieval_top_k)
+                if self._data.retrieval_top_k is not None
                 else None,
             ),
         )
@@ -339,15 +333,15 @@ class SuppressedRetrievalInvocation(RetrievalInvocation):
 
     def publish_to_context(self, data: RetrievalData) -> None:
         """Publish invocation attributes to the active retrieval context."""
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
         # Prevent inner content from merging into context when content capture is off.
         if not self._capture_content_to_context:
-            self.data.retrieval_query_text = None
-            self.data.retrieval_documents = None
+            self._data.retrieval_query_text = None
+            self._data.retrieval_documents = None
 
-        data.merge(self.data, overwrite=True)
+        data.merge(self._data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:
         if self._finished:

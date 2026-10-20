@@ -73,7 +73,7 @@ class WorkflowInvocation(GenAIInvocation):
         start_attributes: dict[str, AttributeValue] = (
             {GenAI.GEN_AI_WORKFLOW_NAME: name} if name is not None else {}
         )
-        self.data: WorkflowData = WorkflowData(
+        self._data: WorkflowData = WorkflowData(
             workflow_name=name,
             conversation_id=conversation_id,
             input_messages=[],
@@ -92,47 +92,49 @@ class WorkflowInvocation(GenAIInvocation):
             conversation_id=conversation_id,
             content_capturing_mode=content_capturing_mode,
             _attach_to_context=_attach_to_context,
-            attributes=self.data.attributes,
-            metric_attributes=self.data.metric_attributes,
+            attributes=self._data.attributes,
+            metric_attributes=self._data.metric_attributes,
         )
         self._name: str | None = name
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
     @property
     def workflow_name(self) -> str | None:
         """The workflow name provided at construction time."""
-        return self.data.workflow_name
+        return self._data.workflow_name
 
     @property
     def input_messages(self) -> list[InputMessage]:
-        if isinstance(self.data.input_messages, list):
-            return self.data.input_messages
+        if isinstance(self._data.input_messages, list):
+            return self._data.input_messages
         messages = (
-            list(self.data.input_messages) if self.data.input_messages else []
+            list(self._data.input_messages)
+            if self._data.input_messages
+            else []
         )
-        self.data.input_messages = messages
+        self._data.input_messages = messages
         return messages
 
     @input_messages.setter
     def input_messages(self, value: Sequence[InputMessage]) -> None:
-        self.data.input_messages = value
+        self._data.input_messages = value
 
     @property
     def output_messages(self) -> list[OutputMessage]:
-        if isinstance(self.data.output_messages, list):
-            return self.data.output_messages
+        if isinstance(self._data.output_messages, list):
+            return self._data.output_messages
         messages = (
-            list(self.data.output_messages)
-            if self.data.output_messages
+            list(self._data.output_messages)
+            if self._data.output_messages
             else []
         )
-        self.data.output_messages = messages
+        self._data.output_messages = messages
         return messages
 
     @output_messages.setter
     def output_messages(self, value: Sequence[OutputMessage]) -> None:
-        self.data.output_messages = value
+        self._data.output_messages = value
 
     def _get_messages_for_span(self) -> dict[str, AttributeValue]:
         if not self._should_capture_content_on_span:
@@ -157,22 +159,22 @@ class WorkflowInvocation(GenAIInvocation):
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         attrs: dict[str, AttributeValue] = {}
-        if self.data.workflow_name is not None:
-            attrs[GenAI.GEN_AI_WORKFLOW_NAME] = self.data.workflow_name
+        if self._data.workflow_name is not None:
+            attrs[GenAI.GEN_AI_WORKFLOW_NAME] = self._data.workflow_name
         attrs.update(self.metric_attributes)
         return attrs
 
     def _apply_finish(self, error: Error | None = None) -> None:
         if error is not None:
             self._apply_error_attributes(error)
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         attributes: dict[str, AttributeValue] = self._get_messages_for_span()
-        conv_id = self.conversation_id or self.data.conversation_id
+        conv_id = self.conversation_id or self._data.conversation_id
         if conv_id is not None:
             attributes[GenAI.GEN_AI_CONVERSATION_ID] = conv_id
-        if self.data.workflow_name is not None:
-            attributes[GenAI.GEN_AI_WORKFLOW_NAME] = self.data.workflow_name
+        if self._data.workflow_name is not None:
+            attributes[GenAI.GEN_AI_WORKFLOW_NAME] = self._data.workflow_name
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
         self._call_completion_hook(

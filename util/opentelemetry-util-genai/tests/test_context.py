@@ -1791,21 +1791,21 @@ class TestEmbeddingContext(BaseContextTest):
         self.assertEqual(inv.server_port, 443)
 
         inv.response_model_name = "text-embedding-3-small-v1"
-        self.assertEqual(inv.data.response_model, "text-embedding-3-small-v1")
+        self.assertEqual(inv._data.response_model, "text-embedding-3-small-v1")
         self.assertEqual(inv.response_model_name, "text-embedding-3-small-v1")
 
         inv.dimension_count = 1536
-        self.assertEqual(inv.data.embeddings_dimension_count, 1536)
+        self.assertEqual(inv._data.embeddings_dimension_count, 1536)
         self.assertEqual(inv.dimension_count, 1536)
 
         inv.encoding_formats = ["float", "base64"]
         self.assertEqual(
-            inv.data.request_encoding_formats, ["float", "base64"]
+            inv._data.request_encoding_formats, ["float", "base64"]
         )
         self.assertEqual(inv.encoding_formats, ["float", "base64"])
 
         inv.input_tokens = 42
-        self.assertEqual(inv.data.usage_input_tokens, 42)
+        self.assertEqual(inv._data.usage_input_tokens, 42)
         self.assertEqual(inv.input_tokens, 42)
         inv.stop()
 
@@ -1974,18 +1974,18 @@ class TestRetrievalContext(BaseContextTest):
         self.assertEqual(inv.server_port, 8000)
 
         inv.top_k = 15
-        self.assertEqual(inv.data.retrieval_top_k, 15)
+        self.assertEqual(inv._data.retrieval_top_k, 15)
         self.assertEqual(inv.top_k, 15)
 
         inv.query_text = "What is OpenTelemetry?"
         self.assertEqual(
-            inv.data.retrieval_query_text, "What is OpenTelemetry?"
+            inv._data.retrieval_query_text, "What is OpenTelemetry?"
         )
         self.assertEqual(inv.query_text, "What is OpenTelemetry?")
 
         doc = RetrievalDocument(id="doc-1", score=0.8)
         inv.documents = [doc]
-        self.assertEqual(inv.data.retrieval_documents, [doc])
+        self.assertEqual(inv._data.retrieval_documents, [doc])
         self.assertEqual(inv.documents, [doc])
         inv.stop()
 
@@ -2018,11 +2018,11 @@ class TestRetrievalContext(BaseContextTest):
 
     def test_enrich_from_context_does_not_override_content(self) -> None:
         with self.handler.retrieval(data_source_id="root-ds") as outer:
-            outer.data.retrieval_query_text = "root query"
-            outer.data.retrieval_documents = [
+            outer._data.retrieval_query_text = "root query"
+            outer._data.retrieval_documents = [
                 RetrievalDocument(id="root-doc", score=0.9)
             ]
-            outer.data.retrieval_top_k = 5
+            outer._data.retrieval_top_k = 5
 
             inner_data = RetrievalData(
                 retrieval_top_k=10,
@@ -2035,13 +2035,13 @@ class TestRetrievalContext(BaseContextTest):
             outer.enrich_from_context(inner_data)
 
             # Non-content fields: outer top_k preserved
-            self.assertEqual(outer.data.retrieval_top_k, 5)
+            self.assertEqual(outer._data.retrieval_top_k, 5)
             # Inner non-content fields not on outer are enriched
-            self.assertEqual(outer.data.data_source_id, "root-ds")
+            self.assertEqual(outer._data.data_source_id, "root-ds")
             # Content fields are NOT overridden by inner
-            self.assertEqual(outer.data.retrieval_query_text, "root query")
+            self.assertEqual(outer._data.retrieval_query_text, "root query")
             self.assertEqual(
-                outer.data.retrieval_documents,
+                outer._data.retrieval_documents,
                 [RetrievalDocument(id="root-doc", score=0.9)],
             )
 
@@ -2095,9 +2095,9 @@ class TestRetrievalContext(BaseContextTest):
                 ],
             )
             outer.enrich_from_context(inner_data)
-            self.assertEqual(outer.data.retrieval_query_text, "inner query")
+            self.assertEqual(outer._data.retrieval_query_text, "inner query")
             self.assertEqual(
-                outer.data.retrieval_documents,
+                outer._data.retrieval_documents,
                 [RetrievalDocument(id="inner-doc", score=0.1)],
             )
 
@@ -2111,8 +2111,8 @@ class TestRetrievalContext(BaseContextTest):
                 ],
             )
             outer.enrich_from_context(inner_data)
-            self.assertIsNone(outer.data.retrieval_query_text)
-            self.assertIsNone(outer.data.retrieval_documents)
+            self.assertIsNone(outer._data.retrieval_query_text)
+            self.assertIsNone(outer._data.retrieval_documents)
 
     def test_suppressed_retrieval_content_capture_enabled_when_configured(
         self,
@@ -2292,19 +2292,19 @@ class TestFetchResponseContext(BaseContextTest):
         self.assertEqual(inv.server_port, 443)
 
         inv.response_model_name = "gpt-4o-mini"
-        self.assertEqual(inv.data.response_model, "gpt-4o-mini")
+        self.assertEqual(inv._data.response_model, "gpt-4o-mini")
         self.assertEqual(inv.response_model_name, "gpt-4o-mini")
 
         inv.response_status = "completed"
-        self.assertEqual(inv.data.response_status, "completed")
+        self.assertEqual(inv._data.response_status, "completed")
         self.assertEqual(inv.response_status, "completed")
 
         inv.finish_reasons = ["stop"]
-        self.assertEqual(inv.data.response_finish_reasons, ["stop"])
+        self.assertEqual(inv._data.response_finish_reasons, ["stop"])
         self.assertEqual(inv.finish_reasons, ["stop"])
 
         inv.stream_cursor = "cursor-123"
-        self.assertEqual(inv.data.request_stream_cursor, "cursor-123")
+        self.assertEqual(inv._data.request_stream_cursor, "cursor-123")
         self.assertEqual(inv.stream_cursor, "cursor-123")
         inv.stop()
 
@@ -2354,10 +2354,10 @@ class TestFetchResponseContext(BaseContextTest):
         with self.handler.fetch_response(
             "openai", response_id="resp-root"
         ) as outer:
-            outer.data.output_messages = [
+            outer._data.output_messages = [
                 OutputMessage(role="assistant", parts=[TextPart("root out")])
             ]
-            outer.data.response_model = "root-model"
+            outer._data.response_model = "root-model"
 
             inner_data = FetchResponseData(
                 response_model="inner-model",
@@ -2371,11 +2371,11 @@ class TestFetchResponseContext(BaseContextTest):
             outer.enrich_from_context(inner_data)
 
             # Non-content fields: outer preserved, inner enriched
-            self.assertEqual(outer.data.response_model, "root-model")
-            self.assertEqual(outer.data.response_status, "completed")
+            self.assertEqual(outer._data.response_model, "root-model")
+            self.assertEqual(outer._data.response_status, "completed")
             # Content fields are NOT overridden by inner
             self.assertEqual(
-                outer.data.output_messages,
+                outer._data.output_messages,
                 [
                     OutputMessage(
                         role="assistant", parts=[TextPart("root out")]
@@ -2437,7 +2437,7 @@ class TestFetchResponseContext(BaseContextTest):
                 self.assertIsInstance(inner, SuppressedFetchResponseInvocation)
                 inner.record_stream_chunk()
                 inner.record_stream_chunk()
-                self.assertTrue(inner.data.request_stream)
+                self.assertTrue(inner._data.request_stream)
         metrics = self._harvest_metrics()
         self.assertNotIn(
             "gen_ai.client.operation.time_to_first_chunk", metrics
@@ -2458,7 +2458,7 @@ class TestFetchResponseContext(BaseContextTest):
                 output_messages=expected_msgs,
             )
             outer.enrich_from_context(inner_data)
-            self.assertEqual(outer.data.output_messages, expected_msgs)
+            self.assertEqual(outer._data.output_messages, expected_msgs)
 
     def test_enrich_from_context_drops_content_when_disabled(self) -> None:
         with self.handler.fetch_response(
@@ -2473,7 +2473,7 @@ class TestFetchResponseContext(BaseContextTest):
                 ],
             )
             outer.enrich_from_context(inner_data)
-            self.assertEqual(outer.data.output_messages, [])
+            self.assertEqual(outer._data.output_messages, [])
 
     def test_suppressed_fetch_response_content_capture_enabled_when_configured(
         self,

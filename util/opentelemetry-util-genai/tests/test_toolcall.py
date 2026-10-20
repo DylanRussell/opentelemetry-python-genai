@@ -702,28 +702,28 @@ def test_property_delegation_to_data():
         tool_type="function",
         agent_name="MathAgent",
     )
-    assert isinstance(inv.data, ToolData)
+    assert isinstance(inv._data, ToolData)
     assert inv.name == "calculator"
-    assert inv.data.tool_name == "calculator"
+    assert inv._data.tool_name == "calculator"
     assert inv.tool_type == "function"
-    assert inv.data.tool_type == "function"
+    assert inv._data.tool_type == "function"
     assert inv.agent_name == "MathAgent"
-    assert inv.data.agent_name == "MathAgent"
+    assert inv._data.agent_name == "MathAgent"
 
     inv.tool_call_id = "call-abc"
-    assert inv.data.tool_call_id == "call-abc"
+    assert inv._data.tool_call_id == "call-abc"
     assert inv.tool_call_id == "call-abc"
 
     inv.tool_description = "A math tool"
-    assert inv.data.tool_description == "A math tool"
+    assert inv._data.tool_description == "A math tool"
     assert inv.tool_description == "A math tool"
 
     inv.arguments = {"expr": "1+1"}
-    assert inv.data.tool_call_arguments == {"expr": "1+1"}
+    assert inv._data.tool_call_arguments == {"expr": "1+1"}
     assert inv.arguments == {"expr": "1+1"}
 
     inv.tool_result = 2
-    assert inv.data.tool_call_result == 2
+    assert inv._data.tool_call_result == 2
     assert inv.tool_result == 2
     inv.stop()
 

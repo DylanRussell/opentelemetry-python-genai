@@ -295,22 +295,22 @@ class TestLocalAgentInvocation(unittest.TestCase):  # pylint: disable=too-many-p
         inv = self.handler.invoke_local_agent(
             agent_name="Delegation Agent", request_model="gpt-4o"
         )
-        self.assertIsInstance(inv.data, AgentData)
-        self.assertEqual(inv.data.agent_name, "Delegation Agent")
+        self.assertIsInstance(inv._data, AgentData)
+        self.assertEqual(inv._data.agent_name, "Delegation Agent")
         self.assertEqual(inv.agent_name, "Delegation Agent")
-        self.assertEqual(inv.data.request_model, "gpt-4o")
+        self.assertEqual(inv._data.request_model, "gpt-4o")
         self.assertEqual(inv.request_model, "gpt-4o")
 
         inv.agent_description = "A delegated agent"
-        self.assertEqual(inv.data.agent_description, "A delegated agent")
+        self.assertEqual(inv._data.agent_description, "A delegated agent")
 
         inv.temperature = 0.5
-        self.assertEqual(inv.data.request_temperature, 0.5)
+        self.assertEqual(inv._data.request_temperature, 0.5)
 
         inv.input_tokens = 50
         inv.output_tokens = 100
-        self.assertEqual(inv.data.usage_input_tokens, 50)
-        self.assertEqual(inv.data.usage_output_tokens, 100)
+        self.assertEqual(inv._data.usage_input_tokens, 50)
+        self.assertEqual(inv._data.usage_output_tokens, 100)
         inv.stop()
 
     def test_agent_name_at_construction_available_to_sampler(self):
@@ -662,30 +662,30 @@ class TestRemoteAgentInvocation(unittest.TestCase):
             server_port=443,
             agent_name="RemoteDelegation",
         )
-        self.assertIsInstance(inv.data, AgentData)
-        self.assertEqual(inv.data.provider_name, "openai")
+        self.assertIsInstance(inv._data, AgentData)
+        self.assertEqual(inv._data.provider_name, "openai")
         self.assertEqual(inv.provider, "openai")
-        self.assertEqual(inv.data.request_model, "gpt-4o")
-        self.assertEqual(inv.data.server_address, "api.openai.com")
+        self.assertEqual(inv._data.request_model, "gpt-4o")
+        self.assertEqual(inv._data.server_address, "api.openai.com")
         self.assertEqual(inv.server_address, "api.openai.com")
-        self.assertEqual(inv.data.server_port, 443)
+        self.assertEqual(inv._data.server_port, 443)
         self.assertEqual(inv.server_port, 443)
-        self.assertEqual(inv.data.agent_name, "RemoteDelegation")
+        self.assertEqual(inv._data.agent_name, "RemoteDelegation")
         self.assertEqual(inv.agent_name, "RemoteDelegation")
 
         inv.agent_id = "agent-xyz"
-        self.assertEqual(inv.data.agent_id, "agent-xyz")
+        self.assertEqual(inv._data.agent_id, "agent-xyz")
 
         inv.agent_version = "2.0.0"
-        self.assertEqual(inv.data.agent_version, "2.0.0")
+        self.assertEqual(inv._data.agent_version, "2.0.0")
 
         inv.previous_response_id = "prev-resp-1"
-        self.assertEqual(inv.data.request_previous_response_id, "prev-resp-1")
+        self.assertEqual(inv._data.request_previous_response_id, "prev-resp-1")
 
         inv.cache_write_input_tokens = 10
         inv.cache_read_input_tokens = 20
-        self.assertEqual(inv.data.usage_cache_write_input_tokens, 10)
-        self.assertEqual(inv.data.usage_cache_read_input_tokens, 20)
+        self.assertEqual(inv._data.usage_cache_write_input_tokens, 10)
+        self.assertEqual(inv._data.usage_cache_read_input_tokens, 20)
         inv.stop()
 
     def test_fail_sets_error_status(self):

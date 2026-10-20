@@ -168,12 +168,6 @@ class InferenceData(_ContextData):
     usage_text_cache_read_input_tokens: int | None = None
     usage_text_input_tokens: int | None = None
     usage_text_output_tokens: int | None = None
-    attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
-    metric_attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
 
 
 class InferenceInvocation(GenAIInvocation):

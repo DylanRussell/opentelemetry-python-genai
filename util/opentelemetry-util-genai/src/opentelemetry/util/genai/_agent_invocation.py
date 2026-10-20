@@ -131,7 +131,7 @@ class AgentInvocation(GenAIInvocation, ABC):
                 output_messages=[],
                 system_instructions=[],
             )
-        self.data: AgentData = _data
+        self._data: AgentData = _data
         super().__init__(
             tracer,
             instruments,
@@ -147,197 +147,201 @@ class AgentInvocation(GenAIInvocation, ABC):
             conversation_id=conversation_id,
             content_capturing_mode=content_capturing_mode,
             _attach_to_context=_attach_to_context,
-            attributes=self.data.attributes,
-            metric_attributes=self.data.metric_attributes,
+            attributes=self._data.attributes,
+            metric_attributes=self._data.metric_attributes,
         )
         self._request_model: str | None = request_model
         self._agent_name: str | None = agent_name
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
     @property
     def agent_name(self) -> str | None:
         """The agent name provided at construction time."""
-        return self.data.agent_name
+        return self._data.agent_name
 
     @property
     def request_model(self) -> str | None:
         """The request model provided at construction time."""
-        return self.data.request_model
+        return self._data.request_model
 
     @property
     def agent_description(self) -> str | None:
-        return self.data.agent_description
+        return self._data.agent_description
 
     @agent_description.setter
     def agent_description(self, value: str | None) -> None:
-        self.data.agent_description = value
+        self._data.agent_description = value
 
     @property
     def data_source_id(self) -> str | None:
-        return self.data.data_source_id
+        return self._data.data_source_id
 
     @data_source_id.setter
     def data_source_id(self, value: str | None) -> None:
-        self.data.data_source_id = value
+        self._data.data_source_id = value
 
     @property
     def output_type(self) -> str | None:
-        return self.data.output_type
+        return self._data.output_type
 
     @output_type.setter
     def output_type(self, value: str | None) -> None:
-        self.data.output_type = value
+        self._data.output_type = value
 
     @property
     def temperature(self) -> float | None:
-        return self.data.request_temperature
+        return self._data.request_temperature
 
     @temperature.setter
     def temperature(self, value: float | None) -> None:
-        self.data.request_temperature = value
+        self._data.request_temperature = value
 
     @property
     def top_p(self) -> float | None:
-        return self.data.request_top_p
+        return self._data.request_top_p
 
     @top_p.setter
     def top_p(self, value: float | None) -> None:
-        self.data.request_top_p = value
+        self._data.request_top_p = value
 
     @property
     def frequency_penalty(self) -> float | None:
-        return self.data.request_frequency_penalty
+        return self._data.request_frequency_penalty
 
     @frequency_penalty.setter
     def frequency_penalty(self, value: float | None) -> None:
-        self.data.request_frequency_penalty = value
+        self._data.request_frequency_penalty = value
 
     @property
     def presence_penalty(self) -> float | None:
-        return self.data.request_presence_penalty
+        return self._data.request_presence_penalty
 
     @presence_penalty.setter
     def presence_penalty(self, value: float | None) -> None:
-        self.data.request_presence_penalty = value
+        self._data.request_presence_penalty = value
 
     @property
     def max_tokens(self) -> int | None:
-        return self.data.request_max_tokens
+        return self._data.request_max_tokens
 
     @max_tokens.setter
     def max_tokens(self, value: int | None) -> None:
-        self.data.request_max_tokens = value
+        self._data.request_max_tokens = value
 
     @property
     def stop_sequences(self) -> list[str] | None:
-        return self.data.request_stop_sequences
+        return self._data.request_stop_sequences
 
     @stop_sequences.setter
     def stop_sequences(self, value: Sequence[str] | None) -> None:
-        self.data.request_stop_sequences = (
+        self._data.request_stop_sequences = (
             list(value) if value is not None else None
         )
 
     @property
     def seed(self) -> int | None:
-        return self.data.request_seed
+        return self._data.request_seed
 
     @seed.setter
     def seed(self, value: int | None) -> None:
-        self.data.request_seed = value
+        self._data.request_seed = value
 
     @property
     def choice_count(self) -> int | None:
-        return self.data.request_choice_count
+        return self._data.request_choice_count
 
     @choice_count.setter
     def choice_count(self, value: int | None) -> None:
-        self.data.request_choice_count = value
+        self._data.request_choice_count = value
 
     @property
     def finish_reasons(self) -> list[str] | None:
-        return self.data.response_finish_reasons
+        return self._data.response_finish_reasons
 
     @finish_reasons.setter
     def finish_reasons(self, value: Sequence[str] | None) -> None:
-        self.data.response_finish_reasons = (
+        self._data.response_finish_reasons = (
             list(value) if value is not None else None
         )
 
     @property
     def input_tokens(self) -> int | None:
-        return self.data.usage_input_tokens
+        return self._data.usage_input_tokens
 
     @input_tokens.setter
     def input_tokens(self, value: int | None) -> None:
-        self.data.usage_input_tokens = value
+        self._data.usage_input_tokens = value
 
     @property
     def output_tokens(self) -> int | None:
-        return self.data.usage_output_tokens
+        return self._data.usage_output_tokens
 
     @output_tokens.setter
     def output_tokens(self, value: int | None) -> None:
-        self.data.usage_output_tokens = value
+        self._data.usage_output_tokens = value
 
     @property
     def input_messages(self) -> list[InputMessage]:
-        if isinstance(self.data.input_messages, list):
-            return self.data.input_messages
+        if isinstance(self._data.input_messages, list):
+            return self._data.input_messages
         messages = (
-            list(self.data.input_messages) if self.data.input_messages else []
+            list(self._data.input_messages)
+            if self._data.input_messages
+            else []
         )
-        self.data.input_messages = messages
+        self._data.input_messages = messages
         return messages
 
     @input_messages.setter
     def input_messages(self, value: Sequence[InputMessage]) -> None:
-        self.data.input_messages = value
+        self._data.input_messages = value
 
     @property
     def output_messages(self) -> list[OutputMessage]:
-        if isinstance(self.data.output_messages, list):
-            return self.data.output_messages
+        if isinstance(self._data.output_messages, list):
+            return self._data.output_messages
         messages = (
-            list(self.data.output_messages)
-            if self.data.output_messages
+            list(self._data.output_messages)
+            if self._data.output_messages
             else []
         )
-        self.data.output_messages = messages
+        self._data.output_messages = messages
         return messages
 
     @output_messages.setter
     def output_messages(self, value: Sequence[OutputMessage]) -> None:
-        self.data.output_messages = value
+        self._data.output_messages = value
 
     @property
     def system_instruction(
         self,
     ) -> list[SystemInstructionPart] | list[MessagePart]:
-        if isinstance(self.data.system_instructions, list):
-            return self.data.system_instructions
+        if isinstance(self._data.system_instructions, list):
+            return self._data.system_instructions
         instructions = (
-            list(self.data.system_instructions)
-            if self.data.system_instructions
+            list(self._data.system_instructions)
+            if self._data.system_instructions
             else []
         )
-        self.data.system_instructions = instructions
+        self._data.system_instructions = instructions
         return instructions
 
     @system_instruction.setter
     def system_instruction(
         self, value: Sequence[SystemInstructionPart] | Sequence[MessagePart]
     ) -> None:
-        self.data.system_instructions = value
+        self._data.system_instructions = value
 
     @property
     def tool_definitions(self) -> list[ToolDefinition] | None:
-        return self.data.tool_definitions
+        return self._data.tool_definitions
 
     @tool_definitions.setter
     def tool_definitions(self, value: Sequence[ToolDefinition] | None) -> None:
-        self.data.tool_definitions = list(value) if value is not None else None
+        self._data.tool_definitions = (
+            list(value) if value is not None else None
+        )
 
     def _get_agent_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
@@ -368,8 +372,8 @@ class AgentInvocation(GenAIInvocation, ABC):
 
     def _get_usage_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
-            (GenAI.GEN_AI_USAGE_INPUT_TOKENS, self.data.usage_input_tokens),
-            (GenAI.GEN_AI_USAGE_OUTPUT_TOKENS, self.data.usage_output_tokens),
+            (GenAI.GEN_AI_USAGE_INPUT_TOKENS, self._data.usage_input_tokens),
+            (GenAI.GEN_AI_USAGE_OUTPUT_TOKENS, self._data.usage_output_tokens),
         )
         return {k: v for k, v in optional_attrs if v is not None}
 
@@ -387,8 +391,8 @@ class AgentInvocation(GenAIInvocation, ABC):
         if error is not None:
             self._apply_error_attributes(error)
 
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         attributes: dict[str, AttributeValue] = {}
         attributes.update(self._get_agent_attributes())
         attributes.update(self._get_request_attributes())
@@ -449,10 +453,10 @@ class LocalAgentInvocation(AgentInvocation):
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         attrs: dict[str, AttributeValue] = {}
-        if self.data.agent_name is not None:
-            attrs[GenAI.GEN_AI_AGENT_NAME] = self.data.agent_name
-        if self.data.request_model is not None:
-            attrs[GenAI.GEN_AI_REQUEST_MODEL] = self.data.request_model
+        if self._data.agent_name is not None:
+            attrs[GenAI.GEN_AI_AGENT_NAME] = self._data.agent_name
+        if self._data.request_model is not None:
+            attrs[GenAI.GEN_AI_REQUEST_MODEL] = self._data.request_model
         attrs.update(self.metric_attributes)
         return attrs
 
@@ -538,50 +542,50 @@ class RemoteAgentInvocation(AgentInvocation):
     @property
     def provider(self) -> str:
         """The provider name provided at construction time."""
-        return self.data.provider_name or self._provider
+        return self._data.provider_name or self._provider
 
     @property
     def server_address(self) -> str | None:
         """The server address provided at construction time."""
-        return self.data.server_address
+        return self._data.server_address
 
     @property
     def server_port(self) -> int | None:
         """The server port provided at construction time."""
-        return self.data.server_port
+        return self._data.server_port
 
     @property
     def agent_id(self) -> str | None:
-        return self.data.agent_id
+        return self._data.agent_id
 
     @agent_id.setter
     def agent_id(self, value: str | None) -> None:
-        self.data.agent_id = value
+        self._data.agent_id = value
 
     @property
     def agent_version(self) -> str | None:
-        return self.data.agent_version
+        return self._data.agent_version
 
     @agent_version.setter
     def agent_version(self, value: str | None) -> None:
-        self.data.agent_version = value
+        self._data.agent_version = value
 
     @property
     def previous_response_id(self) -> str | None:
-        return self.data.request_previous_response_id
+        return self._data.request_previous_response_id
 
     @previous_response_id.setter
     def previous_response_id(self, value: str | None) -> None:
-        self.data.request_previous_response_id = value
+        self._data.request_previous_response_id = value
 
     @property
     def cache_write_input_tokens(self) -> int | None:
         """The number of cache write input tokens."""
-        return self.data.usage_cache_write_input_tokens
+        return self._data.usage_cache_write_input_tokens
 
     @cache_write_input_tokens.setter
     def cache_write_input_tokens(self, value: int | None) -> None:
-        self.data.usage_cache_write_input_tokens = value
+        self._data.usage_cache_write_input_tokens = value
 
     @property
     def cache_creation_input_tokens(self) -> int | None:
@@ -590,25 +594,25 @@ class RemoteAgentInvocation(AgentInvocation):
         .. deprecated:: 1.3b0
             Use :attr:`cache_write_input_tokens` instead.
         """
-        return self.data.usage_cache_write_input_tokens
+        return self._data.usage_cache_write_input_tokens
 
     @cache_creation_input_tokens.setter
     def cache_creation_input_tokens(self, value: int | None) -> None:
-        self.data.usage_cache_write_input_tokens = value
+        self._data.usage_cache_write_input_tokens = value
 
     @property
     def cache_read_input_tokens(self) -> int | None:
-        return self.data.usage_cache_read_input_tokens
+        return self._data.usage_cache_read_input_tokens
 
     @cache_read_input_tokens.setter
     def cache_read_input_tokens(self, value: int | None) -> None:
-        self.data.usage_cache_read_input_tokens = value
+        self._data.usage_cache_read_input_tokens = value
 
     def _get_agent_attributes(self) -> dict[str, AttributeValue]:
         attrs = super()._get_agent_attributes()
         optional_attrs = (
-            (GenAI.GEN_AI_AGENT_ID, self.data.agent_id),
-            (GenAI.GEN_AI_AGENT_VERSION, self.data.agent_version),
+            (GenAI.GEN_AI_AGENT_ID, self._data.agent_id),
+            (GenAI.GEN_AI_AGENT_VERSION, self._data.agent_version),
         )
         attrs.update({k: v for k, v in optional_attrs if v is not None})
         return attrs
@@ -618,27 +622,27 @@ class RemoteAgentInvocation(AgentInvocation):
         optional_attrs = (
             (
                 GenAI.GEN_AI_PROVIDER_NAME,
-                self.data.provider_name or self._provider,
+                self._data.provider_name or self._provider,
             ),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
         )
         attrs.update({k: v for k, v in optional_attrs if v is not None})
-        if self.data.request_previous_response_id is not None:
+        if self._data.request_previous_response_id is not None:
             attrs[_GEN_AI_REQUEST_PREVIOUS_RESPONSE_ID] = (
-                self.data.request_previous_response_id
+                self._data.request_previous_response_id
             )
         return attrs
 
     def _get_usage_attributes(self) -> dict[str, AttributeValue]:
         attrs = super()._get_usage_attributes()
-        if self.data.usage_cache_write_input_tokens is not None:
+        if self._data.usage_cache_write_input_tokens is not None:
             attrs[_GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS] = (
-                self.data.usage_cache_write_input_tokens
+                self._data.usage_cache_write_input_tokens
             )
-        if self.data.usage_cache_read_input_tokens is not None:
+        if self._data.usage_cache_read_input_tokens is not None:
             attrs[GenAI.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS] = (
-                self.data.usage_cache_read_input_tokens
+                self._data.usage_cache_read_input_tokens
             )
         return attrs
 
@@ -646,19 +650,19 @@ class RemoteAgentInvocation(AgentInvocation):
         optional_attrs = (
             (
                 GenAI.GEN_AI_PROVIDER_NAME,
-                self.data.provider_name or self._provider,
+                self._data.provider_name or self._provider,
             ),
             (
                 GenAI.GEN_AI_REQUEST_MODEL,
-                self.data.request_model or self._request_model,
+                self._data.request_model or self._request_model,
             ),
             (
                 server_attributes.SERVER_ADDRESS,
-                self.data.server_address or self._server_address,
+                self._data.server_address or self._server_address,
             ),
             (
                 server_attributes.SERVER_PORT,
-                self.data.server_port or self._server_port,
+                self._data.server_port or self._server_port,
             ),
         )
         attrs: dict[str, AttributeValue] = {
@@ -670,13 +674,13 @@ class RemoteAgentInvocation(AgentInvocation):
 
     def _get_metric_token_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
-        if self.data.usage_input_tokens is not None:
+        if self._data.usage_input_tokens is not None:
             counts[GenAI.GenAiTokenTypeValues.INPUT.value] = (
-                self.data.usage_input_tokens
+                self._data.usage_input_tokens
             )
-        if self.data.usage_output_tokens is not None:
+        if self._data.usage_output_tokens is not None:
             counts[GenAI.GenAiTokenTypeValues.OUTPUT.value] = (
-                self.data.usage_output_tokens
+                self._data.usage_output_tokens
             )
         return counts
 

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 from opentelemetry._logs import Logger
@@ -44,12 +44,6 @@ class EmbeddingData(_ContextData):
     embeddings_dimension_count: int | None = None
     request_encoding_formats: list[str] | None = None
     usage_input_tokens: int | None = None
-    attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
-    metric_attributes: dict[str, AttributeValue] = field(
-        default_factory=dict[str, AttributeValue]
-    )
 
 
 class EmbeddingInvocation(GenAIInvocation):
@@ -86,7 +80,7 @@ class EmbeddingInvocation(GenAIInvocation):
             )
             if v is not None
         }
-        self.data: EmbeddingData = EmbeddingData(
+        self._data: EmbeddingData = EmbeddingData(
             provider_name=provider,
             request_model=request_model,
             server_address=server_address,
@@ -107,8 +101,8 @@ class EmbeddingInvocation(GenAIInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             start_span=start_span,
-            attributes=self.data.attributes,
-            metric_attributes=self.data.metric_attributes,
+            attributes=self._data.attributes,
+            metric_attributes=self._data.metric_attributes,
             context_key=CLIENT_EMBEDDING_CONTEXT_KEY,
             dataclass_class_object=EmbeddingData,
         )
@@ -116,73 +110,73 @@ class EmbeddingInvocation(GenAIInvocation):
         self._request_model: str | None = request_model
         self._server_address: str | None = server_address
         self._server_port: int | None = server_port
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
 
     @property
     def provider(self) -> str | None:
-        return self.data.provider_name
+        return self._data.provider_name
 
     @property
     def request_model(self) -> str | None:
-        return self.data.request_model
+        return self._data.request_model
 
     @property
     def server_address(self) -> str | None:
-        return self.data.server_address
+        return self._data.server_address
 
     @property
     def server_port(self) -> int | None:
-        return self.data.server_port
+        return self._data.server_port
 
     @property
     def response_model_name(self) -> str | None:
-        return self.data.response_model
+        return self._data.response_model
 
     @response_model_name.setter
     def response_model_name(self, value: str | None) -> None:
-        self.data.response_model = value
+        self._data.response_model = value
 
     @property
     def dimension_count(self) -> int | None:
-        return self.data.embeddings_dimension_count
+        return self._data.embeddings_dimension_count
 
     @dimension_count.setter
     def dimension_count(self, value: int | None) -> None:
-        self.data.embeddings_dimension_count = value
+        self._data.embeddings_dimension_count = value
 
     @property
     def encoding_formats(self) -> list[str] | None:
-        return self.data.request_encoding_formats
+        return self._data.request_encoding_formats
 
     @encoding_formats.setter
     def encoding_formats(self, value: Sequence[str] | None) -> None:
-        self.data.request_encoding_formats = (
+        self._data.request_encoding_formats = (
             list(value) if value is not None else None
         )
 
     @property
     def input_tokens(self) -> int | None:
-        return self.data.usage_input_tokens
+        return self._data.usage_input_tokens
 
     @input_tokens.setter
     def input_tokens(self, value: int | None) -> None:
-        self.data.usage_input_tokens = value
+        self._data.usage_input_tokens = value
 
     def enrich_from_context(self, data: EmbeddingData) -> None:
         """Enrich invocation attributes from context data published by inner invocations.
 
         Outer (root) attributes take precedence over inner values.
         """
-        self.data.merge(data, overwrite=False)
+        self._data.merge(data, overwrite=False)
 
     def _get_metric_attributes(self) -> dict[str, AttributeValue]:
         optional_attrs = (
-            (GenAI.GEN_AI_PROVIDER_NAME, self.data.provider_name),
-            (GenAI.GEN_AI_REQUEST_MODEL, self.data.request_model),
-            (GenAI.GEN_AI_RESPONSE_MODEL, self.data.response_model),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (GenAI.GEN_AI_PROVIDER_NAME, self._data.provider_name),
+            (GenAI.GEN_AI_REQUEST_MODEL, self._data.request_model),
+            (GenAI.GEN_AI_RESPONSE_MODEL, self._data.response_model),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
         )
         attrs: dict[str, AttributeValue] = {
             GenAI.GEN_AI_OPERATION_NAME: self._operation_name,
@@ -192,10 +186,10 @@ class EmbeddingInvocation(GenAIInvocation):
         return attrs
 
     def _get_metric_token_counts(self) -> dict[str, int]:
-        if self.data.usage_input_tokens is not None:
+        if self._data.usage_input_tokens is not None:
             return {
                 GenAI.GenAiTokenTypeValues.INPUT.value: (
-                    self.data.usage_input_tokens
+                    self._data.usage_input_tokens
                 )
             }
         return {}
@@ -208,29 +202,29 @@ class EmbeddingInvocation(GenAIInvocation):
         )
         if isinstance(ctx_data, EmbeddingData):
             self.enrich_from_context(ctx_data)
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
         optional_attrs = (
             (
                 GenAI.GEN_AI_PROVIDER_NAME,
-                self.data.provider_name or self._provider,
+                self._data.provider_name or self._provider,
             ),
             (
                 GenAI.GEN_AI_REQUEST_MODEL,
-                self.data.request_model or self._request_model,
+                self._data.request_model or self._request_model,
             ),
-            (server_attributes.SERVER_ADDRESS, self.data.server_address),
-            (server_attributes.SERVER_PORT, self.data.server_port),
+            (server_attributes.SERVER_ADDRESS, self._data.server_address),
+            (server_attributes.SERVER_PORT, self._data.server_port),
             (
                 GenAI.GEN_AI_EMBEDDINGS_DIMENSION_COUNT,
-                self.data.embeddings_dimension_count,
+                self._data.embeddings_dimension_count,
             ),
             (
                 GenAI.GEN_AI_REQUEST_ENCODING_FORMATS,
-                self.data.request_encoding_formats,
+                self._data.request_encoding_formats,
             ),
-            (GenAI.GEN_AI_RESPONSE_MODEL, self.data.response_model),
-            (GenAI.GEN_AI_USAGE_INPUT_TOKENS, self.data.usage_input_tokens),
+            (GenAI.GEN_AI_RESPONSE_MODEL, self._data.response_model),
+            (GenAI.GEN_AI_USAGE_INPUT_TOKENS, self._data.usage_input_tokens),
         )
         attributes: dict[str, AttributeValue] = {
             key: value for key, value in optional_attrs if value is not None
@@ -279,9 +273,9 @@ class SuppressedEmbeddingInvocation(EmbeddingInvocation):
 
     def publish_to_context(self, data: EmbeddingData) -> None:
         """Publish invocation attributes to the active embedding context."""
-        self.data.attributes = self.attributes
-        self.data.metric_attributes = self.metric_attributes
-        data.merge(self.data, overwrite=True)
+        self._data.attributes = self.attributes
+        self._data.metric_attributes = self.metric_attributes
+        data.merge(self._data, overwrite=True)
 
     def _finish(self, error: Error | None = None) -> None:
         if self._finished:
