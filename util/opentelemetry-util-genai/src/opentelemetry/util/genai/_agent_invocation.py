@@ -110,7 +110,6 @@ class AgentInvocation(GenAIInvocation, ABC):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
-        _data: AgentData | None = None,
     ) -> None:
         _operation_name = GenAI.GenAiOperationNameValues.INVOKE_AGENT.value
         if start_attributes is None:
@@ -122,16 +121,14 @@ class AgentInvocation(GenAIInvocation, ABC):
                 )
                 if v is not None
             }
-        if _data is None:
-            _data = AgentData(
-                agent_name=agent_name,
-                request_model=request_model,
-                conversation_id=conversation_id,
-                input_messages=[],
-                output_messages=[],
-                system_instructions=[],
-            )
-        self._data: AgentData = _data
+        self._data: AgentData = AgentData(
+            agent_name=agent_name,
+            request_model=request_model,
+            conversation_id=conversation_id,
+            input_messages=[],
+            output_messages=[],
+            system_instructions=[],
+        )
         super().__init__(
             tracer,
             instruments,
@@ -512,17 +509,6 @@ class RemoteAgentInvocation(AgentInvocation):
             )
             if v is not None
         }
-        data = AgentData(
-            agent_name=agent_name,
-            provider_name=provider,
-            request_model=request_model,
-            server_address=server_address,
-            server_port=server_port,
-            conversation_id=conversation_id,
-            input_messages=[],
-            output_messages=[],
-            system_instructions=[],
-        )
         super().__init__(
             tracer,
             instruments,
@@ -536,11 +522,13 @@ class RemoteAgentInvocation(AgentInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
-            _data=data,
         )
         self._provider: str = provider
         self._server_address: str | None = server_address
         self._server_port: int | None = server_port
+        self._data.provider_name = provider
+        self._data.server_address = server_address
+        self._data.server_port = server_port
 
     @property
     def provider(self) -> str:
