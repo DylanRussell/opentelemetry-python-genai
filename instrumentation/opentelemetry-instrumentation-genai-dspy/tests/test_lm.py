@@ -1160,14 +1160,14 @@ def test_extract_multimodal_and_generic_parts() -> None:
 
 def test_safe_numeric_overflow() -> None:
     from opentelemetry.instrumentation.genai.dspy.utils import (
-        _safe_float,
-        _safe_int,
+        safe_float,
+        safe_int,
     )
 
-    assert _safe_int(float("inf")) is None
-    assert _safe_int(float("-inf")) is None
-    assert _safe_int(float("nan")) is None
-    assert _safe_float(10**1000) is None
+    assert safe_int(float("inf")) is None
+    assert safe_int(float("-inf")) is None
+    assert safe_int(float("nan")) is None
+    assert safe_float(10**1000) is None
 
 
 def test_lm_multiple_choices_different_finish_reasons(

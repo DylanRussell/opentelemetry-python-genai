@@ -127,11 +127,6 @@ def safe_stop_sequences(val: object) -> list[str] | None:
     return None
 
 
-_safe_int = safe_int
-_safe_float = safe_float
-_safe_stop_sequences = safe_stop_sequences
-
-
 def parse_provider_and_model(
     model_str: str | None,
 ) -> tuple[str | None, str | None]:
@@ -810,26 +805,26 @@ def apply_usage_to_invocation(
     in_tokens = _get_field(usage, "prompt_tokens")
     if in_tokens is None:
         in_tokens = _get_field(usage, "input_tokens")
-    invocation.input_tokens = _safe_int(in_tokens)
+    invocation.input_tokens = safe_int(in_tokens)
 
     out_tokens = _get_field(usage, "completion_tokens")
     if out_tokens is None:
         out_tokens = _get_field(usage, "output_tokens")
-    invocation.output_tokens = _safe_int(out_tokens)
+    invocation.output_tokens = safe_int(out_tokens)
 
     thinking = _get_field(usage, "reasoning_tokens")
     completion_details = _get_field(usage, "completion_tokens_details")
     if thinking is None and completion_details is not None:
         thinking = _get_field(completion_details, "reasoning_tokens")
-    invocation.thinking_tokens = _safe_int(thinking)
+    invocation.thinking_tokens = safe_int(thinking)
 
     cache_read = _get_field(usage, "cache_read_tokens")
     prompt_details = _get_field(usage, "prompt_tokens_details")
     if cache_read is None and prompt_details is not None:
         cache_read = _get_field(prompt_details, "cached_tokens")
-    invocation.cache_read_input_tokens = _safe_int(cache_read)
+    invocation.cache_read_input_tokens = safe_int(cache_read)
 
-    invocation.cache_write_input_tokens = _safe_int(
+    invocation.cache_write_input_tokens = safe_int(
         _get_field(usage, "cache_write_tokens")
     )
 

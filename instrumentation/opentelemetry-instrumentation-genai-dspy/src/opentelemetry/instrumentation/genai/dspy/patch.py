@@ -25,9 +25,6 @@ from opentelemetry.instrumentation.genai.dspy.utils import (
     SENTINEL_TOOL_NAMES,
     LMRequestProtocol,
     _get_field,
-    _safe_float,
-    _safe_int,
-    _safe_stop_sequences,
     apply_usage_to_invocation,
     extract_input_content,
     extract_lm_input_messages,
@@ -37,6 +34,9 @@ from opentelemetry.instrumentation.genai.dspy.utils import (
     prepare_tool_definitions,
     resolve_provider,
     resolve_request_model,
+    safe_float,
+    safe_int,
+    safe_stop_sequences,
 )
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.util.genai.handler import TelemetryHandler
@@ -417,24 +417,24 @@ def _start_lm_invocation(
         **kwargs,
     }
 
-    invocation.temperature = _safe_float(merged_kwargs.get("temperature"))
-    invocation.max_tokens = _safe_int(merged_kwargs.get("max_tokens"))
-    invocation.top_p = _safe_float(
+    invocation.temperature = safe_float(merged_kwargs.get("temperature"))
+    invocation.max_tokens = safe_int(merged_kwargs.get("max_tokens"))
+    invocation.top_p = safe_float(
         merged_kwargs.get("top_p")
         if merged_kwargs.get("top_p") is not None
         else merged_kwargs.get("p")
     )
-    invocation.frequency_penalty = _safe_float(
+    invocation.frequency_penalty = safe_float(
         merged_kwargs.get("frequency_penalty")
     )
-    invocation.presence_penalty = _safe_float(
+    invocation.presence_penalty = safe_float(
         merged_kwargs.get("presence_penalty")
     )
-    invocation.seed = _safe_int(merged_kwargs.get("seed"))
+    invocation.seed = safe_int(merged_kwargs.get("seed"))
 
-    invocation.stop_sequences = _safe_stop_sequences(merged_kwargs.get("stop"))
+    invocation.stop_sequences = safe_stop_sequences(merged_kwargs.get("stop"))
 
-    choice_count = _safe_int(merged_kwargs.get("n"))
+    choice_count = safe_int(merged_kwargs.get("n"))
     if choice_count is not None and choice_count != 1:
         invocation.request_choice_count = choice_count
 
