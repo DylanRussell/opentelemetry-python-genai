@@ -377,35 +377,20 @@ def _to_tool_executions(raw_tools: object) -> list[ToolExecution]:
         if (tool_exec := getattr(item, "tool_execution", None)) is not None:
             item = tool_exec
 
+        if isinstance(item, Mapping):
+            try:
+                from agno.run.requirement import RunRequirement
+
+                item = RunRequirement.from_dict(
+                    cast(dict[str, Any], item)
+                ).tool_execution
+            except Exception:
+                pass
+
         # Agno populates tool_call_id on paused tools; without an ID the result
         # cannot be correlated to a prior tool call.
-        if isinstance(item, ToolExecution):
-            if item.tool_call_id:
-                tool_executions.append(item)
-            continue
-
-        call_id = _get_property_value(
-            item, "tool_call_id"
-        ) or _get_property_value(item, "id")
-        if not call_id:
-            continue
-
-        resp: Any = _get_property_value(item, "result") or _get_property_value(
-            item, "user_input"
-        )
-        confirmed: Any = _get_property_value(item, "confirmed")
-        tool_name = _get_property_value(
-            item, "tool_name"
-        ) or _get_property_value(item, "name")
-
-        tool_executions.append(
-            ToolExecution(
-                tool_call_id=str(call_id),
-                tool_name=str(tool_name) if tool_name else None,
-                result=resp,
-                confirmed=bool(confirmed) if confirmed is not None else None,
-            )
-        )
+        if isinstance(item, ToolExecution) and item.tool_call_id:
+            tool_executions.append(item)
 
     return tool_executions
 
@@ -531,7 +516,11 @@ def _set_continue_invocation_input(
                 )
             )
 
-    input_val = get_argument("input", wrapped, args, kwargs)
+    input_val = (
+        get_argument("input", wrapped, args, kwargs)
+        if isinstance(invocation, LocalAgentInvocation)
+        else None
+    )
     if input_val is not None:
         content_str = _extract_input_content(input_val)
         if content_str:

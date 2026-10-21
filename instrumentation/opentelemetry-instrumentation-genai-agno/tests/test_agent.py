@@ -1111,6 +1111,44 @@ def test_team_continue_run_spans(
         )
 
 
+def test_team_continue_run_dict_requirement(
+    instrument_agno_content_capture, span_exporter
+) -> None:
+    """Test that Team.continue_run handles dict-form requirements."""
+    if not hasattr(Team, "continue_run"):
+        pytest.skip(
+            "Team.continue_run is not supported in this version of agno"
+        )
+    try:
+        from agno.run.requirement import RunRequirement  # noqa: F401
+    except ImportError:
+        pytest.skip("RunRequirement is not supported in this version of agno")
+
+    req = {
+        "id": "req-uuid",
+        "tool_execution": {
+            "tool_call_id": "call_1",
+            "tool_name": "lookup",
+            "tool_args": {},
+        },
+        "external_execution_result": "Delivered",
+    }
+    team = Team(name="t", members=[], model=MockModel(id="mock-model"))
+    with patch(
+        "agno.team._run.continue_run_dispatch",
+        return_value=ModelResponse(content="ok"),
+    ):
+        team.continue_run(run_id="r", session_id="s", requirements=[req])
+
+    span = span_exporter.get_finished_spans()[-1]
+    messages = json.loads(
+        span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    )
+    assert messages[0]["parts"] == [
+        {"type": "tool_call_response", "id": "call_1", "response": "Delivered"}
+    ]
+
+
 def test_team_acontinue_run_spans(
     instrument_agno,
     span_exporter,
@@ -2097,7 +2135,7 @@ def test_workflow_nested_hitl_captures_only_active_step_requirement(
 def test_workflow_nested_hitl_explicit_step_requirements(
     instrument_agno_content_capture, span_exporter
 ) -> None:
-    """Test that Workflow.continue_run does not capture step requirements as tools, but captures explicit user input."""
+    """Test that Workflow.continue_run does not capture explicit step requirements as tools."""
     from agno.workflow.workflow import Workflow
 
     if not hasattr(Workflow, "continue_run"):
@@ -2142,19 +2180,14 @@ def test_workflow_nested_hitl_explicit_step_requirements(
         res = workflow.continue_run(
             run_response=mock_wf_output,
             step_requirements=[req1, req2],
-            input="user resumed workflow",
         )
         assert res is not None
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    messages = json.loads(
-        span.attributes.get(GenAIAttributes.GEN_AI_INPUT_MESSAGES, "[]")
-    )
-    assert len(messages) == 1
-    assert messages[0]["role"] == "user"
-    assert messages[0]["parts"][0]["content"] == "user resumed workflow"
+    # Step requirements are not LLM tool calls and must not be captured as tool messages
+    assert GenAIAttributes.GEN_AI_INPUT_MESSAGES not in span.attributes
 
 
 def test_workflow_nested_hitl_acontinue_run(
@@ -2235,7 +2268,7 @@ def test_agent_continue_run_with_user_input_schema(
     from agno.models.response import ModelResponse, ToolExecution
 
     try:
-        from agno.run.requirement import UserInputField
+        from agno.run.requirement import RunRequirement, UserInputField
     except ImportError:
         pytest.skip("UserInputField is not supported in this version of agno")
 
@@ -2256,7 +2289,10 @@ def test_agent_continue_run_with_user_input_schema(
         else "agno.agent.agent.continue_run_dispatch"
     )
     with patch(target, return_value=ModelResponse(content="Got info")):
-        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+        agent.continue_run(
+            run_id="mock-id",
+            requirements=[RunRequirement(tool_execution=tool_exec)],
+        )
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -2277,7 +2313,7 @@ def test_agent_continue_run_with_user_feedback_schema(
     from agno.models.response import ModelResponse, ToolExecution
 
     try:
-        from agno.run.requirement import UserFeedbackQuestion
+        from agno.run.requirement import RunRequirement, UserFeedbackQuestion
     except ImportError:
         pytest.skip(
             "UserFeedbackQuestion is not supported in this version of agno"
@@ -2301,7 +2337,10 @@ def test_agent_continue_run_with_user_feedback_schema(
         target,
         return_value=ModelResponse(content="Thanks for feedback"),
     ):
-        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+        agent.continue_run(
+            run_id="mock-id",
+            requirements=[RunRequirement(tool_execution=tool_exec)],
+        )
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -2321,6 +2360,11 @@ def test_agent_continue_run_with_confirmation_note(
     from agno.agent import Agent
     from agno.models.response import ModelResponse, ToolExecution
 
+    try:
+        from agno.run.requirement import RunRequirement
+    except ImportError:
+        pytest.skip("RunRequirement is not supported in this version of agno")
+
     agent = Agent(
         name="test-confirm-note-agent", model=MockModel(id="mock-model")
     )
@@ -2338,7 +2382,10 @@ def test_agent_continue_run_with_confirmation_note(
         "agno.agent._run.continue_run_dispatch",
         return_value=ModelResponse(content="Cancelled"),
     ):
-        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+        agent.continue_run(
+            run_id="mock-id",
+            requirements=[RunRequirement(tool_execution=tool_exec)],
+        )
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -2361,6 +2408,11 @@ def test_agent_continue_run_unresolved_tool_has_none_response(
     from agno.agent import Agent
     from agno.models.response import ModelResponse, ToolExecution
 
+    try:
+        from agno.run.requirement import RunRequirement
+    except ImportError:
+        pytest.skip("RunRequirement is not supported in this version of agno")
+
     agent = Agent(name="test-none-agent", model=MockModel(id="mock-model"))
     tool_exec = ToolExecution(
         tool_call_id="call_empty",
@@ -2374,7 +2426,10 @@ def test_agent_continue_run_unresolved_tool_has_none_response(
         "agno.agent._run.continue_run_dispatch",
         return_value=ModelResponse(content="Done"),
     ):
-        agent.continue_run(run_id="mock-id", updated_tools=[tool_exec])
+        agent.continue_run(
+            run_id="mock-id",
+            requirements=[RunRequirement(tool_execution=tool_exec)],
+        )
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
