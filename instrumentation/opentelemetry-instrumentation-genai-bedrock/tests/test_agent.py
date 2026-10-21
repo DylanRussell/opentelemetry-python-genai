@@ -694,6 +694,73 @@ def test_invoke_inline_agent_sync_caller_error_during_stream(
     assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
 
 
+def test_invoke_inline_agent_sync_nested_call_inherits_conversation_id(
+    agent_client,
+    instrument_with_content,
+    span_exporter,
+    tracer_provider,
+) -> None:
+    stubber = Stubber(agent_client)
+    stubber._validate_response = lambda *args, **kwargs: None
+    stubber.add_response(
+        "invoke_inline_agent",
+        service_response={
+            "contentType": "application/json",
+            "sessionId": "session-inline-nested",
+            "completion": [{"chunk": {"bytes": b"chunk 1"}}],
+        },
+        expected_params={
+            "foundationModel": "amazon.nova-micro-v1:0",
+            "instruction": (
+                "Test instruction for testing OpenTelemetry inline agent."
+            ),
+            "sessionId": "session-inline-nested",
+            "inputText": "Hi",
+        },
+    )
+
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    with stubber:
+        with handler.workflow(
+            "outer-workflow", conversation_id="outer-session"
+        ):
+            response = agent_client.invoke_inline_agent(
+                foundationModel="amazon.nova-micro-v1:0",
+                instruction=(
+                    "Test instruction for testing OpenTelemetry inline agent."
+                ),
+                sessionId="session-inline-nested",
+                inputText="Hi",
+            )
+            for _ in response["completion"]:
+                with handler.inference(provider="aws.bedrock"):
+                    pass
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 3
+    nested_span, agent_span, workflow_span = spans
+
+    assert nested_span.name == "chat"
+    assert (
+        nested_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "session-inline-nested"
+    )
+    assert nested_span.parent.span_id == agent_span.context.span_id
+
+    assert agent_span.name == "invoke_agent"
+    assert (
+        agent_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "session-inline-nested"
+    )
+    assert agent_span.parent.span_id == workflow_span.context.span_id
+
+    assert workflow_span.name == "invoke_workflow outer-workflow"
+    assert (
+        workflow_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "outer-session"
+    )
+
+
 # --- Sync retrieve tests ---
 
 
@@ -1548,6 +1615,76 @@ async def test_async_invoke_inline_agent_caller_error_during_stream(
     span = spans[0]
     assert span.status.status_code == StatusCode.ERROR
     assert span.attributes.get(ErrorAttributes.ERROR_TYPE) == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_async_invoke_inline_agent_nested_call_inherits_conversation_id(
+    async_agent_client,
+    instrument_with_content,
+    span_exporter,
+    tracer_provider,
+) -> None:
+    stubber = Stubber(async_agent_client)
+    stubber._validate_response = lambda *args, **kwargs: None
+    stubber.add_response(
+        "invoke_inline_agent",
+        service_response={
+            "contentType": "application/json",
+            "sessionId": "async-session-inline-nested",
+            "completion": _MockAsyncEventStream(
+                [{"chunk": {"bytes": b"chunk 1"}}]
+            ),
+        },
+        expected_params={
+            "foundationModel": "amazon.nova-micro-v1:0",
+            "instruction": (
+                "Test instruction for testing OpenTelemetry inline agent."
+            ),
+            "sessionId": "async-session-inline-nested",
+            "inputText": "Hi async",
+        },
+    )
+
+    handler = TelemetryHandler(tracer_provider=tracer_provider)
+    with stubber:
+        with handler.workflow(
+            "outer-async-workflow", conversation_id="outer-async-session"
+        ):
+            response = await async_agent_client.invoke_inline_agent(
+                foundationModel="amazon.nova-micro-v1:0",
+                instruction=(
+                    "Test instruction for testing OpenTelemetry inline agent."
+                ),
+                sessionId="async-session-inline-nested",
+                inputText="Hi async",
+            )
+            async for _ in response["completion"]:
+                with handler.inference(provider="aws.bedrock"):
+                    pass
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 3
+    nested_span, agent_span, workflow_span = spans
+
+    assert nested_span.name == "chat"
+    assert (
+        nested_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "async-session-inline-nested"
+    )
+    assert nested_span.parent.span_id == agent_span.context.span_id
+
+    assert agent_span.name == "invoke_agent"
+    assert (
+        agent_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "async-session-inline-nested"
+    )
+    assert agent_span.parent.span_id == workflow_span.context.span_id
+
+    assert workflow_span.name == "invoke_workflow outer-async-workflow"
+    assert (
+        workflow_span.attributes.get(GenAIAttributes.GEN_AI_CONVERSATION_ID)
+        == "outer-async-session"
+    )
 
 
 @pytest.mark.asyncio

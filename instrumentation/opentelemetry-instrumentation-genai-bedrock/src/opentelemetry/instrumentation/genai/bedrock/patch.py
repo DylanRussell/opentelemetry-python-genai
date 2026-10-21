@@ -522,6 +522,8 @@ def _start_invoke_inline_agent(
     request_model = extract_invoke_inline_agent_model(api_params)
     raw_agent_name = api_params.get("agentName")
     agent_name = str(raw_agent_name) if raw_agent_name else None
+    raw_session_id = api_params.get("sessionId")
+    conversation_id = str(raw_session_id) if raw_session_id else None
 
     invocation = handler.invoke_remote_agent(
         provider=GenAiProviderNameValues.AWS_BEDROCK.value,
@@ -529,6 +531,7 @@ def _start_invoke_inline_agent(
         agent_name=agent_name,
         server_address=server_address,
         server_port=server_port,
+        conversation_id=conversation_id,
     )
     extract_invoke_inline_agent_request(
         api_params,

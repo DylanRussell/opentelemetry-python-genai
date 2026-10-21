@@ -987,10 +987,6 @@ def extract_invoke_inline_agent_request(
     *,
     capture_content: bool = True,
 ) -> None:
-    session_id = api_params.get("sessionId")
-    if session_id:
-        invocation.conversation_id = str(session_id)
-
     guardrail_cfg = api_params.get("guardrailConfiguration")
     if _is_dict(guardrail_cfg):
         guardrail_id = guardrail_cfg.get("guardrailIdentifier")
