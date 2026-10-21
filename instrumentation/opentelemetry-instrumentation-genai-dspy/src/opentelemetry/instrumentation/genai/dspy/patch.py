@@ -24,6 +24,7 @@ from wrapt import (
 from opentelemetry.instrumentation.genai.dspy.utils import (
     SENTINEL_TOOL_NAMES,
     LMRequestProtocol,
+    _get_field,
     _safe_float,
     _safe_int,
     _safe_stop_sequences,
@@ -441,12 +442,6 @@ def _start_lm_invocation(
     return invocation
 
 
-def _get_field(obj: Any, key: str) -> Any:
-    if isinstance(obj, Mapping):
-        return cast(Mapping[str, Any], obj).get(key)
-    return getattr(obj, key, None)
-
-
 def _lm_update_history() -> Callable[..., Any]:
     """Capture the history entry in context to isolate concurrent calls from shared instance.history."""
 
@@ -589,7 +584,10 @@ def _set_lm_invocation_response(
                     if fr is None:
                         choices = _get_field(r, "choices")
                         if isinstance(choices, Sequence) and choices:
-                            fr = _get_field(choices[0], "finish_reason")
+                            fr = _get_field(
+                                cast(Sequence[object], choices)[0],
+                                "finish_reason",
+                            )
                     if fr is not None:
                         finish_reasons.append(str(fr))
             else:

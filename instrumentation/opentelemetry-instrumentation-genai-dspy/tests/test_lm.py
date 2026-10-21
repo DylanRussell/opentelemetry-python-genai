@@ -1532,3 +1532,18 @@ def test_lm_call_disable_history_keeps_response_metadata(
     assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
     assert span.attributes[GenAI.GEN_AI_USAGE_INPUT_TOKENS] == 10
     assert span.attributes[GenAI.GEN_AI_USAGE_OUTPUT_TOKENS] == 5
+
+
+@pytest.mark.anyio
+async def test_lm_acall_disable_history_keeps_response_metadata(
+    instrument_dspy, span_exporter
+) -> None:
+    with dspy.context(disable_history=True):
+        await FakeLM().acall("Capital of France?")
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_MODEL] == "gpt-4o-2024-05-13"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_ID] == "chatcmpl-123"
+    assert span.attributes[GenAI.GEN_AI_RESPONSE_FINISH_REASONS] == ("stop",)
+    assert span.attributes[GenAI.GEN_AI_USAGE_INPUT_TOKENS] == 10
+    assert span.attributes[GenAI.GEN_AI_USAGE_OUTPUT_TOKENS] == 5
