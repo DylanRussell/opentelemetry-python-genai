@@ -13,6 +13,10 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      built_sha:
+        description: "Verified commit SHA used for the build"
+        value: ${{ jobs.build.outputs.built_sha }}
 
 permissions:
   contents: read
@@ -43,7 +47,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           persist-credentials: false
 
       - name: Verify commit belongs to a merged pull request
@@ -53,6 +57,10 @@ jobs:
         run: |
           built_sha=$(git rev-parse HEAD)
           echo "sha=${built_sha}" >> "$GITHUB_OUTPUT"
+          if [[ "${built_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "Error! Resolved commit ${built_sha} differs from attested source SHA ${GITHUB_SHA}."
+            exit 1
+          fi
           merged_prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${built_sha}/pulls" \
             --jq '[.[] | select(.merged_at != null)] | length')
           if [[ "${merged_prs}" -lt 1 ]]; then

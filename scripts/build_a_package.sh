@@ -20,6 +20,10 @@
 
 set -ev
 
+# Exclude packages uploaded within the last 3 days across all uv invocations,
+# ensuring build backend dependencies (e.g. hatchling) also inherit the cutoff.
+export UV_EXCLUDE_NEWER=3d
+
 if [ $PACKAGE_NAME ]; then
   pkg_name=${PACKAGE_NAME}
   pkg_version=${VERSION}

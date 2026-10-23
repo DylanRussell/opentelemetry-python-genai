@@ -76,6 +76,10 @@ jobs:
       fail-fast: false
       matrix:
         package: ${{ fromJson(needs.enumerate.outputs.packages) }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     uses: $/.github/workflows/_release-build.yml
     with:
       package: ${{ matrix.package }}

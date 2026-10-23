@@ -29,6 +29,10 @@ run-name: "Release: ${{ inputs.package }}"
 
 jobs:
   build:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     uses: $/.github/workflows/_release-build.yml
     with:
       package: ${{ inputs.package }}
