@@ -998,15 +998,10 @@ def _workflow_arun(
         if not run_id:
             # Matches what agno does internally when no run id is set.
             run_id = str(uuid4())
-            kwargs["run_id"] = run_id
-            if is_continue:
-                try:
-                    bound = bind_arguments(wrapped, args, kwargs)
-                    if run_resp := bound.get("run_response"):
-                        if not getattr(run_resp, "run_id", None):
-                            setattr(run_resp, "run_id", run_id)
-                except Exception:
-                    pass
+            # Do not inject run_id on continue runs; Agno requires the caller
+            # to supply run_response or run_id and fails validation otherwise.
+            if not is_continue:
+                kwargs["run_id"] = run_id
 
         _ACTIVE_WORKFLOW_RUN_IDS.add(run_id)
 
@@ -1218,6 +1213,8 @@ def _workflow_aexecute_stream(
                 )
             if run_id:
                 _ACTIVE_WORKFLOW_RUN_IDS.discard(run_id)
+            _set_invocation_output(invocation, result, capture_content)
+            invocation.stop()
             return result
         except BaseException as error:
             if run_id:

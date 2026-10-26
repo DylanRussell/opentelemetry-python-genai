@@ -649,3 +649,32 @@ def test_workflow_agent_tool_call_foreground_stream_single_workflow_span(
     names = sorted(s.name for s in span_exporter.get_finished_spans())
     assert "execute_tool run_workflow" in names
     assert len(_workflow_spans(span_exporter)) == 1, names
+
+
+def test_workflow_aexecute_stream_non_async_iterator_ends_invocation(
+    span_exporter,
+    tracer_provider,
+) -> None:
+    from opentelemetry.instrumentation.genai.agno.patch import (
+        _workflow_aexecute_stream,
+    )
+    from opentelemetry.util.genai.handler import TelemetryHandler
+
+    handler = TelemetryHandler(
+        tracer_provider=tracer_provider,
+        instrumentation_scope_name="test-agno",
+    )
+    workflow = Workflow(name="wf-non-stream-result", steps=[])
+    mock_fn = MagicMock(return_value="immediate result")
+    traced_fn = _workflow_aexecute_stream(handler)
+
+    res = traced_fn(
+        mock_fn, workflow, (), {"user_input": "hi", "run_id": "r-123"}
+    )
+    assert res == "immediate result"
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.name == "invoke_workflow wf-non-stream-result"
+    assert span.status.status_code != StatusCode.ERROR
