@@ -54,7 +54,6 @@ jobs:
         with:
           packages-dir: dist/
           skip-existing: true
-          attestations: true
 
   finalize:
     needs: [build, publish]

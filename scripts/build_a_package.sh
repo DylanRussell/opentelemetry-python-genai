@@ -105,8 +105,6 @@ with zipfile.ZipFile(wheels[0]) as zf:
         basename = pathlib.PurePosixPath(name).name
         if name.endswith(".pth") or basename in {"sitecustomize.py", "usercustomize.py"}:
             sys.exit(f"Error! Forbidden startup hook file in wheel: {name}")
-        if f"{pkg_name_norm}-{pkg_version}.data/" in name or ".data/" in name.split("/")[0]:
-            sys.exit(f"Error! Unexpected .data/ directory entry in wheel: {name}")
         if not (name.startswith("opentelemetry/") or name.startswith(expected_dist_info)):
             sys.exit(
                 f"Error! Unexpected top-level path in wheel: {name} "

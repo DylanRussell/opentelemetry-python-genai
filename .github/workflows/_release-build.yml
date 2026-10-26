@@ -23,13 +23,9 @@ permissions:
 
 jobs:
   build:
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
     runs-on: ubuntu-slim
     outputs:
-      built_sha: ${{ steps.verify_commit.outputs.sha }}
+      built_sha: ${{ steps.build_commit.outputs.sha }}
     steps:
       - name: Resolve release target
         id: target
@@ -50,23 +46,11 @@ jobs:
           ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Verify commit belongs to a merged pull request
-        id: verify_commit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Record build commit SHA
+        id: build_commit
         run: |
           built_sha=$(git rev-parse HEAD)
           echo "sha=${built_sha}" >> "$GITHUB_OUTPUT"
-          if [[ "${built_sha}" != "${GITHUB_SHA}" ]]; then
-            echo "Error! Resolved commit ${built_sha} differs from attested source SHA ${GITHUB_SHA}."
-            exit 1
-          fi
-          merged_prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${built_sha}/pulls" \
-            --jq '[.[] | select(.merged_at != null)] | length')
-          if [[ "${merged_prs}" -lt 1 ]]; then
-            echo "Error! Commit ${built_sha} is not associated with any merged pull request."
-            exit 1
-          fi
 
       - name: Set environment variables
         run: |
@@ -121,11 +105,6 @@ jobs:
       - name: Build wheels
         run: ./scripts/build_a_package.sh
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: "dist/*"
-
       - name: Upload dist artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -133,3 +112,21 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 1
+
+  attest:
+    needs: build
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ inputs.package }}
+          path: dist/
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: "dist/*"

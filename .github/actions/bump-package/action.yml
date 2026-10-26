@@ -88,8 +88,8 @@ runs:
     - name: Create pull request
       shell: bash
       env:
-        PUSH_TOKEN: ${{ github.token }}
-        GITHUB_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+        GH_TOKEN: ${{ github.token }}
+        PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
         INPUTS_OPERATION: ${{ inputs.operation }}
       run: |
         case "${INPUTS_OPERATION}" in
@@ -104,8 +104,9 @@ runs:
         esac
 
         git commit -a -m "$title"
-        git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$branch"
-        gh pr create --title "$title" \
+        gh auth setup-git
+        git push origin HEAD:"$branch"
+        GH_TOKEN="${PR_TOKEN}" gh pr create --title "$title" \
                      --body "$title." \
                      --head "$branch" \
                      --base "$GITHUB_REF_NAME"
