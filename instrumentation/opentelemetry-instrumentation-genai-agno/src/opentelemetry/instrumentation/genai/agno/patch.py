@@ -322,7 +322,10 @@ def patch_agent(handler: TelemetryHandler) -> None:
         current_generation,
     )
 
-    embedder_wrappers = _embedder_method_wrappers(handler)
+    embedder_wrappers = [
+        (method_name, factory(handler))
+        for method_name, factory in _EMBEDDER_METHOD_FACTORIES
+    ]
     for mod_name, cls_name in _KNOWN_EMBEDDERS:
         for method_name, wrapper_fn in embedder_wrappers:
             _safe_wrap_function(
@@ -331,30 +334,6 @@ def patch_agent(handler: TelemetryHandler) -> None:
                 wrapper_fn,
                 current_generation,
             )
-
-    try:
-        from agno.knowledge.embedder.base import Embedder
-
-        # Wrap all existing custom embedder classes
-        def _wrap_subclasses(base_cls: type[Any]) -> None:
-            for sub in base_cls.__subclasses__():
-                _wrap_embedder_class(sub, handler)
-                _wrap_subclasses(sub)
-
-        _wrap_subclasses(Embedder)
-
-        # Wrap new embedder classes created during runtime
-        def _traced_init_subclass(cls: type[Embedder], **kwargs: Any) -> None:
-            super(Embedder, cls).__init_subclass__(**kwargs)
-            if _is_instrumented:
-                _wrap_embedder_class(cls, handler)
-
-        setattr(
-            Embedder, "__init_subclass__", classmethod(_traced_init_subclass)
-        )
-    except Exception:
-        pass
-
 
 
 def unpatch_agent() -> None:
