@@ -157,8 +157,8 @@ jobs:
 
       - name: Open pull request for post-release updates on main
         env:
-          PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
         run: |
           if git diff --quiet; then
             echo "No updates needed on main"
@@ -170,8 +170,9 @@ jobs:
           branch="otelbot/bump-after-release-all-$(date +%Y%m%d)"
 
           git commit -a -m "$message"
-          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$branch"
-          gh pr create --title "$message" \
+          gh auth setup-git
+          git push origin HEAD:"$branch"
+          GH_TOKEN="${PR_TOKEN}" gh pr create --title "$message" \
                        --body "$body" \
                        --head "$branch" \
                        --base main \
