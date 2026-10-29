@@ -53,6 +53,7 @@ from opentelemetry.util.genai.types import (
 )
 from opentelemetry.util.genai.utils import (
     ContentCapturingMode,
+    gen_ai_json_dumps,
     get_content_capturing_mode,
     object_to_any_value,
 )
@@ -467,6 +468,20 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
             self.stop()
 
 
+def _json_dumps_unless_str(value: object) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    try:
+        return gen_ai_json_dumps(value, allow_nan=False)
+    except (TypeError, ValueError, RecursionError):
+        pass
+    # Callers may set objects (e.g. models) that weren't converted to AnyValue.
+    converted = object_to_any_value(value)
+    if converted is None or isinstance(converted, str):
+        return converted
+    return gen_ai_json_dumps(converted)
+
+
 def get_content_attributes(
     *,
     input_messages: Sequence[InputMessage],
@@ -537,7 +552,7 @@ def get_content_attributes(
     }
     if prompt_variables:
         for k, v in prompt_variables.items():
-            serialized = object_to_any_value(v)
+            serialized = _json_dumps_unless_str(v)
             if serialized is not None:
                 result[f"{_GEN_AI_PROMPT_VARIABLE_PREFIX}{k}"] = serialized
     return result

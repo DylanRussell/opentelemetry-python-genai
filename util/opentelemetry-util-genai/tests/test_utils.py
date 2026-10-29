@@ -1455,7 +1455,7 @@ class TestTelemetryHandler(unittest.TestCase):
             assert attrs["gen_ai.prompt.version"] == "1.0.0"
             assert attrs["gen_ai.prompt.variable.user"] == "Alice"
             assert attrs["gen_ai.prompt.variable.style"] == "formal"
-            assert attrs["gen_ai.prompt.variable.tags"] == ("a", "b")
+            assert attrs["gen_ai.prompt.variable.tags"] == '["a","b"]'
 
             event_attrs = self.log_exporter.get_finished_logs()[
                 -1
@@ -1464,7 +1464,7 @@ class TestTelemetryHandler(unittest.TestCase):
             assert event_attrs["gen_ai.prompt.version"] == "1.0.0"
             assert event_attrs["gen_ai.prompt.variable.user"] == "Alice"
             assert event_attrs["gen_ai.prompt.variable.style"] == "formal"
-            assert event_attrs["gen_ai.prompt.variable.tags"] == ("a", "b")
+            assert event_attrs["gen_ai.prompt.variable.tags"] == '["a","b"]'
 
     def test_inference_prompt_variables_safe_serialization(self):
         with patch.dict(
@@ -1492,11 +1492,12 @@ class TestTelemetryHandler(unittest.TestCase):
 
             attrs = self.span_exporter.get_finished_spans()[-1].attributes
             assert attrs["gen_ai.prompt.variable.plain_str"] == "hello"
-            assert attrs["gen_ai.prompt.variable.int_val"] == 42
+            assert attrs["gen_ai.prompt.variable.int_val"] == "42"
             assert "gen_ai.prompt.variable.none_val" not in attrs
-            assert attrs["gen_ai.prompt.variable.valid_dict"] == {
-                "clean": "data"
-            }
+            assert (
+                attrs["gen_ai.prompt.variable.valid_dict"]
+                == '{"clean":"data"}'
+            )
             assert "gen_ai.prompt.variable.bad_obj" not in attrs
 
     @patch.dict(
@@ -1523,7 +1524,7 @@ class TestTelemetryHandler(unittest.TestCase):
         invocation.stop()
 
         attrs = self.span_exporter.get_finished_spans()[-1].attributes
-        assert attrs["gen_ai.prompt.variable.node"] == {"name": "root"}
+        assert attrs["gen_ai.prompt.variable.node"] == '{"name":"root"}'
 
 
 class AnyNonNone:

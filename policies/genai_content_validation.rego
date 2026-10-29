@@ -22,7 +22,6 @@ deny contains result if {
 	input.sample.attribute
 	attr_name := input.sample.attribute.name
 	attr_value := input.sample.attribute.value
-	not is_string(attr_value)
 
 	key := _genai_content_schema_keys[attr_name]
 	# Undefined (so the rule skips this attribute) when the schema isn't loaded

@@ -760,6 +760,14 @@ def _chat_span(
     return span
 
 
+def _normalize_tuples_to_lists(value: Any) -> Any:
+    if isinstance(value, (tuple, list)):
+        return [_normalize_tuples_to_lists(x) for x in value]
+    if isinstance(value, dict):
+        return {k: _normalize_tuples_to_lists(v) for k, v in value.items()}
+    return value
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
 @pytest.mark.parametrize("definitions_key", ["tools", "functions", None])
@@ -789,10 +797,9 @@ async def test_chat_tool_definitions(
     assert attrs is not None
     if definitions_key and content_capture == ContentCapturingMode.SPAN_ONLY:
         definitions = attrs[gen_ai_attributes.GEN_AI_TOOL_DEFINITIONS]
-        assert isinstance(definitions, tuple)
-        assert definitions[0]["type"] == "function"
-        assert definitions[0]["name"] == function["name"]
-        assert definitions[0]["description"] == function["description"]
+        assert _normalize_tuples_to_lists(definitions) == [
+            {"type": "function", **function}
+        ]
     else:
         assert gen_ai_attributes.GEN_AI_TOOL_DEFINITIONS not in attrs
 
