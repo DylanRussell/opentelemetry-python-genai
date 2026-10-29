@@ -35,12 +35,7 @@ from opentelemetry.util.genai.types import (
     ToolDefinition,
     UriPart,
 )
-from opentelemetry.util.genai.utils import (
-    decode_base64,
-    image_from_url,
-    object_to_any_value,
-    tool_arguments_to_any_value,
-)
+from opentelemetry.util.genai.utils import decode_base64, image_from_url
 
 if TYPE_CHECKING:
     from dspy.adapters.types.tool import Tool
@@ -300,7 +295,12 @@ def _extract_tool_call_part(
 
         args = None
         if capture_content:
-            args = tool_arguments_to_any_value(args_raw)
+            args = args_raw
+            if isinstance(args_raw, str):
+                try:
+                    args = json.loads(args_raw)
+                except (json.JSONDecodeError, TypeError):
+                    args = args_raw
         return ToolCallRequestPart(
             id=str(call_id) if call_id else None,
             name=name,
@@ -311,12 +311,11 @@ def _extract_tool_call_part(
         name = str(getattr(tc, "name", ""))
         args = None
         if capture_content:
-            args_raw = getattr(tc, "args", None)
-            if args_raw is None:
-                args_raw = getattr(tc, "arguments", None)
-            if args_raw is None:
-                args_raw = getattr(tc, "input", None)
-            args = tool_arguments_to_any_value(args_raw)
+            args = getattr(tc, "args", None)
+            if args is None:
+                args = getattr(tc, "arguments", None)
+            if args is None:
+                args = getattr(tc, "input", None)
         return ToolCallRequestPart(
             id=str(call_id) if call_id else None,
             name=name,
@@ -386,7 +385,7 @@ def _extract_part(
             content = p.get("content") or p.get("response")
             return ToolCallResponsePart(
                 id=str(call_id) if call_id else None,
-                response=object_to_any_value(content),
+                response=content,
             )
 
         # URL specified -> UriPart
@@ -467,7 +466,7 @@ def _extract_part(
         content = getattr(p, "content", None)
         return ToolCallResponsePart(
             id=str(call_id) if call_id else None,
-            response=object_to_any_value(content),
+            response=content,
         )
 
     # URL specified -> UriPart
@@ -529,7 +528,7 @@ def _extract_single_message(
             parts.append(
                 ToolCallResponsePart(
                     id=str(call_id) if call_id else None,
-                    response=object_to_any_value(content),
+                    response=content,
                 )
             )
         else:
@@ -1036,7 +1035,7 @@ def prepare_tool_definitions(
             FunctionToolDefinition(
                 name=name_str,
                 description=str(desc).strip() if desc is not None else None,
-                parameters=object_to_any_value(args_schema),
+                parameters=args_schema,
             )
         )
 

@@ -150,7 +150,7 @@ def _chat_message_parts(message: ChatMessage) -> list[MessagePart]:
         elif isinstance(block, ToolCallBlock):
             parts.append(
                 ToolCallRequestPart(
-                    arguments=object_to_any_value(block.tool_kwargs),
+                    arguments=block.tool_kwargs,
                     name=block.tool_name,
                     id=block.tool_call_id,
                 )
@@ -407,7 +407,7 @@ def _tool_definition(candidate: object) -> ToolDefinition | None:
         name=name,
         description=description,
         type="function",
-        parameters=object_to_any_value(parameters),
+        parameters=parameters,
     )
 
 

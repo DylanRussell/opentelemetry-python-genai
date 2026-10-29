@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -43,11 +44,7 @@ _SERVER_TOOL_RESULT_TYPES = {
     "text_editor_code_execution_tool_result": "text_editor_code_execution",
     "tool_search_tool_result": "tool_search",
 }
-from opentelemetry.util.genai.utils import (
-    decode_base64,
-    image_from_url,
-    tool_arguments_to_any_value,
-)
+from opentelemetry.util.genai.utils import decode_base64, image_from_url
 
 if TYPE_CHECKING:
     from anthropic.types import (
@@ -495,11 +492,12 @@ def stream_block_state_to_part(state: StreamBlockState) -> MessagePart | None:
         return TextPart(content=state.text)
 
     if state.type == "tool_use":
-        arguments = (
-            tool_arguments_to_any_value(state.input_json)
-            if state.input_json
-            else state.tool_input
-        )
+        arguments: str | dict[str, object] | None = state.tool_input
+        if state.input_json:
+            try:
+                arguments = json.loads(state.input_json)
+            except ValueError:
+                arguments = state.input_json
         return ToolCallRequestPart(
             arguments=arguments,
             name=state.tool_name,

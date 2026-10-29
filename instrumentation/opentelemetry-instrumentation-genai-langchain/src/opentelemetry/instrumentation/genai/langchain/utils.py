@@ -40,12 +40,7 @@ from opentelemetry.util.genai.types import (
     ToolCallResponsePart,
     ToolDefinition,
 )
-from opentelemetry.util.genai.utils import (
-    decode_base64,
-    image_from_url,
-    object_to_any_value,
-    tool_arguments_to_any_value,
-)
+from opentelemetry.util.genai.utils import decode_base64, image_from_url
 
 # Mapping from LangChain ``ls_provider`` metadata values to the well-known
 # ``gen_ai.provider.name`` values defined by the GenAI semantic conventions.
@@ -289,7 +284,12 @@ def _legacy_function_call_request(
     if not name:
         return None
     raw_arguments = function_call.get("arguments")
-    arguments = tool_arguments_to_any_value(raw_arguments)
+    arguments: Any = raw_arguments
+    if isinstance(raw_arguments, str):
+        try:
+            arguments = json.loads(raw_arguments)
+        except (json.JSONDecodeError, ValueError):
+            arguments = raw_arguments
     return ToolCallRequestPart(arguments=arguments, name=name, id=None)
 
 
@@ -307,7 +307,7 @@ def _ai_message_parts(message: AIMessage) -> list[MessagePart]:
             continue
         parts.append(
             ToolCallRequestPart(
-                arguments=object_to_any_value(call["args"]),
+                arguments=call["args"],
                 name=name,
                 id=call["id"],
             )
@@ -324,7 +324,7 @@ def _tool_message_parts(message: ToolMessage) -> list[MessagePart]:
     tool_call_id = getattr(message, "tool_call_id", None)
     return [
         ToolCallResponsePart(
-            response=object_to_any_value(message.content),
+            response=message.content,
             id=tool_call_id if isinstance(tool_call_id, str) else None,
         )
     ]
@@ -438,9 +438,7 @@ def prepare_tool_definitions(tools: list[Any]) -> list[ToolDefinition] | None:
                         description=str(func_description)
                         if func_description is not None
                         else None,
-                        parameters=object_to_any_value(
-                            _get_property_value(func, "parameters")
-                        ),
+                        parameters=_get_property_value(func, "parameters"),
                     )
                 )
         elif (
@@ -458,9 +456,7 @@ def prepare_tool_definitions(tools: list[Any]) -> list[ToolDefinition] | None:
                     description=str(func_description)
                     if func_description is not None
                     else None,
-                    parameters=object_to_any_value(
-                        _get_property_value(tool, "parameters")
-                    ),
+                    parameters=_get_property_value(tool, "parameters"),
                 )
             )
     return definitions or None
