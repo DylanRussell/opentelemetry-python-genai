@@ -15,7 +15,7 @@ from dataclasses import asdict, fields, is_dataclass
 from datetime import date, datetime, time
 from enum import Enum
 from functools import lru_cache, partial
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from opentelemetry.util.genai.environment_variables import (
@@ -127,7 +127,7 @@ def fq_exception_type(exception: BaseException) -> str:
 
 
 class _GenAiJsonEncoder(json.JSONEncoder):
-    def default(self, o: object) -> object:
+    def default(self, o: Any) -> Any:
         if is_dataclass(o) and not isinstance(o, type):
             return asdict(o)
         if isinstance(o, bytes):
