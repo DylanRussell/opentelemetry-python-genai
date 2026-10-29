@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
@@ -26,6 +25,7 @@ from opentelemetry.util.genai.types import (
     TextPart,
     ToolCallRequestPart,
 )
+from opentelemetry.util.genai.utils import tool_arguments_to_any_value
 
 from .extractors import (
     _first_not_none,
@@ -66,14 +66,9 @@ def _build_stream_parts(
         if idx in tool_blocks:
             tool_info = tool_blocks[idx]
             raw_input = "".join(tool_info.get("input_chunks", []))
-            args: object
-            if raw_input:
-                try:
-                    args = json.loads(raw_input)
-                except Exception:
-                    args = raw_input
-            else:
-                args = {}
+            args: object = (
+                tool_arguments_to_any_value(raw_input) if raw_input else {}
+            )
             parts.append(
                 ToolCallRequestPart(
                     id=tool_info.get("id") or tool_info.get("toolUseId"),

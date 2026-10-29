@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 
 from openai import AsyncStream, Stream
@@ -24,6 +23,7 @@ from opentelemetry.util.genai.types import (
     TextPart,
     ToolCallRequestPart,
 )
+from opentelemetry.util.genai.utils import tool_arguments_to_any_value
 
 from .chat_buffers import ChoiceBuffer
 from .utils import (
@@ -137,13 +137,12 @@ class _ChatStreamMixin:
             if choice.tool_calls_buffers:
                 tool_calls = []
                 for tool_call in filter(None, choice.tool_calls_buffers):
-                    arguments = None
                     arguments_str = "".join(tool_call.arguments)
-                    if arguments_str:
-                        try:
-                            arguments = json.loads(arguments_str)
-                        except json.JSONDecodeError:
-                            arguments = arguments_str
+                    arguments = (
+                        tool_arguments_to_any_value(arguments_str)
+                        if arguments_str
+                        else None
+                    )
                     tool_call_part = ToolCallRequestPart(
                         name=tool_call.function_name,
                         id=tool_call.tool_call_id,

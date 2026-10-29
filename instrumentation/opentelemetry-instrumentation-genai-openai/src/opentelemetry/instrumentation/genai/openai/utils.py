@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import mimetypes
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
@@ -38,7 +37,12 @@ from opentelemetry.util.genai.types import (
     ToolCallResponsePart,
     ToolDefinition,
 )
-from opentelemetry.util.genai.utils import decode_base64, image_from_url
+from opentelemetry.util.genai.utils import (
+    decode_base64,
+    image_from_url,
+    object_to_any_value,
+    tool_arguments_to_any_value,
+)
 
 _OpenAIOmit = getattr(openai, "Omit", None)
 
@@ -470,10 +474,7 @@ def extract_tool_calls_new(tool_calls) -> list[ToolCallRequestPart]:
             func_name = get_property_value(func, "name") or ""
             arguments_str = get_property_value(func, "arguments")
             if arguments_str:
-                try:
-                    arguments = json.loads(arguments_str)
-                except json.JSONDecodeError:
-                    arguments = arguments_str
+                arguments = tool_arguments_to_any_value(arguments_str)
 
         # TODO: support custom
         parts.append(
@@ -498,7 +499,9 @@ def _prepare_tool_definitions(tools) -> list[ToolDefinition] | None:
                     FunctionToolDefinition(
                         name=get_property_value(func, "name") or "",
                         description=get_property_value(func, "description"),
-                        parameters=get_property_value(func, "parameters"),
+                        parameters=object_to_any_value(
+                            get_property_value(func, "parameters")
+                        ),
                     )
                 )
     return definitions

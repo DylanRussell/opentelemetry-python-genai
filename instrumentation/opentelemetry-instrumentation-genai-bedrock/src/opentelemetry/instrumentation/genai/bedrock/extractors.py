@@ -33,7 +33,7 @@ from opentelemetry.util.genai.types import (
     ToolCallResponsePart,
     ToolDefinition,
 )
-from opentelemetry.util.genai.utils import decode_base64
+from opentelemetry.util.genai.utils import decode_base64, object_to_any_value
 
 
 def _is_dict(val: object) -> TypeGuard[dict[str, Any]]:
@@ -212,13 +212,13 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
         return ToolCallRequestPart(
             id=tool_use.get("toolUseId"),
             name=tool_use.get("name", ""),
-            arguments=tool_use.get("input"),
+            arguments=object_to_any_value(tool_use.get("input")),
         )
     if block_type == "tool_use":
         return ToolCallRequestPart(
             id=block.get("id"),
             name=str(block.get("name", "")),
-            arguments=block.get("input"),
+            arguments=object_to_any_value(block.get("input")),
         )
 
     # 6. Tool result (Converse toolResult or Anthropic tool_result)
@@ -226,12 +226,12 @@ def extract_content_block(block: dict[str, Any]) -> MessagePart | None:
     if _is_dict(tool_result):
         return ToolCallResponsePart(
             id=tool_result.get("toolUseId"),
-            response=tool_result.get("content"),
+            response=object_to_any_value(tool_result.get("content")),
         )
     if block_type == "tool_result":
         return ToolCallResponsePart(
             id=block.get("tool_use_id"),
-            response=block.get("content"),
+            response=object_to_any_value(block.get("content")),
         )
 
     return None
@@ -379,7 +379,7 @@ def extract_converse_request(
                         FunctionToolDefinition(
                             name=name,
                             description=description,
-                            parameters=params,
+                            parameters=object_to_any_value(params),
                         )
                     )
                 elif "name" in tool and "type" in tool:
@@ -534,7 +534,9 @@ def extract_invoke_model_request(
                     FunctionToolDefinition(
                         name=name,
                         description=description,
-                        parameters=params if _is_dict(params) else {},
+                        parameters=object_to_any_value(params)
+                        if _is_dict(params)
+                        else {},
                     )
                 )
             elif name and "type" in tool:
@@ -1015,8 +1017,8 @@ def extract_invoke_inline_agent_request(
                     FunctionToolDefinition(
                         name=name,
                         description=str(desc) if desc is not None else None,
-                        parameters=_convert_bedrock_parameters_to_json_schema(
-                            params
+                        parameters=object_to_any_value(
+                            _convert_bedrock_parameters_to_json_schema(params)
                         ),
                     )
                 )

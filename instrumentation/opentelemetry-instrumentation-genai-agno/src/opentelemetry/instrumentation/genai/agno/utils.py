@@ -81,7 +81,7 @@ def prepare_tool_definitions(
             FunctionToolDefinition(
                 name=name,
                 description=desc,
-                parameters=params,
+                parameters=object_to_any_value(params),
             )
         )
 

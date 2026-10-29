@@ -42,7 +42,8 @@ from opentelemetry.util.genai.types import (
     ModalityTokens,
     ToolDefinition,
 )
-from opentelemetry.util.types import AttributeValue
+from opentelemetry.util.genai.utils import object_to_any_value
+from opentelemetry.util.types import AnyValue, AttributeValue
 
 from ._error_type import resolve_error_type
 from .allowlist_util import AllowList
@@ -199,36 +200,34 @@ def _model_dump_to_tool_definition(tool: Any) -> ToolDefinition:
     return FunctionToolDefinition(
         name=name,
         description=description,
-        parameters=parameters,
+        parameters=_clean_parameters(parameters),
     )
 
 
-def _clean_parameters(params: Any) -> Any:
-    """Converts parameter objects into plain dicts."""
+def _clean_parameters(params: Any) -> AnyValue:
+    """Converts parameter objects into AnyValue."""
     if params is None:
         return None
-    if isinstance(params, dict):
-        return params
     if hasattr(params, "to_dict"):
-        return params.to_dict()
-    if hasattr(params, "model_dump"):
-        return params.model_dump(exclude_none=True)
+        params = params.to_dict()
+    elif hasattr(params, "model_dump"):
+        params = params.model_dump(exclude_none=True)
 
-    try:
-        # Check if it's already a standard JSON type.
-        json.dumps(params)
-        return params
+    if not isinstance(params, (dict, list, str, int, float, bool, bytes)):
+        try:
+            json.dumps(params)
+        except (TypeError, ValueError):
+            return {
+                "type": "object",
+                "properties": {
+                    "serialization_error": {
+                        "type": "string",
+                        "description": f"Failed to serialize parameters: {type(params).__name__}",
+                    }
+                },
+            }
 
-    except (TypeError, ValueError):
-        return {
-            "type": "object",
-            "properties": {
-                "serialization_error": {
-                    "type": "string",
-                    "description": f"Failed to serialize parameters: {type(params).__name__}",
-                }
-            },
-        }
+    return object_to_any_value(params)
 
 
 def _tool_to_tool_definition(tool: Tool) -> list[ToolDefinition]:
@@ -282,7 +281,7 @@ def _mcp_tool_to_tool_definition(tool: McpTool) -> ToolDefinition:
     return FunctionToolDefinition(
         name=getattr(tool, "name", type(tool).__name__),
         description=getattr(tool, "description", None),
-        parameters=getattr(tool, "input_schema", None),
+        parameters=_clean_parameters(getattr(tool, "input_schema", None)),
     )
 
 

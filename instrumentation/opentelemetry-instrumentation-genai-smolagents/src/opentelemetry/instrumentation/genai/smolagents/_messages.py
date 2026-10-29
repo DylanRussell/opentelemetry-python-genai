@@ -37,6 +37,7 @@ from opentelemetry.util.genai.types import (
     ToolDefinition,
     UriPart,
 )
+from opentelemetry.util.genai.utils import object_to_any_value
 
 if TYPE_CHECKING:
     from smolagents.agents import MultiStepAgent
@@ -253,7 +254,7 @@ def to_tool_definitions(
             FunctionToolDefinition(
                 name=cast(str, tool.name),
                 description=tool.description,
-                parameters=parameters,
+                parameters=object_to_any_value(parameters),
             )
         )
     return definitions or None

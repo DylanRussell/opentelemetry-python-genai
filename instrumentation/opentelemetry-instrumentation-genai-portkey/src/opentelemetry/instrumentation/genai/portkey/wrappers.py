@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from typing import Any, cast
 
@@ -25,6 +24,7 @@ from opentelemetry.util.genai.types import (
     Text,
     ToolCallRequest,
 )
+from opentelemetry.util.genai.utils import tool_arguments_to_any_value
 
 
 class ToolCallBuffer:
@@ -153,13 +153,12 @@ class _PortkeyStreamMixin:
             if choice.tool_calls_buffers:
                 tool_calls: list[ToolCallRequest] = []
                 for tool_call in filter(None, choice.tool_calls_buffers):
-                    arguments = None
                     args_str = "".join(tool_call.arguments)
-                    if args_str:
-                        try:
-                            arguments = json.loads(args_str)
-                        except Exception:
-                            arguments = args_str
+                    arguments = (
+                        tool_arguments_to_any_value(args_str)
+                        if args_str
+                        else None
+                    )
                     tool_calls.append(
                         ToolCallRequest(
                             name=tool_call.function_name or "",

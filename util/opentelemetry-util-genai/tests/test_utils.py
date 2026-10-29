@@ -125,8 +125,8 @@ def _get_messages_from_attr(
 ) -> list[dict[str, Any]]:
     payload = span_attrs.get(attribute_name)
     assert payload is not None
-    assert isinstance(payload, str)
-    return json.loads(payload)
+    assert isinstance(payload, (list, tuple))
+    return list(payload)
 
 
 def _get_single_message(
@@ -145,7 +145,7 @@ def _assert_text_message(
 ) -> None:
     assert message.get("role") == role
     parts = message.get("parts")
-    assert isinstance(parts, list) and parts
+    assert isinstance(parts, (list, tuple)) and parts
     assert parts[0].get("content") == content
     if finish_reason is not None:
         assert message.get("finish_reason") == finish_reason
@@ -310,10 +310,10 @@ class TestTelemetryHandler(unittest.TestCase):
         self.assertEqual(invocation.attributes.get("custom_attr"), "value")
         self.assertEqual(invocation.attributes.get("extra"), "info")
 
-        # Verify system instruction is present in span as JSON string
+        # Verify system instruction is present in span
         self.assertIn(GenAI.GEN_AI_SYSTEM_INSTRUCTIONS, span_attrs)
-        span_system = json.loads(span_attrs[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS])
-        self.assertIsInstance(span_system, list)
+        span_system = span_attrs[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS]
+        self.assertIsInstance(span_system, (list, tuple))
         self.assertEqual(
             span_system[0]["content"], "You are a helpful assistant."
         )
@@ -336,9 +336,9 @@ class TestTelemetryHandler(unittest.TestCase):
         span = _get_single_span(self.span_exporter)
         span_attrs = _get_span_attributes(span)
         self.assertIn(GenAI.GEN_AI_SYSTEM_INSTRUCTIONS, span_attrs)
-        instructions = json.loads(span_attrs[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS])
+        instructions = span_attrs[GenAI.GEN_AI_SYSTEM_INSTRUCTIONS]
         self.assertEqual(
-            instructions,
+            list(instructions),
             [
                 {"type": "text", "content": "You are helpful"},
                 {"type": "custom"},
@@ -1278,7 +1278,7 @@ class TestTelemetryHandler(unittest.TestCase):
             GenAI.GEN_AI_OUTPUT_MESSAGES,
         ):
             with self.subTest(key=key):
-                span_parts = json.loads(span_attrs[key])[0]["parts"]
+                span_parts = span_attrs[key][0]["parts"]
                 event_parts = event_attrs[key][0]["parts"]
                 for recorded_parts in (span_parts, event_parts):
                     values = [part["modality"] for part in recorded_parts]
@@ -1455,7 +1455,7 @@ class TestTelemetryHandler(unittest.TestCase):
             assert attrs["gen_ai.prompt.version"] == "1.0.0"
             assert attrs["gen_ai.prompt.variable.user"] == "Alice"
             assert attrs["gen_ai.prompt.variable.style"] == "formal"
-            assert attrs["gen_ai.prompt.variable.tags"] == '["a","b"]'
+            assert attrs["gen_ai.prompt.variable.tags"] == ("a", "b")
 
             event_attrs = self.log_exporter.get_finished_logs()[
                 -1
@@ -1464,7 +1464,7 @@ class TestTelemetryHandler(unittest.TestCase):
             assert event_attrs["gen_ai.prompt.version"] == "1.0.0"
             assert event_attrs["gen_ai.prompt.variable.user"] == "Alice"
             assert event_attrs["gen_ai.prompt.variable.style"] == "formal"
-            assert event_attrs["gen_ai.prompt.variable.tags"] == '["a","b"]'
+            assert event_attrs["gen_ai.prompt.variable.tags"] == ("a", "b")
 
     def test_inference_prompt_variables_safe_serialization(self):
         with patch.dict(
@@ -1492,12 +1492,11 @@ class TestTelemetryHandler(unittest.TestCase):
 
             attrs = self.span_exporter.get_finished_spans()[-1].attributes
             assert attrs["gen_ai.prompt.variable.plain_str"] == "hello"
-            assert attrs["gen_ai.prompt.variable.int_val"] == "42"
+            assert attrs["gen_ai.prompt.variable.int_val"] == 42
             assert "gen_ai.prompt.variable.none_val" not in attrs
-            assert (
-                attrs["gen_ai.prompt.variable.valid_dict"]
-                == '{"clean":"data"}'
-            )
+            assert attrs["gen_ai.prompt.variable.valid_dict"] == {
+                "clean": "data"
+            }
             assert "gen_ai.prompt.variable.bad_obj" not in attrs
 
     @patch.dict(
@@ -1524,7 +1523,7 @@ class TestTelemetryHandler(unittest.TestCase):
         invocation.stop()
 
         attrs = self.span_exporter.get_finished_spans()[-1].attributes
-        assert attrs["gen_ai.prompt.variable.node"] == '{"name":"root"}'
+        assert attrs["gen_ai.prompt.variable.node"] == {"name": "root"}
 
 
 class AnyNonNone:

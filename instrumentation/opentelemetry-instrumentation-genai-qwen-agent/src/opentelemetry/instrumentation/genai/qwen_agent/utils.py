@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
@@ -22,6 +21,7 @@ from opentelemetry.util.genai.types import (
     ToolCallRequestPart,
     ToolCallResponsePart,
 )
+from opentelemetry.util.genai.utils import tool_arguments_to_any_value
 
 if TYPE_CHECKING:
     from qwen_agent.llm.schema import ContentItem, Message
@@ -140,12 +140,9 @@ def find_tool_call_id(
 
 def _function_call_part(function_call: Any) -> ToolCallRequestPart:
     name = _field_value(function_call, "name") or ""
-    arguments = _field_value(function_call, "arguments") or "{}"
-    if isinstance(arguments, str):
-        try:
-            arguments = json.loads(arguments)
-        except (json.JSONDecodeError, ValueError):
-            pass
+    arguments = tool_arguments_to_any_value(
+        _field_value(function_call, "arguments") or "{}"
+    )
     return ToolCallRequestPart(name=name, arguments=arguments, id=None)
 
 

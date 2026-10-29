@@ -549,7 +549,7 @@ def _set_continue_invocation_input(
                     parts=[
                         ToolCallResponsePart(
                             id=tool_exec.tool_call_id,
-                            response=resp,
+                            response=object_to_any_value(resp),
                         )
                     ],
                 )
