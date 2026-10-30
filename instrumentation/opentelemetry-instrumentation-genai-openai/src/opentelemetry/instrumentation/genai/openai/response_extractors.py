@@ -97,11 +97,6 @@ from opentelemetry.util.genai.types import (
 from opentelemetry.util.genai.types import (
     ToolCallRequestPart as ToolCall,
 )
-from opentelemetry.util.genai.utils import (
-    object_to_any_value,
-    tool_arguments_to_any_value,
-)
-from opentelemetry.util.types import AnyValue
 
 
 @dataclass
@@ -272,8 +267,14 @@ def get_system_instruction(instructions: str | None) -> list[TextPart]:
     return [TextPart(content=instructions)]
 
 
-def _parse_tool_call_arguments(arguments: str | None) -> AnyValue:
-    return tool_arguments_to_any_value(arguments)
+def _parse_tool_call_arguments(arguments: str | None) -> object:
+    if arguments is None:
+        return None
+
+    try:
+        return json.loads(arguments)
+    except (TypeError, ValueError):
+        return arguments
 
 
 def _get_str(value: object) -> str | None:
@@ -504,7 +505,7 @@ def _extract_server_tool_part(
     if response_name is not None:
         return (
             ServerToolCallResponsePart(
-                server_tool_call_response=object_to_any_value(payload),
+                server_tool_call_response=payload,
                 id=call_id if isinstance(call_id, str) else None,
             ),
             finish_reason,
@@ -512,7 +513,7 @@ def _extract_server_tool_part(
     return (
         ServerToolCallPart(
             name=name if isinstance(name, str) else canonical_name,
-            server_tool_call=object_to_any_value(payload),
+            server_tool_call=payload,
             id=part_id if isinstance(part_id, str) else None,
         ),
         finish_reason,
@@ -595,9 +596,7 @@ def get_tool_definitions(
                 FunctionToolDefinition(
                     name=name if isinstance(name, str) else "",
                     description=get_property_value(tool, "description"),
-                    parameters=object_to_any_value(
-                        get_property_value(tool, "parameters")
-                    ),
+                    parameters=get_property_value(tool, "parameters"),
                 )
             )
         else:
@@ -636,7 +635,7 @@ def _is_tool_call_item(item: object) -> bool:
     return bool(_TOOL_CALL_MODELS) and isinstance(item, _TOOL_CALL_MODELS)
 
 
-def _tool_call_arguments(item: object) -> AnyValue:
+def _tool_call_arguments(item: object) -> object:
     """Return arguments in the GenAI shape used for tool calls."""
     if getattr(item, "type", None) == "computer_call":
         return _computer_tool_arguments(item)
@@ -646,7 +645,7 @@ def _tool_call_arguments(item: object) -> AnyValue:
     return _tool_response_to_data(getattr(item, "input", None))
 
 
-def _computer_tool_arguments(item: object) -> dict[str, AnyValue]:
+def _computer_tool_arguments(item: object) -> dict[str, object]:
     model_dump = getattr(item, "model_dump", None)
     if callable(model_dump):
         item = model_dump(exclude_none=True, mode="json")

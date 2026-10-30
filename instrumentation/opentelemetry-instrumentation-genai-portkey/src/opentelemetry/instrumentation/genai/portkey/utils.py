@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, cast
@@ -26,10 +27,6 @@ from opentelemetry.util.genai.types import (
     ToolCallRequest,
     ToolCallResponse,
     ToolDefinition,
-)
-from opentelemetry.util.genai.utils import (
-    object_to_any_value,
-    tool_arguments_to_any_value,
 )
 
 if TYPE_CHECKING:
@@ -125,12 +122,18 @@ def _extract_tool_calls(tool_calls: Iterable[Any]) -> list[ToolCallRequest]:
     for tool_call in tool_calls:
         call_id = get_property_value(tool_call, "id")
         func_name = ""
-        arguments = None
+        arguments: Any = None
         func = get_property_value(tool_call, "function")
         if func is not None:
             func_name = str(get_property_value(func, "name") or "")
             args_raw = get_property_value(func, "arguments")
-            arguments = tool_arguments_to_any_value(args_raw)
+            if isinstance(args_raw, str):
+                try:
+                    arguments = json.loads(args_raw)
+                except Exception:
+                    arguments = args_raw
+            elif args_raw is not None:
+                arguments = args_raw
         parts.append(
             ToolCallRequest(
                 id=str(call_id) if call_id is not None else None,
@@ -156,10 +159,7 @@ def _prepare_input_messages(messages: Iterable[Any]) -> list[InputMessage]:
             parts.extend(_extract_tool_calls(cast(Iterable[Any], tool_calls)))
         if tool_call_id is not None:
             parts.append(
-                ToolCallResponse(
-                    id=str(tool_call_id),
-                    response=object_to_any_value(content),
-                )
+                ToolCallResponse(id=str(tool_call_id), response=content)
             )
         elif content:
             if isinstance(content, str):
@@ -197,9 +197,7 @@ def _prepare_tool_definitions(
                     FunctionToolDefinition(
                         name=str(get_property_value(func, "name") or ""),
                         description=get_property_value(func, "description"),
-                        parameters=object_to_any_value(
-                            get_property_value(func, "parameters")
-                        ),
+                        parameters=get_property_value(func, "parameters"),
                     )
                 )
     return definitions or None

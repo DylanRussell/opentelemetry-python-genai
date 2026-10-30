@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import (
     AsyncIterable,
@@ -131,11 +132,6 @@ from opentelemetry.util.genai.types import (
     ToolDefinition,
     UriPart,
 )
-from opentelemetry.util.genai.utils import (
-    object_to_any_value,
-    tool_arguments_to_any_value,
-)
-from opentelemetry.util.types import AnyValue
 
 # Interaction.status values that differ from the gen_ai.response.status value
 # set. `in_progress`, `completed`, `failed`, `cancelled` and `incomplete` are
@@ -306,12 +302,12 @@ def _to_server_tool_part(
     if response_name is not None:
         return ServerToolCallResponsePart(
             id=call_id if isinstance(call_id, str) else None,
-            server_tool_call_response=object_to_any_value(payload),
+            server_tool_call_response=payload,
         )
     return ServerToolCallPart(
         id=item_id if isinstance(item_id, str) else None,
         name=name if isinstance(name, str) else canonical_name,
-        server_tool_call=object_to_any_value(payload),
+        server_tool_call=payload,
     )
 
 
@@ -337,12 +333,12 @@ def _interaction_item_to_part(
         return ToolCallRequestPart(
             id=item_id if isinstance(item_id, str) else None,
             name=name if isinstance(name, str) else "",
-            arguments=object_to_any_value(arguments),
+            arguments=arguments,
         )
     if item_type == "function_result":
         return ToolCallResponsePart(
             id=call_id if isinstance(call_id, str) else None,
-            response=object_to_any_value(result),
+            response=result,
         )
     return _to_server_tool_part(item)
 
@@ -609,9 +605,12 @@ class AsyncInteractionsStreamWrapper(AsyncStreamWrapper[InteractionSSEEvent]):
         self._self_invocation.fail(error)
 
 
-def _maybe_json(value: str) -> AnyValue:
+def _maybe_json(value: str) -> Any:
     """Parse streamed tool arguments, keeping the raw string if incomplete."""
-    return tool_arguments_to_any_value(value)
+    try:
+        return json.loads(value)
+    except ValueError:
+        return value
 
 
 def _as_json_value(value: Any) -> Any:
@@ -985,7 +984,7 @@ def _maybe_get_tool_definitions(
                 FunctionToolDefinition(
                     name=tool.get("name") or "function",
                     description=tool.get("description"),
-                    parameters=object_to_any_value(tool.get("parameters")),
+                    parameters=tool.get("parameters"),
                 )
             )
     return definitions if definitions else None

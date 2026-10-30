@@ -23,7 +23,6 @@ from opentelemetry.util.genai.types import (
     ToolCallResponsePart,
     UriPart,
 )
-from opentelemetry.util.genai.utils import object_to_any_value
 
 _logger = logging.getLogger(__name__)
 
@@ -116,13 +115,13 @@ def _to_part(part: genai_types.Part, idx: int) -> MessagePart | None:
         return ToolCallRequestPart(
             id=call.id or tool_call_id(call.name),
             name=call.name or "",
-            arguments=object_to_any_value(call.args),
+            arguments=call.args,
         )
 
     if response := part.function_response:
         return ToolCallResponsePart(
             id=response.id or tool_call_id(response.name),
-            response=object_to_any_value(response.response),
+            response=response.response,
         )
 
     if call := getattr(part, "tool_call", None):
@@ -130,12 +129,10 @@ def _to_part(part: genai_types.Part, idx: int) -> MessagePart | None:
         return ServerToolCallPart(
             id=call.id,
             name=name,
-            server_tool_call=object_to_any_value(
-                {
-                    "type": name,
-                    "arguments": call.args,
-                }
-            ),
+            server_tool_call={
+                "type": name,
+                "arguments": call.args,
+            },
         )
 
     if response := getattr(part, "tool_response", None):
@@ -146,39 +143,31 @@ def _to_part(part: genai_types.Part, idx: int) -> MessagePart | None:
         )
         return ServerToolCallResponsePart(
             id=response.id,
-            server_tool_call_response=object_to_any_value(
-                {
-                    "type": name,
-                    "response": response.response,
-                }
-            ),
+            server_tool_call_response={
+                "type": name,
+                "response": response.response,
+            },
         )
 
     if code := part.executable_code:
         return ServerToolCallPart(
             id=getattr(code, "id", None),
             name="code_execution",
-            server_tool_call=object_to_any_value(
-                {
-                    "type": "code_execution",
-                    "code": code.code,
-                    "language": code.language.value if code.language else None,
-                }
-            ),
+            server_tool_call={
+                "type": "code_execution",
+                "code": code.code,
+                "language": code.language.value if code.language else None,
+            },
         )
 
     if result := part.code_execution_result:
         return ServerToolCallResponsePart(
             id=getattr(result, "id", None),
-            server_tool_call_response=object_to_any_value(
-                {
-                    "type": "code_execution",
-                    "outcome": result.outcome.value
-                    if result.outcome
-                    else None,
-                    "output": result.output,
-                }
-            ),
+            server_tool_call_response={
+                "type": "code_execution",
+                "outcome": result.outcome.value if result.outcome else None,
+                "output": result.output,
+            },
         )
 
     _logger.info("Unknown part dropped from telemetry %s", part)
