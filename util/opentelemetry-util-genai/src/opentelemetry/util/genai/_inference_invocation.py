@@ -79,6 +79,7 @@ _GEN_AI_REQUEST_PREVIOUS_RESPONSE_ID: Final = (
 )
 _GEN_AI_CONVERSATION_COMPACTED: Final = "gen_ai.conversation.compacted"
 _GEN_AI_PROMPT_VERSION: Final = "gen_ai.prompt.version"
+_GEN_AI_REALTIME_SESSION_ID: Final = "gen_ai.realtime_session.id"
 
 
 CLIENT_INFERENCE_CONTEXT_KEY: Final[str] = (
@@ -91,6 +92,7 @@ class InferenceData(_ContextData):
     """Typed data passed from inner inference invocations to the outer invocation."""
 
     conversation_id: str | None = None
+    realtime_session_id: str | None = None
     conversation_compacted: bool | None = None
     error_type: str | None = None
     input_messages: Sequence[InputMessage] | None = None
@@ -171,6 +173,7 @@ class InferenceInvocation(GenAIInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
+        realtime_session_id: str | None = None,
     ) -> None:
         operation_name = (
             operation_name or GenAI.GenAiOperationNameValues.CHAT.value
@@ -191,6 +194,7 @@ class InferenceInvocation(GenAIInvocation):
             server_address=server_address,
             server_port=server_port,
             conversation_id=conversation_id,
+            realtime_session_id=realtime_session_id,
             operation_name=operation_name,
             input_messages=[],
             output_messages=[],
@@ -540,6 +544,14 @@ class InferenceInvocation(GenAIInvocation):
         self.data.prompt_version = value
 
     @property
+    def realtime_session_id(self) -> str | None:
+        return self.data.realtime_session_id
+
+    @realtime_session_id.setter
+    def realtime_session_id(self, value: str | None) -> None:
+        self.data.realtime_session_id = value
+
+    @property
     def input_messages(self) -> list[InputMessage]:
         if isinstance(self.data.input_messages, list):
             return self.data.input_messages
@@ -746,6 +758,10 @@ class InferenceInvocation(GenAIInvocation):
             (
                 GenAI.GEN_AI_CONVERSATION_ID,
                 self.conversation_id or self.data.conversation_id,
+            ),
+            (
+                _GEN_AI_REALTIME_SESSION_ID,
+                self.data.realtime_session_id,
             ),
             (GenAI.GEN_AI_REQUEST_STREAM, self.request_stream),
             (GenAI.GEN_AI_REQUEST_TEMPERATURE, self.data.request_temperature),
@@ -996,6 +1012,7 @@ class SuppressedInferenceInvocation(InferenceInvocation):
         context: Context | None = None,
         _attach_to_context: bool = True,
         conversation_id: str | None = None,
+        realtime_session_id: str | None = None,
     ) -> None:
         ctx_data = get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context)
         (
@@ -1023,6 +1040,7 @@ class SuppressedInferenceInvocation(InferenceInvocation):
             context=context,
             _attach_to_context=_attach_to_context,
             conversation_id=conversation_id,
+            realtime_session_id=realtime_session_id,
         )
 
     def _on_stream_chunk(self, chunk_at: float) -> None:

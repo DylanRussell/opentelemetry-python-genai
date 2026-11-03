@@ -13,6 +13,10 @@ from opentelemetry.instrumentation.google_genai.interactions import (
     AsyncInteractionsResource,
     InteractionsResource,
 )
+from opentelemetry.instrumentation.google_genai.live import (
+    _HAS_LIVE,
+    AsyncLive,
+)
 from opentelemetry.test_util_genai.instrumentor import instrument
 
 
@@ -33,6 +37,10 @@ def _get_wrapped_functions():
             AsyncInteractionsResource.create,
             InteractionsResource.get,
             AsyncInteractionsResource.get,
+        ]
+    if _HAS_LIVE:
+        wrapped_functions += [
+            AsyncLive.connect,
         ]
     return wrapped_functions
 

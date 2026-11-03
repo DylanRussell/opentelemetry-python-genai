@@ -1,32 +1,27 @@
 [project]
 name = "test-google-genai-instrumentation-changes"
 version = "0.1.0"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "opentelemetry-instrumentation-google-genai",
-    "google-genai>=2.0.0",
-    "pyOpenSSL",
-    "opentelemetry-sdk",
-    "opentelemetry-exporter-otlp-proto-grpc",
-    "opentelemetry-util-genai",
-    "opentelemetry-semantic-conventions",
-    "opentelemetry-instrumentation",
+    "opentelemetry-util-genai[upload]",
+    "google-genai>=1.32.0,<3",
+    "google-auth>=2.0.0",
+    "grpcio>=1.60.0",
+    "requests>=2.31.0",
+    "websockets>=13.0",
+    "cryptography>=42.0",
+    "opentelemetry-sdk~=1.43",
+    "opentelemetry-exporter-otlp-proto-grpc~=1.43",
+    "opentelemetry-semantic-conventions>=0.64b0,<1",
+    "opentelemetry-instrumentation>=0.64b0,<1",
 ]
-
-[[tool.uv.index]]
-# Optional name for the index.
-name = "pypi"
-# Required URL for the index.
-url = "https://pypi.org/simple"
 
 [tool.uv]
 no-sources = false
 
-# NOT USED unless no-sources is false
+[tool.uv.workspace]
+
 [tool.uv.sources]
-opentelemetry-util-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-genai.git", branch = "main", subdirectory="util/opentelemetry-util-genai" }
-opentelemetry-instrumentation-google-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-genai.git", branch = "main", subdirectory="instrumentation/opentelemetry-instrumentation-google-genai" }
-opentelemetry-sdk = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="opentelemetry-sdk" }
-opentelemetry-exporter-otlp-proto-grpc = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="exporter/opentelemetry-exporter-otlp-proto-grpc" }
-opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-python.git", branch = "main", subdirectory="opentelemetry-semantic-conventions" }
-opentelemetry-instrumentation = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", branch = "main", subdirectory="opentelemetry-instrumentation" }
+opentelemetry-util-genai = { path = "../../../util/opentelemetry-util-genai", editable = true }
+opentelemetry-instrumentation-google-genai = { path = "..", editable = true }
