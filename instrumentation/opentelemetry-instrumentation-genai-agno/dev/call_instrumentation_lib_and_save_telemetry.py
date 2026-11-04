@@ -95,7 +95,7 @@ trace_provider.add_span_processor(
     BatchSpanProcessor(
         OTLPSpanExporter(
             credentials=channel_creds,
-            endpoint=f"{GCP_OTLP_ENDPOINT}/v1/traces",
+            endpoint=GCP_OTLP_ENDPOINT,
         )
     )
 )

@@ -15,13 +15,13 @@ resource_logs {
     attributes {
       key: "telemetry.sdk.version"
       value {
-        string_value: "1.45.2"
+        string_value: "1.46.0.dev"
       }
     }
     attributes {
       key: "service.instance.id"
       value {
-        string_value: "85ff5b74-04a9-4df5-87e9-eefb98f3712e"
+        string_value: "1497b9af-fdee-4630-b5bd-f032a6c392b7"
       }
     }
     attributes {
@@ -107,7 +107,7 @@ resource_logs {
       attributes {
         key: "gen_ai.response.id"
         value {
-          string_value: "JGjravjNOYrQkNAPoIjm6Qg"
+          string_value: "pGjrarbHGJXokNAPmM-QqQk"
         }
       }
       attributes {
@@ -350,9 +350,9 @@ resource_logs {
         }
       }
       flags: 3
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\274v%\234\310Hx\262"
-      observed_time_unix_nano: 1793812517796800107
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "MV\270\256\240\246\201;"
+      observed_time_unix_nano: 1793812645283494300
       event_name: "gen_ai.client.inference.operation.details"
     }
     log_records {
@@ -414,7 +414,7 @@ resource_logs {
       attributes {
         key: "gen_ai.response.id"
         value {
-          string_value: "JWjrap6VOOiJkNAP29rbqAU"
+          string_value: "pWjravzyHsH-msUPx6Sy0Ag"
         }
       }
       attributes {
@@ -426,7 +426,7 @@ resource_logs {
       attributes {
         key: "gen_ai.usage.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
@@ -438,7 +438,7 @@ resource_logs {
       attributes {
         key: "gen_ai.usage.text.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
@@ -621,7 +621,7 @@ resource_logs {
                           values {
                             key: "content"
                             value {
-                              string_value: "The sum of 123 and 456 is 579."
+                              string_value: "123 + 456 = 579."
                             }
                           }
                           values {
@@ -740,9 +740,9 @@ resource_logs {
         }
       }
       flags: 3
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\315!]$\372\207\234\232"
-      observed_time_unix_nano: 1793812518637460706
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "\026h0\302}&\013\240"
+      observed_time_unix_nano: 1793812645879119194
       event_name: "gen_ai.client.inference.operation.details"
     }
     schema_url: "https://opentelemetry.io/schemas/1.37.0"
@@ -905,7 +905,7 @@ resource_logs {
                           values {
                             key: "id"
                             value {
-                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                              string_value: "c9bef0da-251d-4a97-82a8-b45f35c81b36"
                             }
                           }
                           values {
@@ -1024,9 +1024,9 @@ resource_logs {
         }
       }
       flags: 3
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "e\313\236\211\276\215\357}"
-      observed_time_unix_nano: 1793812517797815557
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "R\373\237\314\207\274\n>"
+      observed_time_unix_nano: 1793812645284403640
       event_name: "gen_ai.client.inference.operation.details"
     }
     log_records {
@@ -1082,7 +1082,7 @@ resource_logs {
       attributes {
         key: "gen_ai.usage.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
@@ -1169,7 +1169,7 @@ resource_logs {
                           values {
                             key: "id"
                             value {
-                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                              string_value: "c9bef0da-251d-4a97-82a8-b45f35c81b36"
                             }
                           }
                           values {
@@ -1213,7 +1213,7 @@ resource_logs {
                           values {
                             key: "id"
                             value {
-                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                              string_value: "c9bef0da-251d-4a97-82a8-b45f35c81b36"
                             }
                           }
                           values {
@@ -1258,7 +1258,7 @@ resource_logs {
                           values {
                             key: "content"
                             value {
-                              string_value: "The sum of 123 and 456 is 579."
+                              string_value: "123 + 456 = 579."
                             }
                           }
                           values {
@@ -1377,9 +1377,9 @@ resource_logs {
         }
       }
       flags: 3
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\034\354.?\3223\275\373"
-      observed_time_unix_nano: 1793812518638277816
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "\027uy)\225\356\311\211"
+      observed_time_unix_nano: 1793812645879831454
       event_name: "gen_ai.client.inference.operation.details"
     }
     schema_url: "https://opentelemetry.io/schemas/1.37.0"

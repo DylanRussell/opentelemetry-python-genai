@@ -15,13 +15,13 @@ resource_spans {
     attributes {
       key: "telemetry.sdk.version"
       value {
-        string_value: "1.45.2"
+        string_value: "1.46.0.dev"
       }
     }
     attributes {
       key: "service.instance.id"
       value {
-        string_value: "85ff5b74-04a9-4df5-87e9-eefb98f3712e"
+        string_value: "1497b9af-fdee-4630-b5bd-f032a6c392b7"
       }
     }
     attributes {
@@ -49,13 +49,13 @@ resource_spans {
       version: "1.4b0.dev"
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\274v%\234\310Hx\262"
-      parent_span_id: "e\313\236\211\276\215\357}"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "MV\270\256\240\246\201;"
+      parent_span_id: "R\373\237\314\207\274\n>"
       name: "generate_content gemini-2.5-flash"
       kind: SPAN_KIND_CLIENT
-      start_time_unix_nano: 1793812515762039049
-      end_time_unix_nano: 1793812517797062687
+      start_time_unix_nano: 1793812643342754746
+      end_time_unix_nano: 1793812645283670370
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -111,7 +111,7 @@ resource_spans {
       attributes {
         key: "gen_ai.response.id"
         value {
-          string_value: "JGjravjNOYrQkNAPoIjm6Qg"
+          string_value: "pGjrarbHGJXokNAPmM-QqQk"
         }
       }
       attributes {
@@ -167,13 +167,13 @@ resource_spans {
       flags: 256
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\315!]$\372\207\234\232"
-      parent_span_id: "\034\354.?\3223\275\373"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "\026h0\302}&\013\240"
+      parent_span_id: "\027uy)\225\356\311\211"
       name: "generate_content gemini-2.5-flash"
       kind: SPAN_KIND_CLIENT
-      start_time_unix_nano: 1793812517818972016
-      end_time_unix_nano: 1793812518637628106
+      start_time_unix_nano: 1793812645411528632
+      end_time_unix_nano: 1793812645879263985
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -229,7 +229,7 @@ resource_spans {
       attributes {
         key: "gen_ai.response.id"
         value {
-          string_value: "JWjrap6VOOiJkNAP29rbqAU"
+          string_value: "pWjravzyHsH-msUPx6Sy0Ag"
         }
       }
       attributes {
@@ -241,7 +241,7 @@ resource_spans {
       attributes {
         key: "gen_ai.usage.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
@@ -253,7 +253,7 @@ resource_spans {
       attributes {
         key: "gen_ai.usage.text.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
@@ -265,7 +265,7 @@ resource_spans {
       attributes {
         key: "gen_ai.output.messages"
         value {
-          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"123 + 456 = 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
         }
       }
       attributes {
@@ -286,13 +286,13 @@ resource_spans {
       version: "1.4b0.dev"
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "e\313\236\211\276\215\357}"
-      parent_span_id: "\264\336>\352\003\366:\302"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "R\373\237\314\207\274\n>"
+      parent_span_id: "0\315RE\253\010!7"
       name: "chat gemini-2.5-flash"
       kind: SPAN_KIND_CLIENT
-      start_time_unix_nano: 1793812515613621788
-      end_time_unix_nano: 1793812517797924507
+      start_time_unix_nano: 1793812641923540120
+      end_time_unix_nano: 1793812645284529950
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -360,7 +360,7 @@ resource_spans {
       attributes {
         key: "gen_ai.output.messages"
         value {
-          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call\"}],\"finish_reason\":\"tool_call\",\"name\":null}]"
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"c9bef0da-251d-4a97-82a8-b45f35c81b36\",\"type\":\"tool_call\"}],\"finish_reason\":\"tool_call\",\"name\":null}]"
         }
       }
       attributes {
@@ -374,13 +374,13 @@ resource_spans {
       flags: 256
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\262\030N=\343\300y\274"
-      parent_span_id: "\264\336>\352\003\366:\302"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "\252}\232\221R\277$\314"
+      parent_span_id: "0\315RE\253\010!7"
       name: "execute_tool add"
       kind: SPAN_KIND_INTERNAL
-      start_time_unix_nano: 1793812517815750236
-      end_time_unix_nano: 1793812517816364856
+      start_time_unix_nano: 1793812645408427012
+      end_time_unix_nano: 1793812645409168272
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -402,7 +402,7 @@ resource_spans {
       attributes {
         key: "gen_ai.tool.call.id"
         value {
-          string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+          string_value: "c9bef0da-251d-4a97-82a8-b45f35c81b36"
         }
       }
       attributes {
@@ -428,13 +428,13 @@ resource_spans {
       flags: 256
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\034\354.?\3223\275\373"
-      parent_span_id: "\264\336>\352\003\366:\302"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "\027uy)\225\356\311\211"
+      parent_span_id: "0\315RE\253\010!7"
       name: "chat gemini-2.5-flash"
       kind: SPAN_KIND_CLIENT
-      start_time_unix_nano: 1793812517816684496
-      end_time_unix_nano: 1793812518638387616
+      start_time_unix_nano: 1793812645409563082
+      end_time_unix_nano: 1793812645879937404
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -484,19 +484,19 @@ resource_spans {
       attributes {
         key: "gen_ai.usage.output_tokens"
         value {
-          int_value: 18
+          int_value: 14
         }
       }
       attributes {
         key: "gen_ai.input.messages"
         value {
-          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null},{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call\"}],\"name\":null},{\"role\":\"tool\",\"parts\":[{\"response\":\"579\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call_response\"}],\"name\":null}]"
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null},{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"c9bef0da-251d-4a97-82a8-b45f35c81b36\",\"type\":\"tool_call\"}],\"name\":null},{\"role\":\"tool\",\"parts\":[{\"response\":\"579\",\"id\":\"c9bef0da-251d-4a97-82a8-b45f35c81b36\",\"type\":\"tool_call_response\"}],\"name\":null}]"
         }
       }
       attributes {
         key: "gen_ai.output.messages"
         value {
-          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"123 + 456 = 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
         }
       }
       attributes {
@@ -510,12 +510,12 @@ resource_spans {
       flags: 256
     }
     spans {
-      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
-      span_id: "\264\336>\352\003\366:\302"
+      trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+      span_id: "0\315RE\253\010!7"
       name: "invoke_agent google-genai-agent"
       kind: SPAN_KIND_INTERNAL
-      start_time_unix_nano: 1793812515557668102
-      end_time_unix_nano: 1793812518670278974
+      start_time_unix_nano: 1793812641494534916
+      end_time_unix_nano: 1793812646490301498
       attributes {
         key: "gen_ai.operation.name"
         value {
@@ -549,7 +549,7 @@ resource_spans {
       attributes {
         key: "gen_ai.output.messages"
         value {
-          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"123 + 456 = 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
         }
       }
       attributes {
