@@ -1,0 +1,1387 @@
+resource_logs {
+  resource {
+    attributes {
+      key: "telemetry.sdk.language"
+      value {
+        string_value: "python"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.name"
+      value {
+        string_value: "opentelemetry"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.version"
+      value {
+        string_value: "1.45.2"
+      }
+    }
+    attributes {
+      key: "service.instance.id"
+      value {
+        string_value: "85ff5b74-04a9-4df5-87e9-eefb98f3712e"
+      }
+    }
+    attributes {
+      key: "service.name"
+      value {
+        string_value: "repro-issue-682-duplicate-inference"
+      }
+    }
+    attributes {
+      key: "gcp.project_id"
+      value {
+        string_value: "ai-observability-demo-project"
+      }
+    }
+    attributes {
+      key: "cloud.region"
+      value {
+        string_value: "us-central1"
+      }
+    }
+  }
+  scope_logs {
+    scope {
+      name: "opentelemetry.instrumentation.google_genai"
+      version: "1.4b0.dev"
+    }
+    log_records {
+      severity_number: SEVERITY_NUMBER_DEBUG
+      body {
+      }
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "generate_content"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "server.address"
+        value {
+          string_value: "us-central1-aiplatform.googleapis.com"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.response.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.response.id"
+        value {
+          string_value: "JGjravjNOYrQkNAPoIjm6Qg"
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 74
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.reasoning.output_tokens"
+        value {
+          int_value: 54
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.output_tokens"
+        value {
+          int_value: 20
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "user"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "What is 123 + 456? Use the add tool to compute."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "arguments"
+                            value {
+                              kvlist_value {
+                                values {
+                                  key: "a"
+                                  value {
+                                    int_value: 123
+                                  }
+                                }
+                                values {
+                                  key: "b"
+                                  value {
+                                    int_value: 456
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          values {
+                            key: "name"
+                            value {
+                              string_value: "add"
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "add_0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "finish_reason"
+                  value {
+                    string_value: "stop"
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "name"
+                  value {
+                    string_value: "add"
+                  }
+                }
+                values {
+                  key: "description"
+                  value {
+                    string_value: "Add two numbers."
+                  }
+                }
+                values {
+                  key: "parameters"
+                  value {
+                    kvlist_value {
+                      values {
+                        key: "properties"
+                        value {
+                          kvlist_value {
+                            values {
+                              key: "a"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "INTEGER"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            values {
+                              key: "b"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "INTEGER"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "required"
+                        value {
+                          array_value {
+                            values {
+                              string_value: "a"
+                            }
+                            values {
+                              string_value: "b"
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "type"
+                        value {
+                          string_value: "OBJECT"
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "type"
+                  value {
+                    string_value: "function"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      flags: 3
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\274v%\234\310Hx\262"
+      observed_time_unix_nano: 1793812517796800107
+      event_name: "gen_ai.client.inference.operation.details"
+    }
+    log_records {
+      severity_number: SEVERITY_NUMBER_DEBUG
+      body {
+      }
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "generate_content"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "server.address"
+        value {
+          string_value: "us-central1-aiplatform.googleapis.com"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.response.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.response.id"
+        value {
+          string_value: "JWjrap6VOOiJkNAP29rbqAU"
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "user"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "What is 123 + 456? Use the add tool to compute."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "arguments"
+                            value {
+                              kvlist_value {
+                                values {
+                                  key: "a"
+                                  value {
+                                    int_value: 123
+                                  }
+                                }
+                                values {
+                                  key: "b"
+                                  value {
+                                    int_value: 456
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          values {
+                            key: "name"
+                            value {
+                              string_value: "add"
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "add_0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "user"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "response"
+                            value {
+                              kvlist_value {
+                                values {
+                                  key: "result"
+                                  value {
+                                    string_value: "579"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "add_0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call_response"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "The sum of 123 and 456 is 579."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "finish_reason"
+                  value {
+                    string_value: "stop"
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "name"
+                  value {
+                    string_value: "add"
+                  }
+                }
+                values {
+                  key: "description"
+                  value {
+                    string_value: "Add two numbers."
+                  }
+                }
+                values {
+                  key: "parameters"
+                  value {
+                    kvlist_value {
+                      values {
+                        key: "properties"
+                        value {
+                          kvlist_value {
+                            values {
+                              key: "a"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "INTEGER"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            values {
+                              key: "b"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "INTEGER"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "required"
+                        value {
+                          array_value {
+                            values {
+                              string_value: "a"
+                            }
+                            values {
+                              string_value: "b"
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "type"
+                        value {
+                          string_value: "OBJECT"
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "type"
+                  value {
+                    string_value: "function"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      flags: 3
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\315!]$\372\207\234\232"
+      observed_time_unix_nano: 1793812518637460706
+      event_name: "gen_ai.client.inference.operation.details"
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+  scope_logs {
+    scope {
+      name: "opentelemetry.instrumentation.genai.agno"
+      version: "1.4b0.dev"
+    }
+    log_records {
+      severity_number: SEVERITY_NUMBER_DEBUG
+      body {
+      }
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "chat"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "gcp.vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "tool_call"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 20
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.reasoning.output_tokens"
+        value {
+          int_value: 54
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "user"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "What is 123 + 456? Use the add tool to compute."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "arguments"
+                            value {
+                              kvlist_value {
+                                values {
+                                  key: "a"
+                                  value {
+                                    int_value: 123
+                                  }
+                                }
+                                values {
+                                  key: "b"
+                                  value {
+                                    int_value: 456
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          values {
+                            key: "name"
+                            value {
+                              string_value: "add"
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "finish_reason"
+                  value {
+                    string_value: "tool_call"
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "name"
+                  value {
+                    string_value: "add"
+                  }
+                }
+                values {
+                  key: "description"
+                  value {
+                    string_value: "Add two numbers."
+                  }
+                }
+                values {
+                  key: "parameters"
+                  value {
+                    kvlist_value {
+                      values {
+                        key: "type"
+                        value {
+                          string_value: "object"
+                        }
+                      }
+                      values {
+                        key: "properties"
+                        value {
+                          kvlist_value {
+                            values {
+                              key: "a"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "integer"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            values {
+                              key: "b"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "integer"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "required"
+                        value {
+                          array_value {
+                            values {
+                              string_value: "a"
+                            }
+                            values {
+                              string_value: "b"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "type"
+                  value {
+                    string_value: "function"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      flags: 3
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "e\313\236\211\276\215\357}"
+      observed_time_unix_nano: 1793812517797815557
+      event_name: "gen_ai.client.inference.operation.details"
+    }
+    log_records {
+      severity_number: SEVERITY_NUMBER_DEBUG
+      body {
+      }
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "chat"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "gcp.vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "user"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "What is 123 + 456? Use the add tool to compute."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "arguments"
+                            value {
+                              kvlist_value {
+                                values {
+                                  key: "a"
+                                  value {
+                                    int_value: 123
+                                  }
+                                }
+                                values {
+                                  key: "b"
+                                  value {
+                                    int_value: 456
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          values {
+                            key: "name"
+                            value {
+                              string_value: "add"
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "tool"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "response"
+                            value {
+                              string_value: "579"
+                            }
+                          }
+                          values {
+                            key: "id"
+                            value {
+                              string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "tool_call_response"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "role"
+                  value {
+                    string_value: "assistant"
+                  }
+                }
+                values {
+                  key: "parts"
+                  value {
+                    array_value {
+                      values {
+                        kvlist_value {
+                          values {
+                            key: "content"
+                            value {
+                              string_value: "The sum of 123 and 456 is 579."
+                            }
+                          }
+                          values {
+                            key: "type"
+                            value {
+                              string_value: "text"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "finish_reason"
+                  value {
+                    string_value: "stop"
+                  }
+                }
+                values {
+                  key: "name"
+                  value {
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          array_value {
+            values {
+              kvlist_value {
+                values {
+                  key: "name"
+                  value {
+                    string_value: "add"
+                  }
+                }
+                values {
+                  key: "description"
+                  value {
+                    string_value: "Add two numbers."
+                  }
+                }
+                values {
+                  key: "parameters"
+                  value {
+                    kvlist_value {
+                      values {
+                        key: "type"
+                        value {
+                          string_value: "object"
+                        }
+                      }
+                      values {
+                        key: "properties"
+                        value {
+                          kvlist_value {
+                            values {
+                              key: "a"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "integer"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            values {
+                              key: "b"
+                              value {
+                                kvlist_value {
+                                  values {
+                                    key: "type"
+                                    value {
+                                      string_value: "integer"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      values {
+                        key: "required"
+                        value {
+                          array_value {
+                            values {
+                              string_value: "a"
+                            }
+                            values {
+                              string_value: "b"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                values {
+                  key: "type"
+                  value {
+                    string_value: "function"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      flags: 3
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\034\354.?\3223\275\373"
+      observed_time_unix_nano: 1793812518638277816
+      event_name: "gen_ai.client.inference.operation.details"
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+}

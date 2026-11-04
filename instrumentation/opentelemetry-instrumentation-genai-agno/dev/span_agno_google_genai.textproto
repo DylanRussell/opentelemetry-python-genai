@@ -1,0 +1,567 @@
+resource_spans {
+  resource {
+    attributes {
+      key: "telemetry.sdk.language"
+      value {
+        string_value: "python"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.name"
+      value {
+        string_value: "opentelemetry"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.version"
+      value {
+        string_value: "1.45.2"
+      }
+    }
+    attributes {
+      key: "service.instance.id"
+      value {
+        string_value: "85ff5b74-04a9-4df5-87e9-eefb98f3712e"
+      }
+    }
+    attributes {
+      key: "service.name"
+      value {
+        string_value: "repro-issue-682-duplicate-inference"
+      }
+    }
+    attributes {
+      key: "gcp.project_id"
+      value {
+        string_value: "ai-observability-demo-project"
+      }
+    }
+    attributes {
+      key: "cloud.region"
+      value {
+        string_value: "us-central1"
+      }
+    }
+  }
+  scope_spans {
+    scope {
+      name: "opentelemetry.instrumentation.google_genai"
+      version: "1.4b0.dev"
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\274v%\234\310Hx\262"
+      parent_span_id: "e\313\236\211\276\215\357}"
+      name: "generate_content gemini-2.5-flash"
+      kind: SPAN_KIND_CLIENT
+      start_time_unix_nano: 1793812515762039049
+      end_time_unix_nano: 1793812517797062687
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "generate_content"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "server.address"
+        value {
+          string_value: "us-central1-aiplatform.googleapis.com"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.response.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.response.id"
+        value {
+          string_value: "JGjravjNOYrQkNAPoIjm6Qg"
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 74
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.reasoning.output_tokens"
+        value {
+          int_value: 54
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.output_tokens"
+        value {
+          int_value: 20
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"add_0\",\"type\":\"tool_call\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          string_value: "[{\"name\":\"add\",\"description\":\"Add two numbers.\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"INTEGER\"},\"b\":{\"type\":\"INTEGER\"}},\"required\":[\"a\",\"b\"],\"type\":\"OBJECT\"},\"type\":\"function\"}]"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\315!]$\372\207\234\232"
+      parent_span_id: "\034\354.?\3223\275\373"
+      name: "generate_content gemini-2.5-flash"
+      kind: SPAN_KIND_CLIENT
+      start_time_unix_nano: 1793812517818972016
+      end_time_unix_nano: 1793812518637628106
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "generate_content"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "server.address"
+        value {
+          string_value: "us-central1-aiplatform.googleapis.com"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.response.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.response.id"
+        value {
+          string_value: "JWjrap6VOOiJkNAP29rbqAU"
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.text.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null},{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"add_0\",\"type\":\"tool_call\"}],\"name\":null},{\"role\":\"user\",\"parts\":[{\"response\":{\"result\":\"579\"},\"id\":\"add_0\",\"type\":\"tool_call_response\"}],\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          string_value: "[{\"name\":\"add\",\"description\":\"Add two numbers.\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"INTEGER\"},\"b\":{\"type\":\"INTEGER\"}},\"required\":[\"a\",\"b\"],\"type\":\"OBJECT\"},\"type\":\"function\"}]"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+  scope_spans {
+    scope {
+      name: "opentelemetry.instrumentation.genai.agno"
+      version: "1.4b0.dev"
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "e\313\236\211\276\215\357}"
+      parent_span_id: "\264\336>\352\003\366:\302"
+      name: "chat gemini-2.5-flash"
+      kind: SPAN_KIND_CLIENT
+      start_time_unix_nano: 1793812515613621788
+      end_time_unix_nano: 1793812517797924507
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "chat"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "gcp.vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "tool_call"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 31
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 20
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.reasoning.output_tokens"
+        value {
+          int_value: 54
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call\"}],\"finish_reason\":\"tool_call\",\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          string_value: "[{\"name\":\"add\",\"description\":\"Add two numbers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]},\"type\":\"function\"}]"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\262\030N=\343\300y\274"
+      parent_span_id: "\264\336>\352\003\366:\302"
+      name: "execute_tool add"
+      kind: SPAN_KIND_INTERNAL
+      start_time_unix_nano: 1793812517815750236
+      end_time_unix_nano: 1793812517816364856
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "execute_tool"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.name"
+        value {
+          string_value: "add"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.type"
+        value {
+          string_value: "function"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.call.id"
+        value {
+          string_value: "e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.description"
+        value {
+          string_value: "Add two numbers."
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.call.arguments"
+        value {
+          string_value: "{\"a\":123,\"b\":456}"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.call.result"
+        value {
+          string_value: "579"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\034\354.?\3223\275\373"
+      parent_span_id: "\264\336>\352\003\366:\302"
+      name: "chat gemini-2.5-flash"
+      kind: SPAN_KIND_CLIENT
+      start_time_unix_nano: 1793812517816684496
+      end_time_unix_nano: 1793812518638387616
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "chat"
+        }
+      }
+      attributes {
+        key: "gen_ai.provider.name"
+        value {
+          string_value: "gcp.vertex_ai"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.temperature"
+        value {
+          double_value: 0.2
+        }
+      }
+      attributes {
+        key: "gen_ai.response.finish_reasons"
+        value {
+          array_value {
+            values {
+              string_value: "stop"
+            }
+          }
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.input_tokens"
+        value {
+          int_value: 95
+        }
+      }
+      attributes {
+        key: "gen_ai.usage.output_tokens"
+        value {
+          int_value: 18
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null},{\"role\":\"assistant\",\"parts\":[{\"arguments\":{\"a\":123,\"b\":456},\"name\":\"add\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call\"}],\"name\":null},{\"role\":\"tool\",\"parts\":[{\"response\":\"579\",\"id\":\"e8440d36-5db8-4d94-b5f2-e5c5dbe5f7b0\",\"type\":\"tool_call_response\"}],\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          string_value: "[{\"name\":\"add\",\"description\":\"Add two numbers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]},\"type\":\"function\"}]"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    spans {
+      trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+      span_id: "\264\336>\352\003\366:\302"
+      name: "invoke_agent google-genai-agent"
+      kind: SPAN_KIND_INTERNAL
+      start_time_unix_nano: 1793812515557668102
+      end_time_unix_nano: 1793812518670278974
+      attributes {
+        key: "gen_ai.operation.name"
+        value {
+          string_value: "invoke_agent"
+        }
+      }
+      attributes {
+        key: "gen_ai.request.model"
+        value {
+          string_value: "gemini-2.5-flash"
+        }
+      }
+      attributes {
+        key: "gen_ai.agent.name"
+        value {
+          string_value: "google-genai-agent"
+        }
+      }
+      attributes {
+        key: "gen_ai.conversation.id"
+        value {
+          string_value: "repro-session-682"
+        }
+      }
+      attributes {
+        key: "gen_ai.input.messages"
+        value {
+          string_value: "[{\"role\":\"user\",\"parts\":[{\"content\":\"What is 123 + 456? Use the add tool to compute.\",\"type\":\"text\"}],\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.output.messages"
+        value {
+          string_value: "[{\"role\":\"assistant\",\"parts\":[{\"content\":\"The sum of 123 and 456 is 579.\",\"type\":\"text\"}],\"finish_reason\":\"stop\",\"name\":null}]"
+        }
+      }
+      attributes {
+        key: "gen_ai.tool.definitions"
+        value {
+          string_value: "[{\"name\":\"add\",\"description\":\"Add two numbers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]},\"type\":\"function\"}]"
+        }
+      }
+      status {
+      }
+      flags: 256
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+}

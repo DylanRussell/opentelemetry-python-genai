@@ -1,0 +1,672 @@
+resource_metrics {
+  resource {
+    attributes {
+      key: "telemetry.sdk.language"
+      value {
+        string_value: "python"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.name"
+      value {
+        string_value: "opentelemetry"
+      }
+    }
+    attributes {
+      key: "telemetry.sdk.version"
+      value {
+        string_value: "1.45.2"
+      }
+    }
+    attributes {
+      key: "service.instance.id"
+      value {
+        string_value: "85ff5b74-04a9-4df5-87e9-eefb98f3712e"
+      }
+    }
+    attributes {
+      key: "service.name"
+      value {
+        string_value: "repro-issue-682-duplicate-inference"
+      }
+    }
+    attributes {
+      key: "gcp.project_id"
+      value {
+        string_value: "ai-observability-demo-project"
+      }
+    }
+    attributes {
+      key: "cloud.region"
+      value {
+        string_value: "us-central1"
+      }
+    }
+  }
+  scope_metrics {
+    scope {
+      name: "opentelemetry.instrumentation.google_genai"
+      version: "1.4b0.dev"
+    }
+    metrics {
+      name: "gen_ai.client.operation.duration"
+      description: "Duration of GenAI client operation"
+      unit: "s"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812517796473417
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 2.8523655680473894
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 0.01
+          explicit_bounds: 0.02
+          explicit_bounds: 0.04
+          explicit_bounds: 0.08
+          explicit_bounds: 0.16
+          explicit_bounds: 0.32
+          explicit_bounds: 0.64
+          explicit_bounds: 1.28
+          explicit_bounds: 2.56
+          explicit_bounds: 5.12
+          explicit_bounds: 10.24
+          explicit_bounds: 20.48
+          explicit_bounds: 40.96
+          explicit_bounds: 81.92
+          exemplars {
+            time_unix_nano: 1793812518637163456
+            as_double: 0.8181780900340527
+            span_id: "\315!]$\372\207\234\232"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          exemplars {
+            time_unix_nano: 1793812517796261577
+            as_double: 2.0341874780133367
+            span_id: "\274v%\234\310Hx\262"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "generate_content"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "server.address"
+            value {
+              string_value: "us-central1-aiplatform.googleapis.com"
+            }
+          }
+          attributes {
+            key: "gen_ai.response.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          min: 0.8181780900340527
+          max: 2.0341874780133367
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    metrics {
+      name: "gen_ai.client.token.usage"
+      description: "Number of input and output tokens used by GenAI clients"
+      unit: "{token}"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812517796626057
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 126.0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 1.0
+          explicit_bounds: 4.0
+          explicit_bounds: 16.0
+          explicit_bounds: 64.0
+          explicit_bounds: 256.0
+          explicit_bounds: 1024.0
+          explicit_bounds: 4096.0
+          explicit_bounds: 16384.0
+          explicit_bounds: 65536.0
+          explicit_bounds: 262144.0
+          explicit_bounds: 1048576.0
+          explicit_bounds: 4194304.0
+          explicit_bounds: 16777216.0
+          explicit_bounds: 67108864.0
+          exemplars {
+            time_unix_nano: 1793812517796587717
+            span_id: "\274v%\234\310Hx\262"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 31
+          }
+          exemplars {
+            time_unix_nano: 1793812518637276256
+            span_id: "\315!]$\372\207\234\232"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 95
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "generate_content"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "server.address"
+            value {
+              string_value: "us-central1-aiplatform.googleapis.com"
+            }
+          }
+          attributes {
+            key: "gen_ai.response.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "gen_ai.token.type"
+            value {
+              string_value: "input"
+            }
+          }
+          min: 31.0
+          max: 95.0
+        }
+        data_points {
+          start_time_unix_nano: 1793812517796690107
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 92.0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 1.0
+          explicit_bounds: 4.0
+          explicit_bounds: 16.0
+          explicit_bounds: 64.0
+          explicit_bounds: 256.0
+          explicit_bounds: 1024.0
+          explicit_bounds: 4096.0
+          explicit_bounds: 16384.0
+          explicit_bounds: 65536.0
+          explicit_bounds: 262144.0
+          explicit_bounds: 1048576.0
+          explicit_bounds: 4194304.0
+          explicit_bounds: 16777216.0
+          explicit_bounds: 67108864.0
+          exemplars {
+            time_unix_nano: 1793812518637334076
+            span_id: "\315!]$\372\207\234\232"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 18
+          }
+          exemplars {
+            time_unix_nano: 1793812517796675687
+            span_id: "\274v%\234\310Hx\262"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 74
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "generate_content"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "server.address"
+            value {
+              string_value: "us-central1-aiplatform.googleapis.com"
+            }
+          }
+          attributes {
+            key: "gen_ai.response.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "gen_ai.token.type"
+            value {
+              string_value: "output"
+            }
+          }
+          min: 18.0
+          max: 74.0
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+  scope_metrics {
+    scope {
+      name: "opentelemetry.instrumentation.genai.agno"
+      version: "1.4b0.dev"
+    }
+    metrics {
+      name: "gen_ai.client.operation.duration"
+      description: "Duration of GenAI client operation"
+      unit: "s"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812517797616357
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 3.0053258090047166
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 0.01
+          explicit_bounds: 0.02
+          explicit_bounds: 0.04
+          explicit_bounds: 0.08
+          explicit_bounds: 0.16
+          explicit_bounds: 0.32
+          explicit_bounds: 0.64
+          explicit_bounds: 1.28
+          explicit_bounds: 2.56
+          explicit_bounds: 5.12
+          explicit_bounds: 10.24
+          explicit_bounds: 20.48
+          explicit_bounds: 40.96
+          explicit_bounds: 81.92
+          exemplars {
+            time_unix_nano: 1793812518638094016
+            as_double: 0.8213994200341403
+            span_id: "\034\354.?\3223\275\373"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          exemplars {
+            time_unix_nano: 1793812517797571477
+            as_double: 2.1839263889705762
+            span_id: "e\313\236\211\276\215\357}"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "chat"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "gcp.vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          min: 0.8213994200341403
+          max: 2.1839263889705762
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    metrics {
+      name: "gen_ai.client.token.usage"
+      description: "Number of input and output tokens used by GenAI clients"
+      unit: "{token}"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812517797695357
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 126.0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 1.0
+          explicit_bounds: 4.0
+          explicit_bounds: 16.0
+          explicit_bounds: 64.0
+          explicit_bounds: 256.0
+          explicit_bounds: 1024.0
+          explicit_bounds: 4096.0
+          explicit_bounds: 16384.0
+          explicit_bounds: 65536.0
+          explicit_bounds: 262144.0
+          explicit_bounds: 1048576.0
+          explicit_bounds: 4194304.0
+          explicit_bounds: 16777216.0
+          explicit_bounds: 67108864.0
+          exemplars {
+            time_unix_nano: 1793812517797670297
+            span_id: "e\313\236\211\276\215\357}"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 31
+          }
+          exemplars {
+            time_unix_nano: 1793812518638158146
+            span_id: "\034\354.?\3223\275\373"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 95
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "chat"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "gcp.vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "gen_ai.token.type"
+            value {
+              string_value: "input"
+            }
+          }
+          min: 31.0
+          max: 95.0
+        }
+        data_points {
+          start_time_unix_nano: 1793812517797741477
+          time_unix_nano: 1793812518675652724
+          count: 2
+          sum: 38.0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 2
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 1.0
+          explicit_bounds: 4.0
+          explicit_bounds: 16.0
+          explicit_bounds: 64.0
+          explicit_bounds: 256.0
+          explicit_bounds: 1024.0
+          explicit_bounds: 4096.0
+          explicit_bounds: 16384.0
+          explicit_bounds: 65536.0
+          explicit_bounds: 262144.0
+          explicit_bounds: 1048576.0
+          explicit_bounds: 4194304.0
+          explicit_bounds: 16777216.0
+          explicit_bounds: 67108864.0
+          exemplars {
+            time_unix_nano: 1793812518638190916
+            span_id: "\034\354.?\3223\275\373"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+            as_int: 18
+          }
+          attributes {
+            key: "gen_ai.operation.name"
+            value {
+              string_value: "chat"
+            }
+          }
+          attributes {
+            key: "gen_ai.provider.name"
+            value {
+              string_value: "gcp.vertex_ai"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          attributes {
+            key: "gen_ai.token.type"
+            value {
+              string_value: "output"
+            }
+          }
+          min: 18.0
+          max: 20.0
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    metrics {
+      name: "gen_ai.execute_tool.duration"
+      description: "Measures the duration of a tool execution."
+      unit: "s"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812517816296206
+          time_unix_nano: 1793812518675652724
+          count: 1
+          sum: 0.0004473499720916152
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 0.01
+          explicit_bounds: 0.02
+          explicit_bounds: 0.04
+          explicit_bounds: 0.08
+          explicit_bounds: 0.16
+          explicit_bounds: 0.32
+          explicit_bounds: 0.64
+          explicit_bounds: 1.28
+          explicit_bounds: 2.56
+          explicit_bounds: 5.12
+          explicit_bounds: 10.24
+          explicit_bounds: 20.48
+          explicit_bounds: 40.96
+          explicit_bounds: 81.92
+          exemplars {
+            time_unix_nano: 1793812517816222656
+            as_double: 0.0004473499720916152
+            span_id: "\262\030N=\343\300y\274"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          attributes {
+            key: "gen_ai.tool.name"
+            value {
+              string_value: "add"
+            }
+          }
+          attributes {
+            key: "gen_ai.tool.type"
+            value {
+              string_value: "function"
+            }
+          }
+          min: 0.0004473499720916152
+          max: 0.0004473499720916152
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    metrics {
+      name: "gen_ai.invoke_agent.duration"
+      description: "Measures the duration of an in-process agent invocation."
+      unit: "s"
+      histogram {
+        data_points {
+          start_time_unix_nano: 1793812518670206105
+          time_unix_nano: 1793812518675652724
+          count: 1
+          sum: 3.112407892011106
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          bucket_counts: 0
+          explicit_bounds: 0.1
+          explicit_bounds: 0.2
+          explicit_bounds: 0.4
+          explicit_bounds: 0.8
+          explicit_bounds: 1.6
+          explicit_bounds: 3.2
+          explicit_bounds: 6.4
+          explicit_bounds: 12.8
+          explicit_bounds: 25.6
+          explicit_bounds: 51.2
+          explicit_bounds: 102.4
+          explicit_bounds: 204.8
+          explicit_bounds: 409.6
+          exemplars {
+            time_unix_nano: 1793812518670115604
+            as_double: 3.112407892011106
+            span_id: "\264\336>\352\003\366:\302"
+            trace_id: "\323\022\337\301g\032\035\357\275\037\337ij\020Tu"
+          }
+          attributes {
+            key: "gen_ai.agent.name"
+            value {
+              string_value: "google-genai-agent"
+            }
+          }
+          attributes {
+            key: "gen_ai.request.model"
+            value {
+              string_value: "gemini-2.5-flash"
+            }
+          }
+          min: 3.112407892011106
+          max: 3.112407892011106
+        }
+        aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+      }
+    }
+    schema_url: "https://opentelemetry.io/schemas/1.37.0"
+  }
+}

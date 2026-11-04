@@ -205,15 +205,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[RetrievalInvocation] = (
-            SuppressedRetrievalInvocation
-            if isinstance(
-                get_value(CLIENT_RETRIEVAL_CONTEXT_KEY, context=context),
-                RetrievalData,
-            )
-            else RetrievalInvocation
-        )
-        return invocation_cls(
+        return RetrievalInvocation(
             self._tracer,
             self._instruments,
             self._logger,
@@ -255,15 +247,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[InferenceInvocation] = (
-            SuppressedInferenceInvocation
-            if isinstance(
-                get_value(CLIENT_INFERENCE_CONTEXT_KEY, context=context),
-                InferenceData,
-            )
-            else InferenceInvocation
-        )
-        return invocation_cls(
+        return InferenceInvocation(
             self._tracer,
             self._instruments,
             self._logger,
@@ -301,15 +285,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[EmbeddingInvocation] = (
-            SuppressedEmbeddingInvocation
-            if isinstance(
-                get_value(CLIENT_EMBEDDING_CONTEXT_KEY, context=context),
-                EmbeddingData,
-            )
-            else EmbeddingInvocation
-        )
-        return invocation_cls(
+        return EmbeddingInvocation(
             self._tracer,
             self._instruments,
             self._logger,
@@ -350,15 +326,7 @@ class TelemetryHandler:
 
         Only set data attributes on the invocation object, do not modify the span or context.
         """
-        invocation_cls: type[FetchResponseInvocation] = (
-            SuppressedFetchResponseInvocation
-            if isinstance(
-                get_value(CLIENT_FETCH_RESPONSE_CONTEXT_KEY, context=context),
-                FetchResponseData,
-            )
-            else FetchResponseInvocation
-        )
-        return invocation_cls(
+        return FetchResponseInvocation(
             self._tracer,
             self._instruments,
             self._logger,

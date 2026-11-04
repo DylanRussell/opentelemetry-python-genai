@@ -264,15 +264,6 @@ class GenAIInvocation(AbstractContextManager["GenAIInvocation"]):
                 context=context,
             )
             ctx = set_span_in_context(self.span, context)
-            if (
-                self._context_key is not None
-                and self._dataclass_class_object is not None
-            ):
-                ctx = set_value(
-                    self._context_key,
-                    self._dataclass_class_object(),
-                    context=ctx,
-                )
             self._span_context: Context = ctx
             self._attach_to_context = _attach_to_context
             self._context_token: ContextToken | None = (
