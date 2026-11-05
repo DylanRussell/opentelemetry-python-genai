@@ -85,11 +85,9 @@ invoke_agent google-genai-agent (INTERNAL, scope=opentelemetry.instrumentation.g
 ### 2. Split & Inconsistent Attributes Across Layers
 Neither span has the complete, accurate picture of the operation:
 - **Outer Agno span (`chat gemini-2.5-flash`)**:
-  - Missing `server.address` (`None` instead of `us-central1-aiplatform.googleapis.com`) and `gen_ai.response.id`.
-  - Reports `gen_ai.usage.output_tokens = 20` on the first turn because Agno maps Gemini's raw `candidates_token_count` (`20`) to `output_tokens` without adding `thoughts_token_count` (`54`).
+  - Missing `server.address` (`None` instead of `us-central1-aiplatform.googleapis.com`), `gen_ai.response.id`, `gen_ai.response.model`, and modality token breakdowns (`gen_ai.usage.text.input_tokens`, `gen_ai.usage.text.output_tokens`).
 - **Inner Google GenAI SDK span (`generate_content gemini-2.5-flash`)**:
   - Captures `server.address = "us-central1-aiplatform.googleapis.com"`, `gen_ai.response.id`, `gen_ai.response.model`, and modality token breakdowns.
-  - Correctly sums `candidates_token_count + thoughts_token_count` (`20 + 54 = 74`) for `gen_ai.usage.output_tokens`.
 
 ### 3. Duplicate `gen_ai.client.inference.operation.details` Events in Cloud Logging
 4 event log records are emitted instead of 2 (one from `opentelemetry.instrumentation.genai.agno` and one from `opentelemetry.instrumentation.google_genai` for each model call). You can inspect them in Cloud Logging using the Trace ID printed by the script:

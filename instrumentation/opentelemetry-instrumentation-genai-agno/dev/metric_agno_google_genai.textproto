@@ -21,7 +21,7 @@ resource_metrics {
     attributes {
       key: "service.instance.id"
       value {
-        string_value: "1497b9af-fdee-4630-b5bd-f032a6c392b7"
+        string_value: "13945ee9-e843-47b0-a39c-44284a756183"
       }
     }
     attributes {
@@ -54,10 +54,10 @@ resource_metrics {
       unit: "s"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812645283166900
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843292729834
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 2.407506305957213
+          sum: 2.4943845140514895
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -88,16 +88,16 @@ resource_metrics {
           explicit_bounds: 40.96
           explicit_bounds: 81.92
           exemplars {
-            time_unix_nano: 1793812645878862764
-            as_double: 0.46731766196899116
-            span_id: "\026h0\302}&\013\240"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843934246063
+            as_double: 0.6218891610624269
+            span_id: "\273\242\223l\260\342-\036"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           exemplars {
-            time_unix_nano: 1793812645282978510
-            as_double: 1.9401886439882219
-            span_id: "MV\270\256\240\246\201;"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843292535684
+            as_double: 1.8724953529890627
+            span_id: "\006\354D\2174\010B>"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -129,8 +129,8 @@ resource_metrics {
               string_value: "gemini-2.5-flash"
             }
           }
-          min: 0.46731766196899116
-          max: 1.9401886439882219
+          min: 0.6218891610624269
+          max: 1.8724953529890627
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
       }
@@ -141,10 +141,10 @@ resource_metrics {
       unit: "{token}"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812645283315840
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843292978294
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 126.0
+          sum: 151.0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -175,16 +175,16 @@ resource_metrics {
           explicit_bounds: 16777216.0
           explicit_bounds: 67108864.0
           exemplars {
-            time_unix_nano: 1793812645283277130
-            span_id: "MV\270\256\240\246\201;"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843292899304
+            span_id: "\006\354D\2174\010B>"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
             as_int: 31
           }
           exemplars {
-            time_unix_nano: 1793812645878975244
-            span_id: "\026h0\302}&\013\240"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 95
+            time_unix_nano: 1793914843934337523
+            span_id: "\273\242\223l\260\342-\036"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
+            as_int: 120
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -223,17 +223,17 @@ resource_metrics {
             }
           }
           min: 31.0
-          max: 95.0
+          max: 120.0
         }
         data_points {
-          start_time_unix_nano: 1793812645283379560
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843293069864
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 88.0
+          sum: 117.0
+          bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 1
-          bucket_counts: 0
           bucket_counts: 1
           bucket_counts: 0
           bucket_counts: 0
@@ -260,16 +260,16 @@ resource_metrics {
           explicit_bounds: 16777216.0
           explicit_bounds: 67108864.0
           exemplars {
-            time_unix_nano: 1793812645879021454
-            span_id: "\026h0\302}&\013\240"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 14
+            time_unix_nano: 1793914843934374933
+            span_id: "\273\242\223l\260\342-\036"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
+            as_int: 18
           }
           exemplars {
-            time_unix_nano: 1793812645283362850
-            span_id: "MV\270\256\240\246\201;"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 74
+            time_unix_nano: 1793914843293046794
+            span_id: "\006\354D\2174\010B>"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
+            as_int: 99
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -307,8 +307,8 @@ resource_metrics {
               string_value: "output"
             }
           }
-          min: 14.0
-          max: 74.0
+          min: 18.0
+          max: 99.0
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
       }
@@ -326,10 +326,10 @@ resource_metrics {
       unit: "s"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812645284205860
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843294025474
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 3.8306896621361375
+          sum: 2.6819708620896563
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -338,8 +338,8 @@ resource_metrics {
           bucket_counts: 0
           bucket_counts: 1
           bucket_counts: 0
-          bucket_counts: 0
           bucket_counts: 1
+          bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -360,16 +360,16 @@ resource_metrics {
           explicit_bounds: 40.96
           explicit_bounds: 81.92
           exemplars {
-            time_unix_nano: 1793812645879670215
-            as_double: 0.470096662058495
-            span_id: "\027uy)\225\356\311\211"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843934950533
+            as_double: 0.6244003310566768
+            span_id: "\255/\031\327\020\361\224\374"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           exemplars {
-            time_unix_nano: 1793812645284158020
-            as_double: 3.3605930000776425
-            span_id: "R\373\237\314\207\274\n>"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843293978754
+            as_double: 2.0575705310329795
+            span_id: "\005\013\350\006$\022U\376"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -389,8 +389,8 @@ resource_metrics {
               string_value: "gemini-2.5-flash"
             }
           }
-          min: 0.470096662058495
-          max: 3.3605930000776425
+          min: 0.6244003310566768
+          max: 2.0575705310329795
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
       }
@@ -401,10 +401,10 @@ resource_metrics {
       unit: "{token}"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812645284286510
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843294101514
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 126.0
+          sum: 151.0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -435,16 +435,16 @@ resource_metrics {
           explicit_bounds: 16777216.0
           explicit_bounds: 67108864.0
           exemplars {
-            time_unix_nano: 1793812645284260480
-            span_id: "R\373\237\314\207\274\n>"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843294077944
+            span_id: "\005\013\350\006$\022U\376"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
             as_int: 31
           }
           exemplars {
-            time_unix_nano: 1793812645879730315
-            span_id: "\027uy)\225\356\311\211"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 95
+            time_unix_nano: 1793914843934994843
+            span_id: "\255/\031\327\020\361\224\374"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
+            as_int: 120
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -471,17 +471,17 @@ resource_metrics {
             }
           }
           min: 31.0
-          max: 95.0
+          max: 120.0
         }
         data_points {
-          start_time_unix_nano: 1793812645284333280
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843294162474
+          time_unix_nano: 1793914844018266888
           count: 2
-          sum: 34.0
+          sum: 38.0
           bucket_counts: 0
           bucket_counts: 0
-          bucket_counts: 1
-          bucket_counts: 1
+          bucket_counts: 0
+          bucket_counts: 2
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -508,16 +508,10 @@ resource_metrics {
           explicit_bounds: 16777216.0
           explicit_bounds: 67108864.0
           exemplars {
-            time_unix_nano: 1793812645879764784
-            span_id: "\027uy)\225\356\311\211"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 14
-          }
-          exemplars {
-            time_unix_nano: 1793812645284321630
-            span_id: "R\373\237\314\207\274\n>"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
-            as_int: 20
+            time_unix_nano: 1793914843935026443
+            span_id: "\255/\031\327\020\361\224\374"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
+            as_int: 18
           }
           attributes {
             key: "gen_ai.operation.name"
@@ -543,7 +537,7 @@ resource_metrics {
               string_value: "output"
             }
           }
-          min: 14.0
+          min: 18.0
           max: 20.0
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
@@ -555,10 +549,10 @@ resource_metrics {
       unit: "s"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812645409105892
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914843310100822
+          time_unix_nano: 1793914844018266888
           count: 1
-          sum: 0.0005660499446094036
+          sum: 0.0004270010394975543
           bucket_counts: 1
           bucket_counts: 0
           bucket_counts: 0
@@ -589,10 +583,10 @@ resource_metrics {
           explicit_bounds: 40.96
           explicit_bounds: 81.92
           exemplars {
-            time_unix_nano: 1793812645409023803
-            as_double: 0.0005660499446094036
-            span_id: "\252}\232\221R\277$\314"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914843310021662
+            as_double: 0.0004270010394975543
+            span_id: "|w\330\277\225\305\037\266"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           attributes {
             key: "gen_ai.tool.name"
@@ -606,8 +600,8 @@ resource_metrics {
               string_value: "function"
             }
           }
-          min: 0.0005660499446094036
-          max: 0.0005660499446094036
+          min: 0.0004270010394975543
+          max: 0.0004270010394975543
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
       }
@@ -618,17 +612,17 @@ resource_metrics {
       unit: "s"
       histogram {
         data_points {
-          start_time_unix_nano: 1793812646490226468
-          time_unix_nano: 1793812646495812048
+          start_time_unix_nano: 1793914844011338859
+          time_unix_nano: 1793914844018266888
           count: 1
-          sum: 4.995552342035808
-          bucket_counts: 0
+          sum: 2.8296219629701227
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 1
+          bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
           bucket_counts: 0
@@ -650,10 +644,10 @@ resource_metrics {
           explicit_bounds: 204.8
           explicit_bounds: 409.6
           exemplars {
-            time_unix_nano: 1793812646490127258
-            as_double: 4.995552342035808
-            span_id: "0\315RE\253\010!7"
-            trace_id: "\203N\215\313\204\3335z\307r\273\000h\031\001S"
+            time_unix_nano: 1793914844011185209
+            as_double: 2.8296219629701227
+            span_id: "\222y6:\310tf\336"
+            trace_id: "M\033\342\022\364\265\3134ljc\3665\240\r\313"
           }
           attributes {
             key: "gen_ai.agent.name"
@@ -667,8 +661,8 @@ resource_metrics {
               string_value: "gemini-2.5-flash"
             }
           }
-          min: 4.995552342035808
-          max: 4.995552342035808
+          min: 2.8296219629701227
+          max: 2.8296219629701227
         }
         aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
       }
