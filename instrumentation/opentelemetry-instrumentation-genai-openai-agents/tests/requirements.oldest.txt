@@ -28,4 +28,3 @@ packaging==24.0
 
 # Use the development version for testing. Drop this once
 # opentelemetry-util-genai 1.4b0 is published.
--e util/opentelemetry-util-genai
