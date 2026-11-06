@@ -15,6 +15,44 @@ See https://github.com/open-telemetry/opentelemetry-python-genai/blob/main/CONTR
 
 <!-- changelog start -->
 
+## Version 1.4b0 (2026-11-06)
+
+### Added
+
+- Add agent call count metrics on LocalAgentInvocation.
+  ([#634](https://github.com/open-telemetry/opentelemetry-python-genai/pull/634))
+- Check if logger is enabled before emitting inference details event, and set
+  event severity to DEBUG per GenAI semantic conventions.
+  ([#836](https://github.com/open-telemetry/opentelemetry-python-genai/pull/836))
+- Add support for Python 3.15.
+  ([#992](https://github.com/open-telemetry/opentelemetry-python-genai/pull/992))
+
+### Deprecated
+
+- Deprecate ``OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT`` environment variable; it
+  is now ignored. ``gen_ai.client.inference.operation.details`` events are now
+  emitted by default whenever the logger is enabled and can be disabled via
+  logger configuration, see
+  https://github.com/open-telemetry/opentelemetry-python-genai/blob/main/examples/suppress-inference-event/README.rst
+  for examples.
+  ([#836](https://github.com/open-telemetry/opentelemetry-python-genai/pull/836))
+- Deprecate `record_stream_chunk()` on invocation types other than
+  `InferenceInvocation`, where it is now a no-op.
+  ([#880](https://github.com/open-telemetry/opentelemetry-python-genai/pull/880))
+
+### Removed
+
+- Drop support for Python 3.10.
+  ([#992](https://github.com/open-telemetry/opentelemetry-python-genai/pull/992))
+
+### Fixed
+
+- Record the `gen_ai.client.operation.time_to_first_chunk` and
+  `gen_ai.client.operation.time_per_output_chunk` metrics only for streamed
+  inference invocations; streamed agent, workflow and fetch_response
+  invocations no longer emit them.
+  ([#880](https://github.com/open-telemetry/opentelemetry-python-genai/pull/880))
+
 ## Version 1.3b0 (2026-10-23)
 
 ### Added
