@@ -15,6 +15,8 @@ See https://github.com/open-telemetry/opentelemetry-python-genai/blob/main/CONTR
 
 <!-- changelog start -->
 
+## Version 1.4b1 (2026-11-06)
+
 ## Version 1.4b0 (2026-11-06)
 
 ### Added
