@@ -15,10 +15,10 @@ inputs:
     required: true
   otelbot-client-id:
     description: OTELBOT app client id used to open the pull request
-    required: true
+    required: false
   otelbot-private-key:
     description: OTELBOT app private key used to open the pull request
-    required: true
+    required: false
 
 runs:
   using: composite
@@ -78,18 +78,11 @@ runs:
       shell: bash
       run: .github/scripts/use-cla-approved-github-bot.sh
 
-    - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-      id: otelbot-token
-      with:
-        client-id: ${{ inputs.otelbot-client-id }}
-        private-key: ${{ inputs.otelbot-private-key }}
-        permission-pull-requests: write
-
     - name: Create pull request
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+        PR_TOKEN: ${{ github.token }}
         INPUTS_OPERATION: ${{ inputs.operation }}
       run: |
         case "${INPUTS_OPERATION}" in

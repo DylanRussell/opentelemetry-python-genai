@@ -88,12 +88,11 @@ jobs:
 
   publish:
     needs: [enumerate, build]
-    runs-on: cncf-ubuntu-2-8-x86
+    runs-on: ubuntu-slim
     strategy:
       fail-fast: false
       matrix:
         package: ${{ fromJson(needs.enumerate.outputs.packages) }}
-    environment: pypi
     permissions:
       id-token: write
     steps:
@@ -102,16 +101,14 @@ jobs:
           name: dist-${{ matrix.package }}
           path: dist/
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
-        with:
-          packages-dir: dist/
-          skip-existing: true
+      - name: Publish to PyPI (dry-run on fork)
+        run: ls -la dist/
 
   github_release:
     needs: [enumerate, publish]
     permissions:
       contents: write
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -129,6 +126,7 @@ jobs:
     if: always() && needs.enumerate.result == 'success' && needs.publish.result == 'success' && needs.github_release.result == 'success'
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,17 +146,10 @@ jobs:
       - name: Use CLA approved github bot
         run: .github/scripts/use-cla-approved-github-bot.sh
 
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: otelbot-token
-        with:
-          client-id: ${{ vars.OTELBOT_CLIENT_ID }}
-          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
-          permission-pull-requests: write
-
       - name: Open pull request for post-release updates on main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+          PR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --quiet; then
             echo "No updates needed on main"

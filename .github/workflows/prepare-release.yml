@@ -39,6 +39,7 @@ jobs:
   prepare:
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -102,17 +103,10 @@ jobs:
       - name: Configure CLA-approved git bot
         run: .github/scripts/use-cla-approved-github-bot.sh
 
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: otelbot-token
-        with:
-          client-id: ${{ vars.OTELBOT_CLIENT_ID }}
-          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
-          permission-pull-requests: write
-
       - name: Create pull request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+          PR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGES: ${{ steps.packages.outputs.packages }}
           COUNT: ${{ steps.packages.outputs.count }}
         run: |

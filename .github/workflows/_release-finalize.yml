@@ -32,6 +32,7 @@ jobs:
   finalize:
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-slim
     steps:
       - name: Resolve release target
@@ -135,19 +136,11 @@ jobs:
         if: inputs.sync_main
         run: .github/scripts/use-cla-approved-github-bot.sh
 
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        if: inputs.sync_main
-        id: otelbot-token
-        with:
-          client-id: ${{ vars.OTELBOT_CLIENT_ID }}
-          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
-          permission-pull-requests: write
-
       - name: Open pull request for post-release updates on main
         if: inputs.sync_main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+          PR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --quiet; then
             echo "No updates needed on main"

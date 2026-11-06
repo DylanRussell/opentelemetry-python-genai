@@ -40,8 +40,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: cncf-ubuntu-2-8-x86
-    environment: pypi
+    runs-on: ubuntu-slim
     permissions:
       id-token: write
     steps:
@@ -50,16 +49,14 @@ jobs:
           name: dist-${{ inputs.package }}
           path: dist/
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
-        with:
-          packages-dir: dist/
-          skip-existing: true
+      - name: Publish to PyPI (dry-run on fork)
+        run: ls -la dist/
 
   finalize:
     needs: [build, publish]
     permissions:
       contents: write
+      pull-requests: write
     uses: $/.github/workflows/_release-finalize.yml
     with:
       package: ${{ inputs.package }}
