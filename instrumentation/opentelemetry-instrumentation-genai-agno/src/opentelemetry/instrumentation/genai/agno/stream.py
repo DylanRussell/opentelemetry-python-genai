@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agno.agent import RunOutput
@@ -24,6 +24,8 @@ from opentelemetry.instrumentation.genai.agno.utils import (
     format_content,
     format_model_output_message,
     has_model_output_content,
+    populate_provider_data,
+    record_model_token_usage,
     safe_int,
 )
 from opentelemetry.util.genai.invocation import (
@@ -37,7 +39,6 @@ from opentelemetry.util.genai.stream import (
 )
 from opentelemetry.util.genai.types import (
     OutputMessage,
-    Role,
     TextPart,
 )
 
@@ -354,104 +355,20 @@ class _ModelStreamMixin:
     _self_invocation: InferenceInvocation
     _self_assistant_message: Message | None
     _self_stream_data: MessageData | None
-    _self_accumulated_chunks: list[str]
 
     def _process_chunk(self, chunk: ModelResponse) -> None:
-        if self._self_invocation.should_capture_content:
-            content = getattr(chunk, "content", None)
-            if content is not None:
-                formatted = format_content(content)
-                if formatted:
-                    self._self_accumulated_chunks.append(formatted)
-
-        provider_data = getattr(chunk, "provider_data", None)
-        if isinstance(provider_data, dict):
-            provider_dict = cast(dict[str, Any], provider_data)
-            if (
-                "model" in provider_dict
-                and not self._self_invocation.response_model_name
-            ):
-                self._self_invocation.response_model_name = str(
-                    cast(object, provider_dict["model"])
-                )
-            if "id" in provider_dict and not self._self_invocation.response_id:
-                self._self_invocation.response_id = str(
-                    cast(object, provider_dict["id"])
-                )
-
-        usage = getattr(chunk, "response_usage", None)
-        if usage is not None:
-            self._record_metrics(usage)
-        else:
-            in_tok = safe_int(getattr(chunk, "input_tokens", None))
-            out_tok = safe_int(getattr(chunk, "output_tokens", None))
-            if in_tok is not None and in_tok > 0:
-                if self._self_invocation.input_tokens is None:
-                    self._self_invocation.input_tokens = in_tok
-                if (
-                    out_tok is not None
-                    and self._self_invocation.output_tokens is None
-                ):
-                    self._self_invocation.output_tokens = out_tok
-            elif out_tok is not None and out_tok > 0:
-                if self._self_invocation.output_tokens is None:
-                    self._self_invocation.output_tokens = out_tok
-
-    def _record_metrics(self, metrics: Any) -> None:
-        if metrics is None:
-            return
-        if (
-            tok := safe_int(getattr(metrics, "input_tokens", None))
-        ) is not None:
-            self._self_invocation.input_tokens = tok
-        if (
-            tok := safe_int(getattr(metrics, "output_tokens", None))
-        ) is not None:
-            self._self_invocation.output_tokens = tok
-        if (
-            tok := safe_int(getattr(metrics, "cache_read_tokens", None))
-        ) is not None and tok > 0:
-            self._self_invocation.cache_read_input_tokens = tok
-        if (
-            tok := safe_int(getattr(metrics, "cache_write_tokens", None))
-        ) is not None and tok > 0:
-            self._self_invocation.cache_write_input_tokens = tok
-        if (
-            tok := safe_int(getattr(metrics, "reasoning_tokens", None))
-        ) is not None and tok > 0:
-            self._self_invocation.thinking_tokens = tok
+        populate_provider_data(self._self_invocation, chunk.provider_data)
 
     def _finalize_telemetry(self, error: BaseException | None = None) -> None:
         metrics = getattr(self._self_assistant_message, "metrics", None)
         if _has_usage(metrics):
-            self._record_metrics(metrics)
+            record_model_token_usage(self._self_invocation, metrics)
         elif self._self_stream_data is not None:
             sd_metrics = getattr(
                 self._self_stream_data, "response_metrics", None
             )
             if _has_usage(sd_metrics):
-                self._record_metrics(sd_metrics)
-
-        provider_data = getattr(
-            self._self_assistant_message, "provider_data", None
-        )
-        if not provider_data and self._self_stream_data is not None:
-            provider_data = getattr(
-                self._self_stream_data, "provider_data", None
-            )
-        if isinstance(provider_data, dict):
-            provider_dict = cast(dict[str, Any], provider_data)
-            if (
-                "model" in provider_dict
-                and not self._self_invocation.response_model_name
-            ):
-                self._self_invocation.response_model_name = str(
-                    cast(object, provider_dict["model"])
-                )
-            if "id" in provider_dict and not self._self_invocation.response_id:
-                self._self_invocation.response_id = str(
-                    cast(object, provider_dict["id"])
-                )
+                record_model_token_usage(self._self_invocation, sd_metrics)
 
         finish_reasons = (
             ["error"]
@@ -484,17 +401,6 @@ class _ModelStreamMixin:
                         stream_data=self._self_stream_data,
                     )
                 ]
-            elif self._self_accumulated_chunks:
-                text = "".join(self._self_accumulated_chunks)
-                self._self_invocation.output_messages = [
-                    OutputMessage(
-                        role=Role.ASSISTANT.value,
-                        parts=[TextPart(content=text)],
-                        finish_reason=finish_reasons[0]
-                        if finish_reasons
-                        else "stop",
-                    )
-                ]
 
         if error is not None:
             self._self_invocation.fail(error)
@@ -522,7 +428,6 @@ class AgnoModelStreamWrapper(_ModelStreamMixin, SyncStreamWrapper[Any]):
         invocation.suspend()
         self._self_assistant_message = assistant_message
         self._self_stream_data = stream_data
-        self._self_accumulated_chunks = []
 
 
 class AsyncAgnoModelStreamWrapper(_ModelStreamMixin, AsyncStreamWrapper[Any]):
@@ -539,4 +444,3 @@ class AsyncAgnoModelStreamWrapper(_ModelStreamMixin, AsyncStreamWrapper[Any]):
         invocation.suspend()
         self._self_assistant_message = assistant_message
         self._self_stream_data = stream_data
-        self._self_accumulated_chunks = []

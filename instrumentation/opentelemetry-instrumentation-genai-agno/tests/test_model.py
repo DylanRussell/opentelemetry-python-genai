@@ -584,7 +584,7 @@ def test_model_response_stream_early_close(
     instrument_agno,
     span_exporter,
 ) -> None:
-    """Test that closing a sync response stream before it is drained finalizes the span once."""
+    """Test that closing a sync response stream before it is drained finalizes the span once with interrupted finish reason."""
 
     class MultiChunkStreamModel(MockModel):
         def invoke_stream(self, *args: Any, **kwargs: Any) -> Any:
@@ -607,6 +607,37 @@ def test_model_response_stream_early_close(
     span = spans[0]
     assert span.name == "chat early-close-model"
     assert span.status.status_code != StatusCode.ERROR
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
+    ) == ("interrupted",)
+
+
+def test_model_response_stream_early_close_keeps_finish_reason(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test that closing a stream early preserves provider finish_reason on stream_data."""
+
+    class _LengthStream(MockModel):
+        def invoke_stream(self, *args: Any, **kwargs: Any) -> Any:
+            yield ModelResponse(
+                content="partial",
+                provider_data={"id": "resp-1", "finish_reason": "length"},
+            )
+            yield ModelResponse(content="more")
+
+    stream = _LengthStream(id="m", provider="OpenAI").process_response_stream(
+        messages=[Message(role="user", content="hi")],
+        assistant_message=Message(role="assistant"),
+        stream_data=MessageData(),
+    )
+    next(stream)
+    stream.close()
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
+    ) == ("length",)
 
 
 def test_model_aresponse_stream_error_stream_side(
@@ -713,6 +744,9 @@ def test_model_aresponse_stream_early_close(
     span = spans[0]
     assert span.name == "chat async-early-close-model"
     assert span.status.status_code != StatusCode.ERROR
+    assert span.attributes.get(
+        GenAIAttributes.GEN_AI_RESPONSE_FINISH_REASONS
+    ) == ("interrupted",)
 
 
 def test_model_tool_call_arguments_json_decoding_and_fallback(
@@ -931,6 +965,29 @@ def test_resolve_model_provider_prefers_class() -> None:
         resolve_model_provider(AzureAIFoundry(id="m")) == "azure.ai.inference"
     )
     assert resolve_model_provider(WatsonX(id="m")) == "ibm.watsonx.ai"
+
+
+def test_resolve_model_provider_openai_like() -> None:
+    """Test that OpenAILike with inherited default provider resolves to unknown."""
+    from dataclasses import dataclass
+
+    try:
+        from agno.models.openai.like import OpenAILike
+
+        model = OpenAILike(id="llama3", base_url="http://localhost:8000/v1")
+    except ImportError:
+
+        @dataclass
+        class OpenAIChat(MockModel):
+            provider: str = "OpenAI"
+
+        @dataclass
+        class OpenAILike(OpenAIChat):
+            pass
+
+        model = OpenAILike(id="llama3")
+
+    assert resolve_model_provider(model) == "unknown"
 
 
 @pytest.mark.parametrize(
@@ -1286,3 +1343,41 @@ def test_model_async_tool_loop_does_not_reuse_previous_call_data(
         str(second.attributes.get(GenAIAttributes.GEN_AI_OUTPUT_MESSAGES))
     )
     assert output_msgs[0]["parts"] == [{"type": "text", "content": "done"}]
+
+
+def test_gemini_reasoning_tokens_added_to_output_tokens_and_max_output_tokens(
+    instrument_agno,
+    span_exporter,
+) -> None:
+    """Test Gemini adds reasoning_tokens to output_tokens and captures max_output_tokens and audio tokens."""
+
+    class _GeminiLikeModel(MockModel):
+        max_output_tokens: int | None = 512
+
+        def invoke(self, *args: Any, **kwargs: Any) -> ModelResponse:
+            return ModelResponse(
+                content="579",
+                response_usage=MessageMetrics(
+                    input_tokens=31,
+                    output_tokens=20,
+                    reasoning_tokens=54,
+                    audio_input_tokens=5,
+                    audio_output_tokens=10,
+                ),
+            )
+
+    model = _GeminiLikeModel(id="gemini-2.5-flash", provider="Google")
+    model.response(messages=[Message(role="user", content="Add 123 and 456")])
+
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) == 1
+    attrs = spans[0].attributes
+    assert attrs.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "gcp.gemini"
+    assert attrs.get(GenAIAttributes.GEN_AI_REQUEST_MAX_TOKENS) == 512
+    assert attrs.get(GenAIAttributes.GEN_AI_USAGE_INPUT_TOKENS) == 31
+    assert attrs.get(GenAIAttributes.GEN_AI_USAGE_OUTPUT_TOKENS) == 74
+    assert (
+        attrs.get(GenAIAttributes.GEN_AI_USAGE_REASONING_OUTPUT_TOKENS) == 54
+    )
+    assert attrs.get("gen_ai.usage.audio.input_tokens") == 5
+    assert attrs.get("gen_ai.usage.audio.output_tokens") == 10
